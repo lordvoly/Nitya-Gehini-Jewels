@@ -1,3 +1,7 @@
+# CLAUDE.md
+
+This file provides guidance to Claude Code (claude.ai/code) when working with code in this repository.
+
 # Nitya Gehini Jewels — Management System
 
 Rebuild of the v1 Airtable + static HTML system as a real backend + database.
@@ -44,6 +48,19 @@ npm run dev:frontend     # http://localhost:5173
 
 Apply the schema to a Supabase project with the Supabase CLI (`supabase link`, then
 `supabase db push`), or paste `supabase/migrations/*.sql` into the SQL editor.
+
+Other commands (run from repo root, an npm workspaces monorepo):
+
+```
+npm run build:backend       # tsc -p backend/tsconfig.json
+npm run build:frontend      # tsc -b && vite build
+npm run typecheck --workspace backend    # tsc --noEmit
+npm run typecheck --workspace frontend   # tsc --noEmit
+```
+
+There is no test suite or linter configured yet in either workspace — don't assume
+`npm test`/`npm run lint` exist. Type-checking (above) is currently the only automated
+correctness check; run it after backend/frontend changes.
 
 ## Key rules (carried forward from v1's failure modes)
 
@@ -95,6 +112,34 @@ See `supabase/migrations/20260804000000_init_schema.sql` for the authoritative s
   installments); `booking_financials` view sums these into `total_paid`/`balance_due`.
 - **expenses** — for the P&L/bookkeeping views (Phase 2).
 - **users** — mirrors `auth.users`, adds `role` (`admin`/`operator`).
+
+## Request flow / architecture
+
+Every backend route (`backend/src/routes/*.ts`) is mounted in `backend/src/index.ts`
+behind `requireAuth` (`backend/src/middleware/auth.ts`), which verifies the Supabase
+access token from the `Authorization: Bearer` header and attaches `req.user` (id, role,
+name, email) by looking up the matching row in `users`. There's no separate ORM layer —
+routes call the Supabase service-role client (`backend/src/lib/supabase.ts`) directly
+with `.select()/.insert()/.update()`, reading from tables and from the computed views
+(`booking_financials`, `overdue_rentals`, `upcoming_returns`) directly by name.
+
+The frontend never calls Supabase for app data — `frontend/src/lib/api.ts`'s
+`apiFetch()` is the only path to the backend, attaching the current Supabase session's
+access token as the bearer token on every call. `frontend/src/lib/supabase.ts` is used
+solely for `supabase.auth.*` (login/session), matching the "secrets stay backend-only"
+rule above.
+
+The Claude Haiku chat tool definitions and their Supabase-backed implementations
+(`runTool()`) live together in `backend/src/tools/index.ts`, one file, rather than
+split per-tool — each case in the `runTool` switch queries a table or view the same way
+a REST route would.
+
+**Phase 1 is scaffolded but not complete.** `backend/src/routes/bookings.ts` has
+`TODO(Phase 1)` comments marking two known gaps: booking creation doesn't yet do
+conflict detection (overlapping dates for `unique` items, or oversold quantity for
+`quantity` items), and the return endpoint doesn't yet populate/validate
+`return_checklist` against the item's `components`. Check these TODOs before assuming
+booking/return logic is enforced.
 
 ## Build phases
 
