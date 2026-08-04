@@ -1,0 +1,19 @@
+{
+  "name": "nitya-gehini-jewels",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Nitya Gehini Jewels management system — inventory, rentals, sales, bookkeeping, AI assistant.",
+  "workspaces": [
+    "frontend",
+    "backend"
+  ],
+  "scripts": {
+    "dev:frontend": "npm run dev --workspace frontend",
+    "dev:backend": "npm run dev --workspace backend",
+    "build:frontend": "npm run build --workspace frontend",
+    "build:backend": "npm run build --workspace backend"
+  },
+  "engines": {
+    "node": ">=20"
+  }
+}
