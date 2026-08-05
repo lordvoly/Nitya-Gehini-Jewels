@@ -7,6 +7,29 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Rebuild of the v1 Airtable + static HTML system as a real backend + database.
 Full context and rationale: `PROJECT_PLAN_V2.md` (keep it in sync if the plan changes).
 
+## Current status (2026-08-04)
+
+**Done:** Auth (login/logout, protected routes, `/api/me` role scaffold — not yet used
+to gate anything). Items, end to end: backend (`backend/src/routes/items.ts` —
+server-generated `item_code`, photo upload to the `item-photos` Storage bucket) and
+frontend (`frontend/src/pages/ItemsPage.tsx` + `frontend/src/components/items/`) — a
+fast multi-step add-item wizard (photo → basics → components-if-set → prices → review)
+plus a list view. Verified in-browser and against the DB directly: set/single and
+unique/quantity conditionals render correctly, a real save round-trips to a real row,
+and a real photo upload resolves to a public URL.
+
+**In progress / unverified:** `ItemsPage.tsx`'s camera capture
+(`capture="environment"` on the photo input) has only been exercised via a desktop
+file picker through browser automation — not on an actual phone. Confirm that works
+before the real opening-stock entry session.
+
+**Next step:** Per `PROJECT_PLAN_V2.md` §5's Phase 1 order, build out
+`CustomersPage.tsx` next (customer management with phone dedupe on `customers.phone`)
+— it has to exist before bookings can be created, since `bookings.customer_id` is a
+required FK. `BookingsPage.tsx`/`DashboardPage.tsx` are still placeholder stubs, and
+`backend/src/routes/bookings.ts` still has its `TODO(Phase 1)` gaps (conflict
+detection, return-checklist population) unresolved.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.

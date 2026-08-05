@@ -9,10 +9,13 @@ async function authHeader(): Promise<Record<string, string>> {
 }
 
 export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> {
+  // FormData (photo uploads) must not get a manual Content-Type — the browser
+  // sets one with the correct multipart boundary itself.
+  const isFormData = init?.body instanceof FormData;
   const res = await fetch(`${API_URL}${path}`, {
     ...init,
     headers: {
-      "Content-Type": "application/json",
+      ...(isFormData ? {} : { "Content-Type": "application/json" }),
       ...(await authHeader()),
       ...init?.headers,
     },

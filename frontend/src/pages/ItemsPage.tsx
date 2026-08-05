@@ -1,5 +1,80 @@
+import { useCallback, useEffect, useState } from "react";
+import { AddItemWizard } from "../components/items/AddItemWizard";
+import { ItemEditForm } from "../components/items/ItemEditForm";
+import { ItemsList } from "../components/items/ItemsList";
+import { deleteItem, fetchItems, type Item } from "../lib/items";
+import "./ItemsPage.css";
+
 export default function ItemsPage() {
-  // TODO(Phase 1): item intake flow (photo -> category -> components
-  // checklist -> prices -> save) and item list/search
-  return <h1>Items</h1>;
+  const [view, setView] = useState<"add" | "list">("add");
+  const [items, setItems] = useState<Item[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [editingItem, setEditingItem] = useState<Item | null>(null);
+
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    try {
+      setItems(await fetchItems());
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    refresh();
+  }, [refresh]);
+
+  async function handleDelete(item: Item) {
+    await deleteItem(item.id);
+    setItems((prev) => prev.filter((i) => i.id !== item.id));
+  }
+
+  return (
+    <div className="items-page">
+      <div className="items-page-tabs">
+        <button
+          className={view === "add" && !editingItem ? "tab active" : "tab"}
+          onClick={() => {
+            setEditingItem(null);
+            setView("add");
+          }}
+        >
+          + Add Item
+        </button>
+        <button
+          className={view === "list" || editingItem ? "tab active" : "tab"}
+          onClick={() => {
+            setEditingItem(null);
+            setView("list");
+          }}
+        >
+          All Items ({items.length})
+        </button>
+      </div>
+
+      {editingItem ? (
+        <ItemEditForm
+          item={editingItem}
+          onCancel={() => setEditingItem(null)}
+          onSaved={(saved) => {
+            setItems((prev) => prev.map((i) => (i.id === saved.id ? saved : i)));
+            setEditingItem(null);
+          }}
+        />
+      ) : view === "add" ? (
+        <AddItemWizard
+          onItemCreated={(item) => setItems((prev) => [item, ...prev])}
+          onViewItems={() => setView("list")}
+        />
+      ) : (
+        <ItemsList
+          items={items}
+          loading={loading}
+          onRefresh={refresh}
+          onEdit={setEditingItem}
+          onDelete={handleDelete}
+        />
+      )}
+    </div>
+  );
 }
