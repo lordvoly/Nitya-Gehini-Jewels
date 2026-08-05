@@ -60,6 +60,50 @@ bookingsRouter.get("/upcoming-returns", async (_req, res) => {
   res.json(data);
 });
 
+// GET /api/bookings/:id — single booking detail, including the "When
+// Returns" chain (next/previous booking for the same item) from the
+// booking_sequence view. Registered after the literal /overdue and
+// /upcoming-returns routes above so Express's registration-order matching
+// doesn't let :id swallow those paths first.
+bookingsRouter.get("/:id", async (req, res) => {
+  const { data: booking, error } = await supabase
+    .from("bookings")
+    .select("*, items(item_code, name, item_type, tracking_type), customers(name, phone)")
+    .eq("id", req.params.id)
+    .single();
+  if (error || !booking) return res.status(404).json({ error: "Booking not found" });
+
+  // maybeSingle, not single: a cancelled booking has no row in
+  // booking_sequence at all (excluded from the sequence by design), so a
+  // missing row here is an expected, non-error case.
+  const { data: sequence, error: sequenceError } = await supabase
+    .from("booking_sequence")
+    .select("*")
+    .eq("booking_id", req.params.id)
+    .maybeSingle();
+  if (sequenceError) return res.status(500).json({ error: sequenceError.message });
+
+  res.json({
+    ...booking,
+    next_booking: sequence?.next_booking_id
+      ? {
+          id: sequence.next_booking_id,
+          booking_code: sequence.next_booking_code,
+          customer_name: sequence.next_customer_name,
+          pickup_date: sequence.next_pickup_date,
+        }
+      : null,
+    previous_booking: sequence?.prev_booking_id
+      ? {
+          id: sequence.prev_booking_id,
+          booking_code: sequence.prev_booking_code,
+          customer_name: sequence.prev_customer_name,
+          pickup_date: sequence.prev_pickup_date,
+        }
+      : null,
+  });
+});
+
 const CODE_PREFIX = { rental: "RNT", sale: "SALE" } as const;
 
 async function nextBookingCode(type: "rental" | "sale"): Promise<string> {

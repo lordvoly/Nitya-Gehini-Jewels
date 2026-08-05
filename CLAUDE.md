@@ -106,6 +106,38 @@ rejected with a clear message (409); attempting to return a sale booking is reje
 too; deposit-refund toggle persists `deposit_refunded`/`deposit_refund_date`
 correctly, defaulting the date to the return date when not explicitly given.
 
+"When Returns" chain, end to end: a new migration
+(`supabase/migrations/20260805100000_booking_sequence_and_overdue_alert.sql`) adds a
+`booking_sequence` view computing each booking's next/previous booking for the same
+`item_id` via `LAG`/`LEAD` over a window partitioned by `item_id`, ordered by
+`pickup_date`/`created_at`, excluding cancelled bookings — fully computed at query
+time, no `next_booking_id` column stored anywhere, so cancelling or editing a booking
+automatically re-links its former neighbors on the next read with no cleanup step.
+`overdue_rentals` was extended (purely additive columns via `create or replace view`)
+with `next_customer_waiting`: true when an overdue booking's next-in-line booking (per
+`booking_sequence`) has `pickup_date <= ist_today()` — a distinct, higher-urgency
+signal ("next customer is waiting on this exact item"), not folded into the plain
+overdue list. Backend: `GET /api/bookings/:id` (new route, registered after the
+literal `/overdue` and `/upcoming-returns` paths so it doesn't shadow them) joins the
+booking to `booking_sequence` as a second separate query rather than a relationship
+embed, since `booking_sequence` is a view with no real FK — the same
+embed-doesn't-work-on-views constraint hit earlier with `booking_financials`. Frontend:
+`BookingDetail.tsx` (new) shows a "**When Returns →**" panel only when the item's
+`tracking_type` is `unique` and a `next_booking` exists (a `quantity` item can have
+many bookings active at once, so "next in line" isn't a single well-defined thing
+there); `BookingsList` gained a "View" action wired to it via `BookingsPage`'s existing
+state-machine view-switching pattern.
+
+All verified live against real DB rows (throwaway `ZZTEST`-prefixed data, cleaned up
+after): three bookings A→B→C on the same unique item each showed their own correct
+`next_booking` in both the API response and the rendered panel; cancelling B directly
+in the DB caused A's `next_booking` to correctly re-point to C with no stale reference,
+confirmed both via API and a live re-render in the browser; a separate overdue/next
+-in-line scenario (booking `status='out'` with `return_date` in the past, and a
+same-item next booking with `pickup_date` today-or-earlier) correctly set
+`next_customer_waiting: true` on `overdue_rentals` with no false positives on other
+rows. Real data (`Peacock Bridal Set` / `NGJ-0001`) confirmed untouched throughout.
+
 **In progress / unverified:** `ItemsPage.tsx`'s camera capture
 (`capture="environment"` on the photo input) has only been exercised via a desktop
 file picker through browser automation — not on an actual phone. Confirm that works

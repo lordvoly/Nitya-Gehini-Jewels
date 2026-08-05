@@ -1,7 +1,13 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchBookings, type BookingWithDetails } from "../../lib/bookings";
 
-export function BookingsList({ onProcessReturn }: { onProcessReturn: (booking: BookingWithDetails) => void }) {
+export function BookingsList({
+  onProcessReturn,
+  onViewDetail,
+}: {
+  onProcessReturn: (booking: BookingWithDetails) => void;
+  onViewDetail: (bookingId: string) => void;
+}) {
   const [bookings, setBookings] = useState<BookingWithDetails[]>([]);
   const [loading, setLoading] = useState(false);
 
@@ -57,7 +63,10 @@ export function BookingsList({ onProcessReturn }: { onProcessReturn: (booking: B
                   <td>{b.status}</td>
                   <td>₹{b.total_paid}</td>
                   <td>₹{b.balance_due}</td>
-                  <td>
+                  <td className="row-actions">
+                    <button className="btn-secondary" onClick={() => onViewDetail(b.id)}>
+                      View
+                    </button>
                     {b.type === "rental" && (b.status === "booked" || b.status === "out") && (
                       <button className="btn-secondary" onClick={() => onProcessReturn(b)}>
                         Process Return

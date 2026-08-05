@@ -123,3 +123,24 @@ export function processReturn(bookingId: string, payload: ReturnPayload) {
     body: JSON.stringify(payload),
   });
 }
+
+export interface BookingChainLink {
+  id: string;
+  booking_code: string;
+  customer_name: string;
+  pickup_date: string;
+}
+
+// What GET /api/bookings/:id returns — the booking plus the "When Returns"
+// chain (next/previous booking for the same item), fully computed
+// server-side from the booking_sequence view each time, never stored.
+export interface BookingDetail extends Booking {
+  items: BookingItemSummary | null;
+  customers: BookingCustomerSummary | null;
+  next_booking: BookingChainLink | null;
+  previous_booking: BookingChainLink | null;
+}
+
+export function fetchBooking(id: string) {
+  return apiFetch<BookingDetail>(`/api/bookings/${id}`);
+}
