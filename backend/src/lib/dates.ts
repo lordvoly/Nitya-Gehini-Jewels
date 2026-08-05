@@ -14,3 +14,14 @@ export function daysUntil(dateStr: string): number {
   const target = new Date(`${dateStr}T00:00:00`);
   return Math.round((target.getTime() - today.getTime()) / 86_400_000);
 }
+
+/**
+ * Start (Monday) of the current calendar week in IST, as YYYY-MM-DD.
+ */
+export function istWeekStart(): string {
+  const today = new Date(`${istToday()}T00:00:00`);
+  const day = today.getDay(); // 0 (Sun) .. 6 (Sat)
+  const diffToMonday = day === 0 ? 6 : day - 1;
+  today.setDate(today.getDate() - diffToMonday);
+  return today.toLocaleDateString("en-CA");
+}

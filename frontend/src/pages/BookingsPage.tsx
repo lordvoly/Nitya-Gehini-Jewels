@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { BookingDetail } from "../components/bookings/BookingDetail";
 import { BookingForm } from "../components/bookings/BookingForm";
 import { BookingsList } from "../components/bookings/BookingsList";
@@ -7,9 +8,18 @@ import type { BookingWithDetails } from "../lib/bookings";
 import "../styles/shared.css";
 
 export default function BookingsPage() {
+  const [searchParams] = useSearchParams();
   const [view, setView] = useState<"add" | "list">("add");
   const [returningBooking, setReturningBooking] = useState<BookingWithDetails | null>(null);
   const [viewingBookingId, setViewingBookingId] = useState<string | null>(null);
+
+  // Deep link from elsewhere (e.g. the Dashboard) straight into a specific
+  // booking's detail view: /bookings?booking=<id>.
+  useEffect(() => {
+    const id = searchParams.get("booking");
+    if (id) setViewingBookingId(id);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   function resetToTab(next: "add" | "list") {
     setReturningBooking(null);

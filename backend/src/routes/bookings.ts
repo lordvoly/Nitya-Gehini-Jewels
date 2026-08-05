@@ -6,7 +6,7 @@ import type { AuthedRequest } from "../middleware/auth.js";
 export const bookingsRouter = Router();
 
 // "Still consuming inventory" — excludes returned/completed/cancelled.
-const ACTIVE_STATUSES = ["booked", "out"];
+export const ACTIVE_STATUSES = ["booked", "out"];
 
 // GET /api/bookings?status=&item_id=&customer_id=
 //

@@ -391,3 +391,78 @@
   align-items: center;
   gap: 8px;
 }
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.stat-card {
+  display: block;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+  padding: 14px;
+  text-align: center;
+  text-decoration: none;
+  color: inherit;
+}
+
+.stat-card-wide {
+  grid-column: 1 / -1;
+  margin-bottom: 20px;
+}
+
+.stat-value {
+  font-size: 24px;
+  font-weight: 700;
+}
+
+.stat-label {
+  font-size: 12px;
+  color: #888;
+  margin-top: 4px;
+}
+
+.dashboard-section {
+  margin-bottom: 24px;
+}
+
+.dashboard-section h2 {
+  font-size: 16px;
+  margin: 0 0 10px;
+}
+
+.dashboard-link {
+  display: block;
+  text-decoration: none;
+  color: inherit;
+  margin-bottom: 8px;
+}
+
+.overdue-panel {
+  border: 1px solid #e0a0a0;
+  background: #fff5f5;
+  border-radius: 8px;
+  padding: 12px;
+}
+
+.overdue-panel p {
+  margin: 4px 0;
+}
+
+.overdue-panel.urgent {
+  border-color: #b00020;
+  background: #ffe5e5;
+}
+
+.badge-urgent {
+  display: inline-block;
+  background: #b00020;
+  color: #fff;
+  font-size: 11px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}

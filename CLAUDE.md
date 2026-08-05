@@ -138,6 +138,48 @@ same-item next booking with `pickup_date` today-or-earlier) correctly set
 `next_customer_waiting: true` on `overdue_rentals` with no false positives on other
 rows. Real data (`Peacock Bridal Set` / `NGJ-0001`) confirmed untouched throughout.
 
+Dashboard, end to end — `DashboardPage.tsx`'s placeholder heading is replaced with a
+read-only status view, deliberately built as pure composition over existing
+tables/views rather than new business logic: a new backend route
+(`backend/src/routes/dashboard.ts`, mounted at `GET /api/dashboard/summary`) reads
+today's-returns-due directly off `bookings` (`return_date = ist_today()`, status
+`booked`/`out`, distinct from the `upcoming_returns` view which only covers `status =
+'out'` and `return_date >= today`), the `overdue_rentals` view as-is (including last
+task's `next_customer_waiting`), and `booking_financials` for the outstanding-balance
+sum across active bookings — all merged with a second items/customers query where
+needed, the same two-queries-plus-merge pattern used everywhere else in this codebase
+for views with no real FK to embed through. `ACTIVE_STATUSES` was exported from
+`bookings.ts` rather than redefined. A small new IST helper, `istWeekStart()`
+(`backend/src/lib/dates.ts`), gives "bookings created this week" a real Monday
+boundary rather than a rolling 7 days. Frontend: `DashboardPage.tsx` shows four quick-stat
+tiles (active items, items out, customers, bookings this week), an outstanding-balance
+tile, a "Today's Returns Due" list, and an "Overdue Rentals" list that visually splits
+into an urgent group (red panel + "Next customer waiting" badge, `next_customer_waiting
+=== true`) rendered before the plain-overdue group — not just a flat list. Every row
+links out rather than duplicating any action: stat tiles link to `/items`/`/customers`/
+`/bookings`, and each due-today/overdue row links to that exact booking's existing
+`BookingDetail` view via a new `?booking=<id>` query-param deep link added to
+`BookingsPage.tsx` (read on mount only, additive — the existing internal
+view-switching state machine and its "View" button are untouched).
+
+All verified live against real DB rows, cross-checked directly against Supabase (not
+just that the page rendered): with only real data present, `/api/dashboard/summary`
+correctly returned all-zero stats and empty due-today/overdue lists matching an empty
+`bookings`/`customers` table. Throwaway `ZZTEST`-prefixed data was then added (one
+due-today booking, one overdue booking with `next_customer_waiting` true, one item
+flipped to `rented_out`) and the API's `due_today`/`overdue` counts and every stat
+were checked byte-for-byte against direct Supabase queries before checking the
+rendered page — all matched. One test-setup mistake caught and corrected during this,
+not a code bug: a due-today booking was first seeded with `return_date` equal to the
+date given in this session's narrative context, but the actual server clock had
+already rolled past midnight IST into the next day, so `ist_today()` correctly
+excluded it — re-seeded with the real current IST date and it appeared exactly as
+expected. The rendered page was also confirmed live: the urgent/plain overdue split
+renders with the red badge as designed, and clicking an overdue row correctly deep-links
+into that booking's `BookingDetail` (which also, incidentally, showed its own correct
+"When Returns" panel). All test data cleaned up afterward; real data (`Peacock Bridal
+Set` / `NGJ-0001`) confirmed untouched throughout.
+
 **In progress / unverified:** `ItemsPage.tsx`'s camera capture
 (`capture="environment"` on the photo input) has only been exercised via a desktop
 file picker through browser automation — not on an actual phone. Confirm that works
@@ -147,12 +189,10 @@ before the real opening-stock entry session.
 bookings while keeping history) — see the note in `PROJECT_PLAN_V2.md` §3 under
 `items`. Revisit once bookings exist and items accumulate real history.
 
-**Next step:** Both `bookings.ts` `TODO(Phase 1)` markers are now resolved — Phase 1
-core operations (item intake, bookings, returns) are functionally complete except for
-`DashboardPage.tsx`, still a placeholder stub. Per `PROJECT_PLAN_V2.md` §5, that's the
-natural next task: today's returns, overdue items, quick stats — `GET
-/api/bookings/overdue` and `/api/bookings/upcoming-returns` already exist
-(`overdue_rentals`/`upcoming_returns` views) but have no frontend consumer yet.
+**Next step:** Phase 1 core operations (item intake, bookings, returns, dashboard) are
+now functionally complete. Per `PROJECT_PLAN_V2.md` §5, Phase 2 (bookkeeping —
+payments, expenses, P&L, GST invoices) is the natural next area; `payments.ts` and
+`expenses.ts` are scaffolded but not yet wired into any frontend page.
 
 ## Tech stack
 
