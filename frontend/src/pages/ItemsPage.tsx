@@ -3,7 +3,7 @@ import { AddItemWizard } from "../components/items/AddItemWizard";
 import { ItemEditForm } from "../components/items/ItemEditForm";
 import { ItemsList } from "../components/items/ItemsList";
 import { deleteItem, fetchItems, type Item } from "../lib/items";
-import "./ItemsPage.css";
+import "../styles/shared.css";
 
 export default function ItemsPage() {
   const [view, setView] = useState<"add" | "list">("add");
@@ -30,8 +30,8 @@ export default function ItemsPage() {
   }
 
   return (
-    <div className="items-page">
-      <div className="items-page-tabs">
+    <div className="page">
+      <div className="page-tabs">
         <button
           className={view === "add" && !editingItem ? "tab active" : "tab"}
           onClick={() => {

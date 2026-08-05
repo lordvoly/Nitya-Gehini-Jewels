@@ -1,11 +1,11 @@
-.items-page {
+.page {
   max-width: 480px;
   margin: 0 auto;
   padding: 16px;
   font-family: system-ui, sans-serif;
 }
 
-.items-page-tabs {
+.page-tabs {
   display: flex;
   gap: 8px;
   margin-bottom: 16px;
@@ -271,24 +271,24 @@
   margin-top: 20px;
 }
 
-.items-list-header {
+.list-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
 }
 
-.items-table-wrap {
+.table-wrap {
   overflow-x: auto;
 }
 
-.items-table {
+.data-table {
   width: 100%;
   border-collapse: collapse;
   font-size: 13px;
 }
 
-.items-table th,
-.items-table td {
+.data-table th,
+.data-table td {
   text-align: left;
   padding: 8px 6px;
   border-bottom: 1px solid #eee;
@@ -312,4 +312,27 @@
 .row-actions .btn-secondary {
   padding: 6px 10px;
   font-size: 12px;
+}
+
+.search-input {
+  display: block;
+  width: 100%;
+  box-sizing: border-box;
+  font-size: 16px;
+  padding: 10px;
+  margin-bottom: 16px;
+  border: 1px solid #ccc;
+  border-radius: 8px;
+}
+
+.found-panel {
+  border: 1px solid #f0c14b;
+  background: #fffaf0;
+  border-radius: 8px;
+  padding: 14px;
+  margin-top: 14px;
+}
+
+.found-panel p {
+  margin: 4px 0;
 }

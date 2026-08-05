@@ -7,28 +7,47 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Rebuild of the v1 Airtable + static HTML system as a real backend + database.
 Full context and rationale: `PROJECT_PLAN_V2.md` (keep it in sync if the plan changes).
 
-## Current status (2026-08-04)
+## Current status (2026-08-05)
 
 **Done:** Auth (login/logout, protected routes, `/api/me` role scaffold — not yet used
-to gate anything). Items, end to end: backend (`backend/src/routes/items.ts` —
-server-generated `item_code`, photo upload to the `item-photos` Storage bucket) and
-frontend (`frontend/src/pages/ItemsPage.tsx` + `frontend/src/components/items/`) — a
-fast multi-step add-item wizard (photo → basics → components-if-set → prices → review)
-plus a list view. Verified in-browser and against the DB directly: set/single and
-unique/quantity conditionals render correctly, a real save round-trips to a real row,
-and a real photo upload resolves to a public URL.
+to gate anything). Items, end to end, including edit/delete: backend
+(`backend/src/routes/items.ts` — server-generated `item_code`, photo upload to the
+`item-photos` Storage bucket, delete blocked with a friendly message when booking
+history exists) and frontend (`frontend/src/pages/ItemsPage.tsx` +
+`frontend/src/components/items/`) — a fast multi-step add-item wizard, a list view,
+and edit/delete per row. Customers, end to end: backend
+(`backend/src/routes/customers.ts` — atomic phone-dedupe on create via
+insert-then-catch-23505, digits-only phone normalization, name/phone search) and
+frontend (`frontend/src/pages/CustomersPage.tsx` +
+`frontend/src/components/customers/`) — `AddCustomerForm` is deliberately
+self-contained (no page-level state) so it can be dropped into a modal from the future
+booking screen. Shared UI styling (buttons, form fields, cards, tables) lives in
+`frontend/src/styles/shared.css`, used by both Items and Customers.
+
+All of the above verified in-browser and against the DB directly, not just
+typechecked — including the phone-dedupe flow (same digits, different
+formatting/punctuation correctly surfaces the existing customer instead of creating a
+duplicate; a genuinely different number, e.g. with a country code prefix, correctly
+does not match) and partial-phone/name search. One real bug was caught and fixed
+during this verification: `CustomersList`'s debounced search had no guard against an
+older in-flight request resolving after a newer one and clobbering its results —
+fixed with a `cancelled` flag in the effect's cleanup.
 
 **In progress / unverified:** `ItemsPage.tsx`'s camera capture
 (`capture="environment"` on the photo input) has only been exercised via a desktop
 file picker through browser automation — not on an actual phone. Confirm that works
 before the real opening-stock entry session.
 
+**Known gap, parked on purpose:** items have no way to be retired (hidden from new
+bookings while keeping history) — see the note in `PROJECT_PLAN_V2.md` §3 under
+`items`. Revisit once bookings exist and items accumulate real history.
+
 **Next step:** Per `PROJECT_PLAN_V2.md` §5's Phase 1 order, build out
-`CustomersPage.tsx` next (customer management with phone dedupe on `customers.phone`)
-— it has to exist before bookings can be created, since `bookings.customer_id` is a
-required FK. `BookingsPage.tsx`/`DashboardPage.tsx` are still placeholder stubs, and
-`backend/src/routes/bookings.ts` still has its `TODO(Phase 1)` gaps (conflict
-detection, return-checklist population) unresolved.
+`BookingsPage.tsx` next (rental/sale creation with conflict detection, returns
+processing) — `customers` and `items` now both exist so the FK requirements are
+satisfied. `backend/src/routes/bookings.ts` still has its `TODO(Phase 1)` gaps
+(conflict detection, return-checklist population) unresolved; `DashboardPage.tsx` is
+still a placeholder stub.
 
 ## Tech stack
 

@@ -32,8 +32,8 @@ export function ItemsList({
   }
 
   return (
-    <div className="items-list">
-      <div className="items-list-header">
+    <div>
+      <div className="list-header">
         <h2>All Items ({items.length})</h2>
         <button className="btn-secondary" onClick={onRefresh} disabled={loading}>
           {loading ? "Refreshing…" : "Refresh"}
@@ -42,8 +42,8 @@ export function ItemsList({
       {deleteError && <p className="wizard-error">{deleteError}</p>}
       {items.length === 0 && !loading && <p>No items yet — add your first one.</p>}
       {items.length > 0 && (
-        <div className="items-table-wrap">
-          <table className="items-table">
+        <div className="table-wrap">
+          <table className="data-table">
             <thead>
               <tr>
                 <th></th>

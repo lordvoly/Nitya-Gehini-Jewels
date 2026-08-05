@@ -22,7 +22,23 @@ export async function apiFetch<T>(path: string, init?: RequestInit): Promise<T> 
   });
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new Error(body.error ?? `Request to ${path} failed with ${res.status}`);
+    const err = new ApiError(body.error ?? `Request to ${path} failed with ${res.status}`, res.status, body);
+    throw err;
   }
   return res.json();
+}
+
+// Thrown by apiFetch on a non-OK response. Carries the response status and
+// parsed JSON body so callers that need more than the error message (e.g. a
+// 409 duplicate-phone response with the existing record attached) can get it
+// without a bespoke fetch call.
+export class ApiError extends Error {
+  status: number;
+  body: unknown;
+  constructor(message: string, status: number, body: unknown) {
+    super(message);
+    this.name = "ApiError";
+    this.status = status;
+    this.body = body;
+  }
 }

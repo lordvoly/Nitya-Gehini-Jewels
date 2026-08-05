@@ -1,0 +1,48 @@
+import { apiFetch, ApiError } from "./api";
+
+export interface Customer {
+  id: string;
+  name: string;
+  phone: string;
+  email: string | null;
+  address: string;
+  notes: string | null;
+  created_at: string;
+}
+
+export interface NewCustomer {
+  name: string;
+  phone: string;
+  email: string | null;
+  address: string;
+  notes: string | null;
+}
+
+export function fetchCustomers(search?: string) {
+  const qs = search?.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
+  return apiFetch<Customer[]>(`/api/customers${qs}`);
+}
+
+export type CreateCustomerResult =
+  | { type: "created"; customer: Customer }
+  | { type: "duplicate"; existingCustomer: Customer };
+
+// Phone dedupe happens atomically on the backend. A 409 means a customer with
+// this phone already exists — we surface that record instead of throwing, so
+// callers (the add-customer form, and eventually a booking screen) can offer
+// "use this customer" instead of a dead-end error.
+export async function createCustomer(input: NewCustomer): Promise<CreateCustomerResult> {
+  try {
+    const customer = await apiFetch<Customer>("/api/customers", {
+      method: "POST",
+      body: JSON.stringify(input),
+    });
+    return { type: "created", customer };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 409) {
+      const existingCustomer = (e.body as { existingCustomer?: Customer } | undefined)?.existingCustomer;
+      if (existingCustomer) return { type: "duplicate", existingCustomer };
+    }
+    throw e;
+  }
+}
