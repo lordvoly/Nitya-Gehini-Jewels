@@ -9,9 +9,15 @@ const upload = multer({
   limits: { fileSize: 15 * 1024 * 1024 },
 });
 
-// GET /api/items — list, most recently added first
+// GET /api/items — list, most recently added first. ?active_only=true
+// restricts to is_active items — used by the booking item-picker, which
+// must never offer a retired item. The general items management list
+// calls this with no filter: retired items stay visible there (just
+// visually marked) so they can be found and reactivated.
 itemsRouter.get("/", async (req, res) => {
-  const { data, error } = await supabase.from("items").select("*").order("created_at", { ascending: false });
+  let query = supabase.from("items").select("*").order("created_at", { ascending: false });
+  if (req.query.active_only === "true") query = query.eq("is_active", true);
+  const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
@@ -90,4 +96,31 @@ itemsRouter.delete("/:id", async (req, res) => {
     return res.status(400).json({ error: error.message });
   }
   res.status(200).json({ ok: true });
+});
+
+// POST /api/items/:id/retire — hide from new bookings (the booking
+// item-picker filters is_active=true) while keeping the item and its
+// booking history exactly as-is. Not restricted to items blocked from
+// deletion — retirement is a valid state for any item.
+itemsRouter.post("/:id/retire", async (req, res) => {
+  const { data, error } = await supabase
+    .from("items")
+    .update({ is_active: false })
+    .eq("id", req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+  res.json(data);
+});
+
+// POST /api/items/:id/reactivate
+itemsRouter.post("/:id/reactivate", async (req, res) => {
+  const { data, error } = await supabase
+    .from("items")
+    .update({ is_active: true })
+    .eq("id", req.params.id)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+  res.json(data);
 });

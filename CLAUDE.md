@@ -185,9 +185,32 @@ Set` / `NGJ-0001`) confirmed untouched throughout.
 file picker through browser automation — not on an actual phone. Confirm that works
 before the real opening-stock entry session.
 
-**Known gap, parked on purpose:** items have no way to be retired (hidden from new
-bookings while keeping history) — see the note in `PROJECT_PLAN_V2.md` §3 under
-`items`. Revisit once bookings exist and items accumulate real history.
+Item retirement, end to end — resolves the "Known gap" previously noted here (items
+had no way to be retired) and in `PROJECT_PLAN_V2.md` §3. A new migration
+(`supabase/migrations/20260806000000_item_retirement.sql`) adds `items.is_active
+boolean not null default true`. Backend: `POST /api/items/:id/retire` and
+`POST /api/items/:id/reactivate` just flip that flag; `GET /api/items` grew an
+`?active_only=true` param rather than becoming a second endpoint — the booking
+item-picker (`BookingForm.tsx`) now calls `fetchItems({ activeOnly: true })`, while
+the general items management list (`ItemsPage.tsx`) still calls `fetchItems()`
+unfiltered, since retired items must stay visible there (just marked) so they can be
+found and reactivated. Frontend: `ItemsList.tsx` shows a grey "Retired" badge next to
+the name, an All/Active/Retired filter (client-side, over the already-fetched
+unfiltered list — no extra round-trip), and a Retire/Reactivate button alongside
+Delete (not replacing it) so a user never has to hit Delete's 409 first to discover
+retirement is the answer for an item with booking history — though retiring is a
+valid state for any item, not gated on booking history at all.
+
+All verified live, not just typechecked, including in the browser (not just via the
+API): retired an item with real booking history via the actual UI Retire button —
+confirmed it vanished from `BookingForm`'s item dropdown but stayed visible (badged
+"Retired") in the items list under All/Retired; its historical booking's detail view
+still showed the item's name and `price_charged` correctly, untouched; reactivated it
+via the UI Reactivate button and confirmed it reappeared in the booking dropdown;
+separately retired a second item with zero booking history and confirmed it behaves
+identically (retirement never checks for booking history). All `ZZTEST`-prefixed test
+data cleaned up afterward; real data (`Peacock Bridal Set` / `NGJ-0001`, `is_active:
+true`) confirmed untouched throughout.
 
 **Next step:** Phase 1 core operations (item intake, bookings, returns, dashboard) are
 now functionally complete. Per `PROJECT_PLAN_V2.md` §5, Phase 2 (bookkeeping —

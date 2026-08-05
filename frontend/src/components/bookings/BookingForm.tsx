@@ -26,7 +26,7 @@ export function BookingForm() {
   const [saved, setSaved] = useState<Booking | null>(null);
 
   useEffect(() => {
-    fetchItems().then(setItems);
+    fetchItems({ activeOnly: true }).then(setItems);
   }, []);
 
   // Unique items only show while status = available (a coarse manual gate);

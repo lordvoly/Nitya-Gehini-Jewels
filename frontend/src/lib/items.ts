@@ -32,6 +32,7 @@ export interface Item {
   current_location: string | null;
   photos: string[];
   notes: string | null;
+  is_active: boolean;
   created_at: string;
   updated_at: string;
 }
@@ -52,8 +53,11 @@ export interface NewItem {
   notes: string | null;
 }
 
-export function fetchItems() {
-  return apiFetch<Item[]>("/api/items");
+// activeOnly: true is for the booking item-picker, which must never offer a
+// retired item. The general items management list calls this with no
+// argument — retired items stay visible there (just visually marked).
+export function fetchItems(opts?: { activeOnly?: boolean }) {
+  return apiFetch<Item[]>(`/api/items${opts?.activeOnly ? "?active_only=true" : ""}`);
 }
 
 export function createItem(item: NewItem) {
@@ -72,6 +76,14 @@ export function updateItem(id: string, item: NewItem) {
 
 export function deleteItem(id: string) {
   return apiFetch<{ ok: true }>(`/api/items/${id}`, { method: "DELETE" });
+}
+
+export function retireItem(id: string) {
+  return apiFetch<Item>(`/api/items/${id}/retire`, { method: "POST" });
+}
+
+export function reactivateItem(id: string) {
+  return apiFetch<Item>(`/api/items/${id}/reactivate`, { method: "POST" });
 }
 
 export async function uploadItemPhoto(file: File): Promise<string> {

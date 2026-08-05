@@ -75,13 +75,7 @@ The core inventory table. Handles both unique physical pieces and stock-quantity
 | photos | text[] | URLs in Supabase Storage |
 | notes | text | |
 | created_at, updated_at | timestamptz | |
-
-**Known gap, parked on purpose:** items with booking history can't be hard-deleted
-(the `bookings.item_id` FK blocks it), but there's currently no way to *retire* an
-item either — hide a damaged/discontinued piece from new bookings while keeping its
-history intact. Likely fix: an `is_active` flag or a `retired` status value. Doesn't
-matter until bookings exist and items actually accumulate history, so revisit once
-Phase 1 bookings work is underway rather than building it now.
+| is_active | boolean, default `true` | Retirement flag — hides the item from new bookings (booking item-picker filters on it) while keeping its history intact. Items with booking history can't be hard-deleted (the `bookings.item_id` FK blocks it), but retiring is a valid state for any item, not just ones blocked from deletion. |
 
 ### `customers`
 | Field | Type | Notes |

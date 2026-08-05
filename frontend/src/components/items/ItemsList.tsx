@@ -1,5 +1,7 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import type { Item } from "../../lib/items";
+
+type Filter = "all" | "active" | "retired";
 
 export function ItemsList({
   items,
@@ -7,41 +9,96 @@ export function ItemsList({
   onRefresh,
   onEdit,
   onDelete,
+  onRetire,
+  onReactivate,
 }: {
   items: Item[];
   loading: boolean;
   onRefresh: () => void;
   onEdit: (item: Item) => void;
   onDelete: (item: Item) => Promise<void>;
+  onRetire: (item: Item) => Promise<void>;
+  onReactivate: (item: Item) => Promise<void>;
 }) {
+  const [filter, setFilter] = useState<Filter>("all");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [deleteError, setDeleteError] = useState<string | null>(null);
+  const [togglingId, setTogglingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
+
+  const filteredItems = useMemo(() => {
+    if (filter === "active") return items.filter((i) => i.is_active);
+    if (filter === "retired") return items.filter((i) => !i.is_active);
+    return items;
+  }, [items, filter]);
 
   async function confirmDelete(item: Item) {
     setDeletingId(item.id);
-    setDeleteError(null);
+    setActionError(null);
     try {
       await onDelete(item);
       setConfirmingId(null);
     } catch (e) {
-      setDeleteError(e instanceof Error ? e.message : "Failed to delete item");
+      setActionError(e instanceof Error ? e.message : "Failed to delete item");
     } finally {
       setDeletingId(null);
+    }
+  }
+
+  async function handleRetire(item: Item) {
+    setTogglingId(item.id);
+    setActionError(null);
+    try {
+      await onRetire(item);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Failed to retire item");
+    } finally {
+      setTogglingId(null);
+    }
+  }
+
+  async function handleReactivate(item: Item) {
+    setTogglingId(item.id);
+    setActionError(null);
+    try {
+      await onReactivate(item);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Failed to reactivate item");
+    } finally {
+      setTogglingId(null);
     }
   }
 
   return (
     <div>
       <div className="list-header">
-        <h2>All Items ({items.length})</h2>
+        <h2>Items ({filteredItems.length})</h2>
         <button className="btn-secondary" onClick={onRefresh} disabled={loading}>
           {loading ? "Refreshing…" : "Refresh"}
         </button>
       </div>
-      {deleteError && <p className="wizard-error">{deleteError}</p>}
-      {items.length === 0 && !loading && <p>No items yet — add your first one.</p>}
-      {items.length > 0 && (
+
+      <div className="toggle-group filter-group">
+        <button className={filter === "all" ? "toggle-btn active" : "toggle-btn"} onClick={() => setFilter("all")}>
+          All
+        </button>
+        <button
+          className={filter === "active" ? "toggle-btn active" : "toggle-btn"}
+          onClick={() => setFilter("active")}
+        >
+          Active
+        </button>
+        <button
+          className={filter === "retired" ? "toggle-btn active" : "toggle-btn"}
+          onClick={() => setFilter("retired")}
+        >
+          Retired
+        </button>
+      </div>
+
+      {actionError && <p className="wizard-error">{actionError}</p>}
+      {filteredItems.length === 0 && !loading && <p>No items to show.</p>}
+      {filteredItems.length > 0 && (
         <div className="table-wrap">
           <table className="data-table">
             <thead>
@@ -58,11 +115,14 @@ export function ItemsList({
               </tr>
             </thead>
             <tbody>
-              {items.map((item) => (
+              {filteredItems.map((item) => (
                 <tr key={item.id}>
                   <td>{item.photos[0] && <img src={item.photos[0]} alt="" className="row-thumb" />}</td>
                   <td>{item.item_code}</td>
-                  <td>{item.name}</td>
+                  <td>
+                    {item.name}
+                    {!item.is_active && <span className="badge-retired">Retired</span>}
+                  </td>
                   <td>{item.category}</td>
                   <td>
                     {item.item_type === "set" ? "Set" : "Single"} ·{" "}
@@ -91,6 +151,23 @@ export function ItemsList({
                         <button className="btn-secondary" onClick={() => onEdit(item)}>
                           Edit
                         </button>
+                        {item.is_active ? (
+                          <button
+                            className="btn-secondary"
+                            onClick={() => handleRetire(item)}
+                            disabled={togglingId === item.id}
+                          >
+                            {togglingId === item.id ? "…" : "Retire"}
+                          </button>
+                        ) : (
+                          <button
+                            className="btn-secondary"
+                            onClick={() => handleReactivate(item)}
+                            disabled={togglingId === item.id}
+                          >
+                            {togglingId === item.id ? "…" : "Reactivate"}
+                          </button>
+                        )}
                         <button className="btn-secondary" onClick={() => setConfirmingId(item.id)}>
                           Delete
                         </button>

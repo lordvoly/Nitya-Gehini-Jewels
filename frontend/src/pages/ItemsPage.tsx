@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { AddItemWizard } from "../components/items/AddItemWizard";
 import { ItemEditForm } from "../components/items/ItemEditForm";
 import { ItemsList } from "../components/items/ItemsList";
-import { deleteItem, fetchItems, type Item } from "../lib/items";
+import { deleteItem, fetchItems, reactivateItem, retireItem, type Item } from "../lib/items";
 import "../styles/shared.css";
 
 export default function ItemsPage() {
@@ -27,6 +27,16 @@ export default function ItemsPage() {
   async function handleDelete(item: Item) {
     await deleteItem(item.id);
     setItems((prev) => prev.filter((i) => i.id !== item.id));
+  }
+
+  async function handleRetire(item: Item) {
+    const updated = await retireItem(item.id);
+    setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+  }
+
+  async function handleReactivate(item: Item) {
+    const updated = await reactivateItem(item.id);
+    setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
   }
 
   return (
@@ -73,6 +83,8 @@ export default function ItemsPage() {
           onRefresh={refresh}
           onEdit={setEditingItem}
           onDelete={handleDelete}
+          onRetire={handleRetire}
+          onReactivate={handleReactivate}
         />
       )}
     </div>
