@@ -10,14 +10,14 @@ const ACTIVE_STATUSES = ["booked", "out"];
 
 // GET /api/bookings?status=&item_id=&customer_id=
 //
-// Note: booking_financials is a computed VIEW (bookings joined with a
-// payments sum), not a table with a real foreign key to bookings — so
-// PostgREST can't embed it via relationship syntax the way items/customers
-// below are embedded. It was in this select from the original scaffold but
-// had never actually been exercised until this task's list view needed
-// this endpoint to work; it just 500'd. If per-booking balance_due is
-// needed here later, query the view separately (like the customers search
-// does two queries + merge) rather than trying to embed it.
+// booking_financials is a computed VIEW (bookings joined with a payments
+// sum), not a table with a real foreign key to bookings, so PostgREST can't
+// embed it via relationship syntax the way items/customers below are —
+// that was tried in the original scaffold and just 500'd. total_paid/
+// balance_due are fetched with a second query and merged by booking_id
+// instead, the same two-queries-plus-merge pattern the customers search
+// already uses. Never store these on the booking row itself — they must
+// stay computed at read time.
 bookingsRouter.get("/", async (req, res) => {
   let query = supabase
     .from("bookings")
@@ -26,9 +26,26 @@ bookingsRouter.get("/", async (req, res) => {
   if (typeof req.query.status === "string") query = query.eq("status", req.query.status);
   if (typeof req.query.item_id === "string") query = query.eq("item_id", req.query.item_id);
   if (typeof req.query.customer_id === "string") query = query.eq("customer_id", req.query.customer_id);
-  const { data, error } = await query;
+  const { data: bookings, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+
+  const ids = (bookings ?? []).map((b) => b.id);
+  if (ids.length === 0) return res.json(bookings);
+
+  const { data: financials, error: financialsError } = await supabase
+    .from("booking_financials")
+    .select("booking_id, total_paid, balance_due")
+    .in("booking_id", ids);
+  if (financialsError) return res.status(500).json({ error: financialsError.message });
+
+  const financialsByBookingId = new Map((financials ?? []).map((f) => [f.booking_id, f]));
+  res.json(
+    bookings.map((b) => ({
+      ...b,
+      total_paid: financialsByBookingId.get(b.id)?.total_paid ?? 0,
+      balance_due: financialsByBookingId.get(b.id)?.balance_due ?? b.price_charged,
+    })),
+  );
 });
 
 bookingsRouter.get("/overdue", async (_req, res) => {

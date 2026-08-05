@@ -46,10 +46,14 @@ export interface BookingCustomerSummary {
 }
 
 // What GET /api/bookings actually returns — the plain fields plus the
-// item/customer embeds needed to display a list without N+1 fetches.
+// item/customer embeds needed to display a list without N+1 fetches, plus
+// total_paid/balance_due merged in from the booking_financials view
+// (computed at read time server-side, never stored on the booking).
 export interface BookingWithDetails extends Booking {
   items: BookingItemSummary | null;
   customers: BookingCustomerSummary | null;
+  total_paid: number;
+  balance_due: number;
 }
 
 export interface ConflictingBooking {

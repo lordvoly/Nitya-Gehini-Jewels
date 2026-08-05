@@ -38,6 +38,8 @@ export function BookingsList({ onProcessReturn }: { onProcessReturn: (booking: B
                 <th>Customer</th>
                 <th>Dates</th>
                 <th>Status</th>
+                <th>Paid</th>
+                <th>Balance Due</th>
                 <th></th>
               </tr>
             </thead>
@@ -53,6 +55,8 @@ export function BookingsList({ onProcessReturn }: { onProcessReturn: (booking: B
                     {b.return_date ? ` → ${b.return_date}` : ""}
                   </td>
                   <td>{b.status}</td>
+                  <td>₹{b.total_paid}</td>
+                  <td>₹{b.balance_due}</td>
                   <td>
                     {b.type === "rental" && (b.status === "booked" || b.status === "out") && (
                       <button className="btn-secondary" onClick={() => onProcessReturn(b)}>
