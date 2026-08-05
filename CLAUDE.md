@@ -212,6 +212,20 @@ identically (retirement never checks for booking history). All `ZZTEST`-prefixed
 data cleaned up afterward; real data (`Peacock Bridal Set` / `NGJ-0001`, `is_active:
 true`) confirmed untouched throughout.
 
+Deployment prep for Render (backend) + Vercel (frontend): confirmed there was no
+hardcoded `localhost:4000` in frontend source (only in `.env.example`, which is
+correct) — `frontend/src/lib/api.ts` now has an explicit code-level fallback
+(`import.meta.env.VITE_API_URL || "http://localhost:4000"`) so it still works locally
+with no `.env` file present, while `VITE_API_URL` overrides it in production.
+Backend CORS was already reading from `CORS_ORIGIN` (comma-separated) rather than a
+hardcoded origin — added `.filter(Boolean)` so an unset/empty value can't produce a
+stray `""` origin, and updated both `.env.example` files with production-value
+examples (Vercel domain for `CORS_ORIGIN`, Render URL for `VITE_API_URL`). Confirmed
+both `npm run build:backend` and `npm run build:frontend` succeed for real (not just
+typechecked) and produce exactly what each platform's start command expects —
+`backend/dist/index.js` (matches `backend/package.json`'s `start` script) and
+`frontend/dist/` (Vite's default output directory).
+
 **Next step:** Phase 1 core operations (item intake, bookings, returns, dashboard) are
 now functionally complete. Per `PROJECT_PLAN_V2.md` §5, Phase 2 (bookkeeping —
 payments, expenses, P&L, GST invoices) is the natural next area; `payments.ts` and

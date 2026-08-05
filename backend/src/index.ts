@@ -12,7 +12,15 @@ import { requireAuth, type AuthedRequest } from "./middleware/auth.js";
 
 const app = express();
 const port = process.env.PORT ?? 4000;
-const allowedOrigins = (process.env.CORS_ORIGIN ?? "").split(",").map((s) => s.trim());
+
+// Comma-separated list of origins allowed to call this API — the Vercel
+// frontend URL(s) in production, http://localhost:5173 for local dev.
+// filter(Boolean) so an unset/empty CORS_ORIGIN doesn't produce a stray ""
+// entry that cors() would otherwise treat as a literal allowed origin.
+const allowedOrigins = (process.env.CORS_ORIGIN ?? "")
+  .split(",")
+  .map((s) => s.trim())
+  .filter(Boolean);
 
 app.use(cors({ origin: allowedOrigins }));
 app.use(express.json());

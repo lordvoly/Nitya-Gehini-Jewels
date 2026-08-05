@@ -1,6 +1,8 @@
 import { supabase } from "./supabase";
 
-const API_URL = import.meta.env.VITE_API_URL;
+// VITE_API_URL points at the deployed backend in production (Render). Falls
+// back to the local dev server so this works even without a .env file.
+const API_URL = import.meta.env.VITE_API_URL || "http://localhost:4000";
 
 async function authHeader(): Promise<Record<string, string>> {
   const { data } = await supabase.auth.getSession();
