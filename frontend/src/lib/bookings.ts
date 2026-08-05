@@ -27,6 +27,9 @@ export interface Booking {
   return_notes: string | null;
   created_at: string;
   updated_at: string;
+  // Not a DB column — present only when the backend has a non-blocking
+  // heads-up for the operator (e.g. same-day turnover on this item).
+  warning?: string;
 }
 
 export interface ConflictingBooking {

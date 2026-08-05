@@ -110,14 +110,18 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
       return res.status(409).json({ error: `This item isn't available right now (status: ${item.status})` });
     }
     if (type === "rental") {
+      // Strict inequality: a new booking's pickup_date landing exactly on an
+      // existing booking's return_date is same-day turnover (returns in the
+      // morning, goes back out that evening) — common in wedding season and
+      // must succeed, not block. Only a genuine overlap is a hard conflict.
       const { data: conflicts, error: conflictError } = await supabase
         .from("bookings")
         .select("*, customers(name)")
         .eq("item_id", item_id)
         .eq("type", "rental")
         .in("status", ACTIVE_STATUSES)
-        .lte("pickup_date", return_date)
-        .gte("return_date", pickup_date);
+        .lt("pickup_date", return_date)
+        .gt("return_date", pickup_date);
       if (conflictError) return res.status(500).json({ error: conflictError.message });
       if (conflicts && conflicts.length > 0) {
         return res.status(409).json({
@@ -138,14 +142,15 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
 
     let alreadyReservedForDates = 0;
     if (type === "rental") {
+      // Same strict-inequality boundary as the unique-item check above.
       const { data: overlappingRentals, error: rentalError } = await supabase
         .from("bookings")
         .select("quantity_booked")
         .eq("item_id", item_id)
         .eq("type", "rental")
         .in("status", ACTIVE_STATUSES)
-        .lte("pickup_date", return_date)
-        .gte("return_date", pickup_date);
+        .lt("pickup_date", return_date)
+        .gt("return_date", pickup_date);
       if (rentalError) return res.status(500).json({ error: rentalError.message });
       alreadyReservedForDates = sumQuantity(overlappingRentals);
     }
@@ -155,6 +160,25 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
       return res.status(409).json({
         error: `Only ${Math.max(available, 0)} available${type === "rental" ? " for these dates" : ""}, requested ${qty}`,
       });
+    }
+  }
+
+  // Not a conflict (see the strict-inequality checks above), but worth a
+  // heads-up: this booking's pickup lands the same day another active
+  // rental on this item is due back, so the operator should confirm the
+  // check-in actually happened before handing this one over.
+  let warning: string | undefined;
+  if (type === "rental") {
+    const { data: sameDayReturns, error: sameDayError } = await supabase
+      .from("bookings")
+      .select("booking_code")
+      .eq("item_id", item_id)
+      .eq("type", "rental")
+      .in("status", ACTIVE_STATUSES)
+      .eq("return_date", pickup_date);
+    if (sameDayError) return res.status(500).json({ error: sameDayError.message });
+    if (sameDayReturns && sameDayReturns.length > 0) {
+      warning = "This item has another booking returning today — confirm it's been checked in before handing it over.";
     }
   }
 
@@ -186,7 +210,9 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
       if (type === "sale" && item.tracking_type === "unique") {
         await supabase.from("items").update({ status: "sold" }).eq("id", item_id);
       }
-      return res.status(201).json(data);
+      // `warning` is undefined (dropped by JSON.stringify) when there's
+      // nothing to flag — the response shape is unchanged in the common case.
+      return res.status(201).json({ ...data, warning });
     }
     if (error.code !== "23505") return res.status(400).json({ error: error.message });
   }

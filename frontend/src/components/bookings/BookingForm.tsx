@@ -129,6 +129,11 @@ export function BookingForm() {
         <p className="success-check">✓ Booking Created</p>
         <p className="success-code">{saved.booking_code}</p>
         <p>{customer?.name}</p>
+        {saved.warning && (
+          <div className="found-panel">
+            <p>{saved.warning}</p>
+          </div>
+        )}
         <div className="wizard-actions">
           <button className="btn-primary" onClick={startAnother}>
             Create Another
