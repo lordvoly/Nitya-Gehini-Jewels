@@ -33,15 +33,6 @@ during this verification: `CustomersList`'s debounced search had no guard agains
 older in-flight request resolving after a newer one and clobbering its results —
 fixed with a `cancelled` flag in the effect's cleanup.
 
-**In progress / unverified:** `ItemsPage.tsx`'s camera capture
-(`capture="environment"` on the photo input) has only been exercised via a desktop
-file picker through browser automation — not on an actual phone. Confirm that works
-before the real opening-stock entry session.
-
-**Known gap, parked on purpose:** items have no way to be retired (hidden from new
-bookings while keeping history) — see the note in `PROJECT_PLAN_V2.md` §3 under
-`items`. Revisit once bookings exist and items accumulate real history.
-
 Bookings creation, end to end: backend (`backend/src/routes/bookings.ts`) generates
 `RNT-000N`/`SALE-000N` codes (retry-on-23505, same pattern as `item_code`) and does
 real conflict detection — `unique` items require `status = 'available'` and, for
@@ -67,6 +58,28 @@ browser submit (full page reload, all state lost) instead of React's `onSubmit` 
 fixed by rendering `Modal` through a `createPortal` into `document.body`. Any future
 modal that might contain a `<form>` should go through this same `Modal` component
 rather than a one-off `<div>` overlay, to avoid reintroducing this.
+
+Conflict-detection boundary refined afterward: the overlap checks (both the
+unique-item conflict check and the quantity-item date-windowed oversell check) use
+strict inequality (`<`/`>`), not `<=`/`>=` — a new booking's `pickup_date` landing
+exactly on an existing booking's `return_date` for the same item is same-day
+turnaround (returns in the morning, goes back out that evening), which this shop does
+regularly in wedding season, and must succeed rather than hard-block. When that
+touching-boundary case happens, the booking still succeeds but the response carries a
+non-blocking `warning` field (API-response-only, not a DB column) prompting the
+operator to confirm check-in before handing the item over — surfaced in
+`BookingForm`'s success panel. Verified live: touching boundary succeeds with the
+warning shown, a genuinely earlier pickup is still correctly blocked, and a pickup the
+day after succeeds with no warning.
+
+**In progress / unverified:** `ItemsPage.tsx`'s camera capture
+(`capture="environment"` on the photo input) has only been exercised via a desktop
+file picker through browser automation — not on an actual phone. Confirm that works
+before the real opening-stock entry session.
+
+**Known gap, parked on purpose:** items have no way to be retired (hidden from new
+bookings while keeping history) — see the note in `PROJECT_PLAN_V2.md` §3 under
+`items`. Revisit once bookings exist and items accumulate real history.
 
 **Next step:** Per `PROJECT_PLAN_V2.md` §5's Phase 1 order, `backend/src/routes/bookings.ts`
 still has its second `TODO(Phase 1)`: the `/:id/return` endpoint doesn't populate
