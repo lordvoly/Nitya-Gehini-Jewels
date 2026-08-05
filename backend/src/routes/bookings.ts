@@ -1,8 +1,12 @@
 import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
 import { istToday } from "../lib/dates.js";
+import type { AuthedRequest } from "../middleware/auth.js";
 
 export const bookingsRouter = Router();
+
+// "Still consuming inventory" — excludes returned/completed/cancelled.
+const ACTIVE_STATUSES = ["booked", "out"];
 
 // GET /api/bookings?status=&item_id=&customer_id=
 bookingsRouter.get("/", async (req, res) => {
@@ -27,17 +31,166 @@ bookingsRouter.get("/upcoming-returns", async (_req, res) => {
   res.json(data);
 });
 
-// POST /api/bookings — create a rental or sale.
-// TODO(Phase 1): conflict detection — for `unique` items, reject if an
-// overlapping `booked`/`out` booking exists for the same item_id and date
-// range; for `quantity` items, reject if quantity_booked exceeds
-// (quantity_on_hand - sum of already-booked quantity in the overlapping range).
-// price_charged must be taken from the request body (a snapshot), never
-// re-read from items.rental_price/sale_price after creation.
-bookingsRouter.post("/", async (req, res) => {
-  const { data, error } = await supabase.from("bookings").insert(req.body).select().single();
-  if (error) return res.status(400).json({ error: error.message });
-  res.status(201).json(data);
+const CODE_PREFIX = { rental: "RNT", sale: "SALE" } as const;
+
+async function nextBookingCode(type: "rental" | "sale"): Promise<string> {
+  const prefix = CODE_PREFIX[type];
+  const { data, error } = await supabase
+    .from("bookings")
+    .select("booking_code")
+    .eq("type", type)
+    .order("created_at", { ascending: false })
+    .limit(1);
+  if (error) throw error;
+  const last = data?.[0]?.booking_code as string | undefined;
+  const lastNum = last ? parseInt(last.slice(last.lastIndexOf("-") + 1), 10) || 0 : 0;
+  return `${prefix}-${String(lastNum + 1).padStart(4, "0")}`;
+}
+
+function sumQuantity(rows: { quantity_booked: number }[] | null | undefined): number {
+  return (rows ?? []).reduce((sum, r) => sum + r.quantity_booked, 0);
+}
+
+// POST /api/bookings — create a rental or sale, with conflict detection.
+//
+// `unique` items: item.status must be 'available' (mirrors the item
+// picker's own filter, as a server-side backstop). Rentals additionally
+// must not overlap an existing active (booked/out) rental's date range on
+// that item — the item's status is deliberately NOT flipped to
+// 'rented_out' on rental creation, since a unique item can legitimately
+// have multiple non-overlapping future rentals; the date-overlap check is
+// the real guard. A unique-item sale, by contrast, is permanent, so it
+// does flip status to 'sold' below.
+//
+// `quantity` items: requested quantity_booked must not exceed
+// quantity_on_hand minus (a) quantity already permanently consumed by
+// active sales, and for rentals also (b) quantity reserved by other
+// active rentals whose date range overlaps the requested one.
+// quantity_on_hand itself is never decremented — "how much is left" is
+// always computed from existing bookings at check time, the same way
+// balances/overdue status are computed rather than stored elsewhere in
+// this codebase.
+bookingsRouter.post("/", async (req: AuthedRequest, res) => {
+  const {
+    type,
+    item_id,
+    quantity_booked,
+    customer_id,
+    pickup_date,
+    return_date,
+    price_charged,
+    deposit_amount,
+    deposit_collected,
+    gst_applicable,
+    gst_invoice_number,
+    hsn_code,
+    tax_rate,
+  } = req.body ?? {};
+
+  if (type !== "rental" && type !== "sale") {
+    return res.status(400).json({ error: "type must be 'rental' or 'sale'" });
+  }
+  if (!item_id || !customer_id || !pickup_date) {
+    return res.status(400).json({ error: "item_id, customer_id, and pickup_date are required" });
+  }
+  if (type === "rental" && !return_date) {
+    return res.status(400).json({ error: "return_date is required for rentals" });
+  }
+  if (price_charged == null) {
+    return res.status(400).json({ error: "price_charged is required" });
+  }
+
+  const { data: item, error: itemError } = await supabase.from("items").select("*").eq("id", item_id).single();
+  if (itemError || !item) return res.status(400).json({ error: "Item not found" });
+
+  const qty = quantity_booked ?? 1;
+
+  if (item.tracking_type === "unique") {
+    if (item.status !== "available") {
+      return res.status(409).json({ error: `This item isn't available right now (status: ${item.status})` });
+    }
+    if (type === "rental") {
+      const { data: conflicts, error: conflictError } = await supabase
+        .from("bookings")
+        .select("*, customers(name)")
+        .eq("item_id", item_id)
+        .eq("type", "rental")
+        .in("status", ACTIVE_STATUSES)
+        .lte("pickup_date", return_date)
+        .gte("return_date", pickup_date);
+      if (conflictError) return res.status(500).json({ error: conflictError.message });
+      if (conflicts && conflicts.length > 0) {
+        return res.status(409).json({
+          error: "This item is already booked for an overlapping date range",
+          conflicts,
+        });
+      }
+    }
+  } else {
+    const { data: activeSales, error: salesError } = await supabase
+      .from("bookings")
+      .select("quantity_booked")
+      .eq("item_id", item_id)
+      .eq("type", "sale")
+      .in("status", ACTIVE_STATUSES);
+    if (salesError) return res.status(500).json({ error: salesError.message });
+    const alreadySold = sumQuantity(activeSales);
+
+    let alreadyReservedForDates = 0;
+    if (type === "rental") {
+      const { data: overlappingRentals, error: rentalError } = await supabase
+        .from("bookings")
+        .select("quantity_booked")
+        .eq("item_id", item_id)
+        .eq("type", "rental")
+        .in("status", ACTIVE_STATUSES)
+        .lte("pickup_date", return_date)
+        .gte("return_date", pickup_date);
+      if (rentalError) return res.status(500).json({ error: rentalError.message });
+      alreadyReservedForDates = sumQuantity(overlappingRentals);
+    }
+
+    const available = (item.quantity_on_hand ?? 0) - alreadySold - alreadyReservedForDates;
+    if (qty > available) {
+      return res.status(409).json({
+        error: `Only ${Math.max(available, 0)} available${type === "rental" ? " for these dates" : ""}, requested ${qty}`,
+      });
+    }
+  }
+
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const booking_code = await nextBookingCode(type);
+    const { data, error } = await supabase
+      .from("bookings")
+      .insert({
+        booking_code,
+        type,
+        item_id,
+        quantity_booked: qty,
+        customer_id,
+        pickup_date,
+        return_date: type === "rental" ? return_date : null,
+        price_charged,
+        deposit_amount: deposit_amount ?? 0,
+        deposit_collected: deposit_collected ?? false,
+        gst_applicable: gst_applicable ?? false,
+        gst_invoice_number: gst_applicable ? gst_invoice_number ?? null : null,
+        hsn_code: gst_applicable ? hsn_code ?? null : null,
+        tax_rate: gst_applicable ? tax_rate ?? null : null,
+        created_by: req.user?.id ?? null,
+      })
+      .select()
+      .single();
+
+    if (!error) {
+      if (type === "sale" && item.tracking_type === "unique") {
+        await supabase.from("items").update({ status: "sold" }).eq("id", item_id);
+      }
+      return res.status(201).json(data);
+    }
+    if (error.code !== "23505") return res.status(400).json({ error: error.message });
+  }
+  res.status(500).json({ error: "Could not generate a unique booking code, please retry" });
 });
 
 // POST /api/bookings/:id/return — returns processing.

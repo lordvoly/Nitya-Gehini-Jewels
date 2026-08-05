@@ -10,25 +10,12 @@ import {
   type NewItem,
   type TrackingType,
 } from "../../lib/items";
+import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
 import { PhotoPicker } from "./PhotoPicker";
 
 const COMMON_COMPONENTS = ["Necklace", "Earrings", "Tika", "Bangles", "Maang Tikka", "Ring"];
 
 type StepKey = "photo" | "basics" | "components" | "prices" | "review";
-
-function toNumberOrNull(s: string): number | null {
-  const t = s.trim();
-  if (!t) return null;
-  const n = Number(t);
-  return Number.isFinite(n) ? n : null;
-}
-
-function toIntOrNull(s: string): number | null {
-  const t = s.trim();
-  if (!t) return null;
-  const n = parseInt(t, 10);
-  return Number.isFinite(n) ? n : null;
-}
 
 function emptyForm() {
   return {

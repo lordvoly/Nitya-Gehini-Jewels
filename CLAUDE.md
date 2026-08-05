@@ -42,12 +42,38 @@ before the real opening-stock entry session.
 bookings while keeping history) — see the note in `PROJECT_PLAN_V2.md` §3 under
 `items`. Revisit once bookings exist and items accumulate real history.
 
-**Next step:** Per `PROJECT_PLAN_V2.md` §5's Phase 1 order, build out
-`BookingsPage.tsx` next (rental/sale creation with conflict detection, returns
-processing) — `customers` and `items` now both exist so the FK requirements are
-satisfied. `backend/src/routes/bookings.ts` still has its `TODO(Phase 1)` gaps
-(conflict detection, return-checklist population) unresolved; `DashboardPage.tsx` is
-still a placeholder stub.
+Bookings creation, end to end: backend (`backend/src/routes/bookings.ts`) generates
+`RNT-000N`/`SALE-000N` codes (retry-on-23505, same pattern as `item_code`) and does
+real conflict detection — `unique` items require `status = 'available'` and, for
+rentals, no overlapping active (`booked`/`out`) rental on that item; `quantity` items
+can't be oversold past `quantity_on_hand` once active sales (permanent) and
+date-overlapping active rentals (temporary) are both accounted for. A unique item's
+`status` flips to `sold` on sale but is deliberately left untouched by rental
+creation — see the long comment above the POST handler for why. `quantity_on_hand`
+itself is never decremented; "how much is left" is always computed from existing
+bookings at check time. Frontend (`frontend/src/pages/BookingsPage.tsx` +
+`frontend/src/components/bookings/`) — `BookingForm` (type/item/customer/dates/price
+auto-fill/deposit/GST) plus `CustomerPicker`, which reuses `AddCustomerForm` inside a
+new shared `Modal` component exactly as it was built decoupled for.
+
+All verified live: successful non-overlapping unique-item rental, a second overlapping
+rental correctly blocked with the specific conflicting booking shown, a quantity-item
+sale succeeding with no `return_date`, the oversell check confirmed exact down to the
+unit boundary, GST fields toggling both directions, and a brand-new customer created
+from inside the booking form without losing any other field's state. One real bug was
+caught and fixed during that last check: `Modal`'s content was a DOM descendant of
+`BookingForm`'s own `<form>`, so `AddCustomerForm`'s nested `<form>` triggered a native
+browser submit (full page reload, all state lost) instead of React's `onSubmit` —
+fixed by rendering `Modal` through a `createPortal` into `document.body`. Any future
+modal that might contain a `<form>` should go through this same `Modal` component
+rather than a one-off `<div>` overlay, to avoid reintroducing this.
+
+**Next step:** Per `PROJECT_PLAN_V2.md` §5's Phase 1 order, `backend/src/routes/bookings.ts`
+still has its second `TODO(Phase 1)`: the `/:id/return` endpoint doesn't populate
+`return_checklist` from the item's `components` yet, and there's no returns UI at all
+(no way to mark a booking returned from the frontend). That's the next task.
+`DashboardPage.tsx` is still a placeholder stub — today's returns/overdue items/quick
+stats, probably the natural task after returns processing.
 
 ## Tech stack
 

@@ -336,3 +336,45 @@
 .found-panel p {
   margin: 4px 0;
 }
+
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 16px;
+  z-index: 100;
+}
+
+.modal-content {
+  background: #fff;
+  border-radius: 12px;
+  max-width: 480px;
+  width: 100%;
+  max-height: 90vh;
+  overflow-y: auto;
+}
+
+.option-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.option-list .toggle-btn {
+  text-align: left;
+}
+
+.conflict-list {
+  list-style: none;
+  padding: 0;
+  margin: 8px 0 0;
+}
+
+.conflict-list li {
+  padding: 6px 0;
+  border-bottom: 1px solid #f3d9d9;
+}
