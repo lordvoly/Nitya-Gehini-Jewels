@@ -32,6 +32,26 @@ export interface Booking {
   warning?: string;
 }
 
+export interface BookingItemSummary {
+  item_code: string;
+  name: string;
+  item_type: "set" | "single";
+  components: string[] | null;
+  tracking_type: "unique" | "quantity";
+}
+
+export interface BookingCustomerSummary {
+  name: string;
+  phone: string;
+}
+
+// What GET /api/bookings actually returns — the plain fields plus the
+// item/customer embeds needed to display a list without N+1 fetches.
+export interface BookingWithDetails extends Booking {
+  items: BookingItemSummary | null;
+  customers: BookingCustomerSummary | null;
+}
+
 export interface ConflictingBooking {
   id: string;
   booking_code: string;
@@ -82,5 +102,20 @@ export async function createBooking(input: NewBooking): Promise<CreateBookingRes
 
 export function fetchBookings(params?: { item_id?: string; customer_id?: string; status?: string }) {
   const qs = params ? new URLSearchParams(params).toString() : "";
-  return apiFetch<Booking[]>(`/api/bookings${qs ? `?${qs}` : ""}`);
+  return apiFetch<BookingWithDetails[]>(`/api/bookings${qs ? `?${qs}` : ""}`);
+}
+
+export interface ReturnPayload {
+  return_checklist: Record<string, boolean> | null;
+  return_notes: string | null;
+  actual_return_date: string | null;
+  deposit_refunded: boolean | null;
+  deposit_refund_date: string | null;
+}
+
+export function processReturn(bookingId: string, payload: ReturnPayload) {
+  return apiFetch<Booking>(`/api/bookings/${bookingId}/return`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
 }

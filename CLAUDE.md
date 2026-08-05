@@ -72,6 +72,40 @@ operator to confirm check-in before handing the item over — surfaced in
 warning shown, a genuinely earlier pickup is still correctly blocked, and a pickup the
 day after succeeds with no warning.
 
+Returns processing, end to end — the second and last `TODO(Phase 1)` marker in
+`backend/src/routes/bookings.ts` is now resolved. `POST /api/bookings/:id/return`
+rejects anything not currently `booked`/`out` (no double-processing) and anything
+that isn't a rental (a sale has no return concept — added as a safeguard beyond what
+was explicitly asked, since letting one through would incorrectly flip a sold unique
+item's status). For a `set` item it normalizes `return_checklist` from the item's
+`components` (unmentioned components come back `false`) and, if anything's unchecked
+with no `return_notes` explaining it, returns the same kind of non-blocking `warning`
+as booking creation's same-day-turnover case — the shop needs to close out an
+incomplete return, not get stuck. A `unique` item's status flips back to `available`;
+a `quantity` item needs no stock adjustment since availability was already computed
+live from active bookings, never stored. Frontend: `BookingsList` (new — this task
+needed the first real list view for bookings) shows a "Process Return" action on
+eligible bookings; `ReturnForm` handles the checklist/notes/date/deposit-refund flow.
+
+While building this, found and fixed a **pre-existing** bug unrelated to this task:
+`GET /api/bookings` had `booking_financials(*)` in its select since the original
+scaffold, but that's a computed VIEW, not a table with a real foreign key to
+`bookings` — PostgREST can't embed it via relationship syntax, so the endpoint 500'd
+on every call. It had just never been exercised through the app before, since no list
+view existed until this task's `BookingsList` needed one. Removed the embed; if
+per-booking balance_due is ever needed there, query the view separately and merge, the
+way the customers search already does two queries + merge rather than relying on a
+single-request embed.
+
+All verified live: unique-item set return with everything checked succeeds with no
+warning, item status flips back to `available`, and the item reappears in the booking
+item-picker; the same kind with one component deliberately left unchecked and no
+notes succeeds but shows the warning; a quantity-item rental return succeeds with no
+checklist (not a set); attempting to re-return an already-returned booking is
+rejected with a clear message (409); attempting to return a sale booking is rejected
+too; deposit-refund toggle persists `deposit_refunded`/`deposit_refund_date`
+correctly, defaulting the date to the return date when not explicitly given.
+
 **In progress / unverified:** `ItemsPage.tsx`'s camera capture
 (`capture="environment"` on the photo input) has only been exercised via a desktop
 file picker through browser automation — not on an actual phone. Confirm that works
@@ -81,12 +115,12 @@ before the real opening-stock entry session.
 bookings while keeping history) — see the note in `PROJECT_PLAN_V2.md` §3 under
 `items`. Revisit once bookings exist and items accumulate real history.
 
-**Next step:** Per `PROJECT_PLAN_V2.md` §5's Phase 1 order, `backend/src/routes/bookings.ts`
-still has its second `TODO(Phase 1)`: the `/:id/return` endpoint doesn't populate
-`return_checklist` from the item's `components` yet, and there's no returns UI at all
-(no way to mark a booking returned from the frontend). That's the next task.
-`DashboardPage.tsx` is still a placeholder stub — today's returns/overdue items/quick
-stats, probably the natural task after returns processing.
+**Next step:** Both `bookings.ts` `TODO(Phase 1)` markers are now resolved — Phase 1
+core operations (item intake, bookings, returns) are functionally complete except for
+`DashboardPage.tsx`, still a placeholder stub. Per `PROJECT_PLAN_V2.md` §5, that's the
+natural next task: today's returns, overdue items, quick stats — `GET
+/api/bookings/overdue` and `/api/bookings/upcoming-returns` already exist
+(`overdue_rentals`/`upcoming_returns` views) but have no frontend consumer yet.
 
 ## Tech stack
 

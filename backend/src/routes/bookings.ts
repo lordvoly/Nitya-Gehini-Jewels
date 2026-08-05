@@ -9,8 +9,20 @@ export const bookingsRouter = Router();
 const ACTIVE_STATUSES = ["booked", "out"];
 
 // GET /api/bookings?status=&item_id=&customer_id=
+//
+// Note: booking_financials is a computed VIEW (bookings joined with a
+// payments sum), not a table with a real foreign key to bookings — so
+// PostgREST can't embed it via relationship syntax the way items/customers
+// below are embedded. It was in this select from the original scaffold but
+// had never actually been exercised until this task's list view needed
+// this endpoint to work; it just 500'd. If per-booking balance_due is
+// needed here later, query the view separately (like the customers search
+// does two queries + merge) rather than trying to embed it.
 bookingsRouter.get("/", async (req, res) => {
-  let query = supabase.from("bookings").select("*, booking_financials(*)").order("pickup_date", { ascending: false });
+  let query = supabase
+    .from("bookings")
+    .select("*, items(item_code, name, item_type, components, tracking_type), customers(name, phone)")
+    .order("pickup_date", { ascending: false });
   if (typeof req.query.status === "string") query = query.eq("status", req.query.status);
   if (typeof req.query.item_id === "string") query = query.eq("item_id", req.query.item_id);
   if (typeof req.query.customer_id === "string") query = query.eq("customer_id", req.query.customer_id);
@@ -219,23 +231,78 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
   res.status(500).json({ error: "Could not generate a unique booking code, please retry" });
 });
 
-// POST /api/bookings/:id/return — returns processing.
-// TODO(Phase 1): populate return_checklist from the item's `components`,
-// require every component confirmed before allowing status -> 'returned',
-// set actual_return_date to istToday() unless explicitly overridden.
+// POST /api/bookings/:id/return — returns processing. Only valid while the
+// booking is still active (booked/out) — rejects double-processing.
+//
+// For a `set` item, return_checklist is normalized from the item's
+// `components`: whatever the operator submits as checked stays checked,
+// anything else (including components they never mention) is recorded
+// false. If anything ends up unchecked and there's no return_notes
+// explaining why, this returns a non-blocking `warning` rather than
+// blocking — same pattern as the booking-creation same-day-turnover
+// warning: the shop needs to be able to close out an incomplete return
+// ("chasing the missing piece") rather than get stuck unable to record it
+// at all.
+//
+// A `unique` item's status flips back to 'available' here. A `quantity`
+// item needs no stock adjustment — availability is computed live from
+// active (booked/out) bookings, so flipping this one's status to
+// 'returned' already removes it from that count; see the POST / handler's
+// comment for why quantity_on_hand itself is never decremented.
 bookingsRouter.post("/:id/return", async (req, res) => {
-  const { return_checklist, return_notes } = req.body;
+  const { data: booking, error: bookingError } = await supabase
+    .from("bookings")
+    .select("*, items(item_type, components, tracking_type)")
+    .eq("id", req.params.id)
+    .single();
+  if (bookingError || !booking) return res.status(404).json({ error: "Booking not found" });
+
+  if (booking.type !== "rental") {
+    return res.status(400).json({ error: "Only rentals go through returns processing" });
+  }
+  if (!ACTIVE_STATUSES.includes(booking.status)) {
+    return res.status(409).json({ error: `This booking is already '${booking.status}' and can't be returned again` });
+  }
+
+  const item = booking.items as { item_type: string; components: string[] | null; tracking_type: string } | null;
+  const { return_notes, actual_return_date, deposit_refunded, deposit_refund_date } = req.body ?? {};
+
+  let return_checklist: Record<string, boolean> | null = null;
+  let warning: string | undefined;
+  if (item?.item_type === "set") {
+    const components = item.components ?? [];
+    const submitted = (req.body?.return_checklist ?? {}) as Record<string, boolean>;
+    return_checklist = Object.fromEntries(components.map((name) => [name, submitted[name] === true]));
+    const anyUnchecked = components.some((name) => !return_checklist![name]);
+    if (anyUnchecked && !return_notes?.trim()) {
+      warning =
+        "One or more components weren't checked off and there's no return note explaining it — consider adding one.";
+    }
+  }
+
+  const effectiveReturnDate = actual_return_date || istToday();
+  const updatePayload: Record<string, unknown> = {
+    status: "returned",
+    actual_return_date: effectiveReturnDate,
+    return_checklist,
+    return_notes: return_notes?.trim() || null,
+  };
+  if (booking.deposit_collected) {
+    updatePayload.deposit_refunded = deposit_refunded ?? false;
+    updatePayload.deposit_refund_date = deposit_refunded ? deposit_refund_date || effectiveReturnDate : null;
+  }
+
   const { data, error } = await supabase
     .from("bookings")
-    .update({
-      status: "returned",
-      actual_return_date: istToday(),
-      return_checklist,
-      return_notes,
-    })
+    .update(updatePayload)
     .eq("id", req.params.id)
     .select()
     .single();
   if (error) return res.status(400).json({ error: error.message });
-  res.json(data);
+
+  if (item?.tracking_type === "unique") {
+    await supabase.from("items").update({ status: "available" }).eq("id", booking.item_id);
+  }
+
+  res.status(200).json({ ...data, warning });
 });
