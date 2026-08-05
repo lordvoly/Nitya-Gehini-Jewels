@@ -3,8 +3,13 @@ import { supabase } from "../lib/supabase.js";
 
 export const customersRouter = Router();
 
+// Strips everything but digits, then keeps only the last 10 — so a leading
+// country code (+91, 0091, a bare 91) doesn't make the same real number look
+// like a different one. Indian mobile numbers are 10 digits; shorter/partial
+// search terms are returned unchanged since slice(-10) is a no-op under 10
+// chars, so this doesn't affect partial-phone search.
 function normalizePhone(phone: string): string {
-  return phone.replace(/\D/g, "");
+  return phone.replace(/\D/g, "").slice(-10);
 }
 
 // GET /api/customers?search=... — matches name (substring, case-insensitive)
