@@ -76,6 +76,13 @@ The core inventory table. Handles both unique physical pieces and stock-quantity
 | notes | text | |
 | created_at, updated_at | timestamptz | |
 
+**Known gap, parked on purpose:** items with booking history can't be hard-deleted
+(the `bookings.item_id` FK blocks it), but there's currently no way to *retire* an
+item either — hide a damaged/discontinued piece from new bookings while keeping its
+history intact. Likely fix: an `is_active` flag or a `retired` status value. Doesn't
+matter until bookings exist and items actually accumulate history, so revisit once
+Phase 1 bookings work is underway rather than building it now.
+
 ### `customers`
 | Field | Type | Notes |
 |---|---|---|
