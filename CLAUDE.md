@@ -352,6 +352,20 @@ testing the exact camera-capture flow flagged as unverified in the design-pass n
 above. Worth confirming with him — if so, that flagged gap may already be resolved in
 practice.
 
+Photo picker choice, same session — operator feedback: `capture="environment"` on the
+photo input forced straight to the camera on a phone with no way to pick an existing
+photo instead. `PhotoPicker.tsx` now renders two explicit buttons side by side —
+"📷 Take Photo" (keeps `capture="environment"`) and "🖼️ Choose Files" (a second,
+separate `<input type="file">` with no `capture` attribute, so the OS's normal
+gallery/file picker opens instead) — rather than relying on the sometimes-inconsistent
+native chooser dialog browsers show when `capture` is simply omitted. Both share the
+same upload handler, so behavior beyond that split is unchanged. Confirmed live: the
+`capture` attribute is present only on the Take Photo input (checked directly via the
+DOM, not assumed from the JSX); uploading through the Choose Files input still runs
+through the existing upload-and-thumbnail flow correctly; the two buttons stay
+side-by-side and fully tappable down to a 360px-wide viewport, wrapping their label
+text gracefully rather than breaking the layout.
+
 **Next step:** Phase 1 core operations (item intake, bookings, returns, dashboard) are
 now functionally complete. Per `PROJECT_PLAN_V2.md` §5, Phase 2 (bookkeeping —
 payments, expenses, P&L, GST invoices) is the natural next area; `payments.ts` and

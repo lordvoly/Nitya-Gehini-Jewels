@@ -50,17 +50,29 @@ export function PhotoPicker({
   return (
     <div>
       {hint && <p className="wizard-hint">{hint}</p>}
-      <label className="btn-camera">
-        📷 Take / Choose Photo
-        <input
-          type="file"
-          accept="image/*"
-          capture="environment"
-          multiple
-          onChange={(e) => handleSelect(e.target.files)}
-          style={{ display: "none" }}
-        />
-      </label>
+      <div className="photo-picker-actions">
+        <label className="btn-camera">
+          📷 Take Photo
+          <input
+            type="file"
+            accept="image/*"
+            capture="environment"
+            multiple
+            onChange={(e) => handleSelect(e.target.files)}
+            style={{ display: "none" }}
+          />
+        </label>
+        <label className="btn-camera">
+          🖼️ Choose Files
+          <input
+            type="file"
+            accept="image/*"
+            multiple
+            onChange={(e) => handleSelect(e.target.files)}
+            style={{ display: "none" }}
+          />
+        </label>
+      </div>
       {error && <p className="wizard-error">{error}</p>}
       <div className="photo-grid">
         {photos.map((url, i) => (

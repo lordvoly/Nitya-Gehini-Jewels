@@ -269,17 +269,23 @@ a {
   border-color: var(--wine);
 }
 
+.photo-picker-actions {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+
 .btn-camera {
   display: block;
+  flex: 1;
   text-align: center;
-  padding: 18px;
-  font-size: 16px;
+  padding: 18px 10px;
+  font-size: 15px;
   font-weight: 600;
   color: var(--ink-soft);
   border: 2px dashed var(--line);
   border-radius: var(--radius-lg);
   cursor: pointer;
-  margin-bottom: 16px;
 }
 
 .photo-grid {
