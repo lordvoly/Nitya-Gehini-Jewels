@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { fetchBooking, type BookingDetail as BookingDetailData } from "../../lib/bookings";
+import { bookingStatusPill } from "../../lib/statusPill";
 
 export function BookingDetail({ bookingId, onBack }: { bookingId: string; onBack: () => void }) {
   const [booking, setBooking] = useState<BookingDetailData | null>(null);
@@ -26,8 +27,10 @@ export function BookingDetail({ bookingId, onBack }: { bookingId: string; onBack
               {booking.items?.item_code} — {booking.items?.name} · {booking.customers?.name}
             </p>
             <ul className="review-list">
-              <li>Type: {booking.type}</li>
-              <li>Status: {booking.status}</li>
+              <li>Type: {booking.type === "rental" ? "Rental" : "Sale"}</li>
+              <li>
+                Status: <span className={`pill ${bookingStatusPill(booking.status).className}`}>{bookingStatusPill(booking.status).label}</span>
+              </li>
               <li>
                 Dates: {booking.pickup_date}
                 {booking.return_date ? ` → ${booking.return_date}` : ""}

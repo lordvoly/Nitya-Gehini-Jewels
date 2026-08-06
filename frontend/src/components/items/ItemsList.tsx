@@ -1,7 +1,14 @@
 import { useMemo, useState } from "react";
 import type { Item } from "../../lib/items";
+import { itemStatusPill } from "../../lib/statusPill";
 
 type Filter = "all" | "active" | "retired";
+
+const EMPTY_COPY: Record<Filter, { title: string; hint: string }> = {
+  all: { title: "No items yet", hint: "Add your first one to get started." },
+  active: { title: "No active items", hint: "Everything's retired, or nothing's been added yet." },
+  retired: { title: "No retired items", hint: "Retired pieces will show up here." },
+};
 
 export function ItemsList({
   items,
@@ -69,6 +76,8 @@ export function ItemsList({
     }
   }
 
+  const empty = EMPTY_COPY[filter];
+
   return (
     <div>
       <div className="list-header">
@@ -97,7 +106,14 @@ export function ItemsList({
       </div>
 
       {actionError && <p className="wizard-error">{actionError}</p>}
-      {filteredItems.length === 0 && !loading && <p>No items to show.</p>}
+
+      {filteredItems.length === 0 && !loading && (
+        <div className="empty-state">
+          <h3>{empty.title}</h3>
+          <p>{empty.hint}</p>
+        </div>
+      )}
+
       {filteredItems.length > 0 && (
         <div className="table-wrap">
           <table className="data-table">
@@ -115,67 +131,73 @@ export function ItemsList({
               </tr>
             </thead>
             <tbody>
-              {filteredItems.map((item) => (
-                <tr key={item.id}>
-                  <td>{item.photos[0] && <img src={item.photos[0]} alt="" className="row-thumb" />}</td>
-                  <td>{item.item_code}</td>
-                  <td>
-                    {item.name}
-                    {!item.is_active && <span className="badge-retired">Retired</span>}
-                  </td>
-                  <td>{item.category}</td>
-                  <td>
-                    {item.item_type === "set" ? "Set" : "Single"} ·{" "}
-                    {item.tracking_type === "quantity" ? `Qty ${item.quantity_on_hand ?? 0}` : "Unique"}
-                  </td>
-                  <td>{item.status.replace("_", " ")}</td>
-                  <td>{item.rental_price != null ? `₹${item.rental_price}` : "—"}</td>
-                  <td>{item.sale_price != null ? `₹${item.sale_price}` : "—"}</td>
-                  <td className="row-actions">
-                    {confirmingId === item.id ? (
-                      <>
-                        <span>Delete?</span>
-                        <button
-                          className="btn-secondary"
-                          onClick={() => confirmDelete(item)}
-                          disabled={deletingId === item.id}
-                        >
-                          {deletingId === item.id ? "…" : "Yes"}
-                        </button>
-                        <button className="btn-secondary" onClick={() => setConfirmingId(null)}>
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button className="btn-secondary" onClick={() => onEdit(item)}>
-                          Edit
-                        </button>
-                        {item.is_active ? (
+              {filteredItems.map((item) => {
+                const pill = itemStatusPill(item.status);
+                return (
+                  <tr key={item.id}>
+                    <td>{item.photos[0] && <img src={item.photos[0]} alt="" className="row-thumb" />}</td>
+                    <td data-label="Code">{item.item_code}</td>
+                    <td data-label="Name">{item.name}</td>
+                    <td data-label="Category">{item.category}</td>
+                    <td data-label="Type">
+                      {item.item_type === "set" ? "Set" : "Single"} ·{" "}
+                      {item.tracking_type === "quantity" ? `Qty ${item.quantity_on_hand ?? 0}` : "Unique"}
+                    </td>
+                    <td data-label="Status">
+                      {!item.is_active ? (
+                        <span className="pill pill-neutral">Retired</span>
+                      ) : (
+                        <span className={`pill ${pill.className}`}>{pill.label}</span>
+                      )}
+                    </td>
+                    <td data-label="Rental">{item.rental_price != null ? `₹${item.rental_price}` : "—"}</td>
+                    <td data-label="Sale">{item.sale_price != null ? `₹${item.sale_price}` : "—"}</td>
+                    <td className="row-actions">
+                      {confirmingId === item.id ? (
+                        <>
+                          <span>Delete this item?</span>
                           <button
-                            className="btn-secondary"
-                            onClick={() => handleRetire(item)}
-                            disabled={togglingId === item.id}
+                            className="btn-danger"
+                            onClick={() => confirmDelete(item)}
+                            disabled={deletingId === item.id}
                           >
-                            {togglingId === item.id ? "…" : "Retire"}
+                            {deletingId === item.id ? "…" : "Yes, Delete"}
                           </button>
-                        ) : (
-                          <button
-                            className="btn-secondary"
-                            onClick={() => handleReactivate(item)}
-                            disabled={togglingId === item.id}
-                          >
-                            {togglingId === item.id ? "…" : "Reactivate"}
+                          <button className="btn-secondary" onClick={() => setConfirmingId(null)}>
+                            Cancel
                           </button>
-                        )}
-                        <button className="btn-secondary" onClick={() => setConfirmingId(item.id)}>
-                          Delete
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
-              ))}
+                        </>
+                      ) : (
+                        <>
+                          <button className="btn-secondary" onClick={() => onEdit(item)}>
+                            Edit
+                          </button>
+                          {item.is_active ? (
+                            <button
+                              className="btn-secondary"
+                              onClick={() => handleRetire(item)}
+                              disabled={togglingId === item.id}
+                            >
+                              {togglingId === item.id ? "…" : "Retire"}
+                            </button>
+                          ) : (
+                            <button
+                              className="btn-secondary"
+                              onClick={() => handleReactivate(item)}
+                              disabled={togglingId === item.id}
+                            >
+                              {togglingId === item.id ? "…" : "Reactivate"}
+                            </button>
+                          )}
+                          <button className="btn-danger" onClick={() => setConfirmingId(item.id)}>
+                            Delete
+                          </button>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>

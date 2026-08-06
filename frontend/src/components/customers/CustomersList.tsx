@@ -40,7 +40,23 @@ export function CustomersList() {
         <h2>{term ? `Results (${customers.length})` : `All Customers (${customers.length})`}</h2>
         {loading && <span className="wizard-hint">Searching…</span>}
       </div>
-      {customers.length === 0 && !loading && <p>No customers found.</p>}
+
+      {customers.length === 0 && !loading && (
+        <div className="empty-state">
+          {term ? (
+            <>
+              <h3>No matches</h3>
+              <p>Nobody found for "{term}" — check the spelling or try just the phone number.</p>
+            </>
+          ) : (
+            <>
+              <h3>No customers yet</h3>
+              <p>Add your first customer, or create one while booking.</p>
+            </>
+          )}
+        </div>
+      )}
+
       {customers.length > 0 && (
         <div className="table-wrap">
           <table className="data-table">
@@ -55,10 +71,10 @@ export function CustomersList() {
             <tbody>
               {customers.map((c) => (
                 <tr key={c.id}>
-                  <td>{c.name}</td>
-                  <td>{c.phone}</td>
-                  <td>{c.email ?? "—"}</td>
-                  <td>{c.address}</td>
+                  <td data-label="Name">{c.name}</td>
+                  <td data-label="Phone">{c.phone}</td>
+                  <td data-label="Email">{c.email ?? "—"}</td>
+                  <td data-label="Address">{c.address}</td>
                 </tr>
               ))}
             </tbody>

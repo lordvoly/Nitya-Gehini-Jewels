@@ -226,6 +226,67 @@ typechecked) and produce exactly what each platform's start command expects —
 `backend/dist/index.js` (matches `backend/package.json`'s `start` script) and
 `frontend/dist/` (Vite's default output directory).
 
+The app is now live: backend on Render at
+`https://nitya-gehini-jewels-backend.onrender.com`, frontend on Vercel at
+`https://nitya-gehini-jewels-inventory.vercel.app` (renamed from its initial
+auto-generated `nitya-gehini-jewels-frontend.vercel.app`). Checking the first
+deployment live (not just trusting the build succeeding) turned up one real bug the
+build/typecheck steps couldn't have caught: `BrowserRouter` needs a server-side
+fallback to `index.html` for any path that isn't a real static file, and Vercel
+doesn't do this by default — every route except the bare root 404'd on direct
+navigation or refresh (confirmed live: `curl` returned `404` on `/login` before the
+fix). Fixed with `frontend/vercel.json`'s catch-all rewrite. Re-verified live after
+the domain rename: `/`, `/login`, and `/items` all now return `200` on both direct
+`curl` requests and in-browser navigation, and a real authenticated session
+successfully round-trips through the deployed backend (Dashboard correctly showed `1
+Active items`, matching the real `Peacock Bridal Set` row) — confirming Render's
+`CORS_ORIGIN` is correctly scoped to allow the current Vercel domain.
+
+Design pass, end to end — the app had been entirely unstyled default HTML until now.
+Direction was proposed and approved before any code changed (a published design-plan
+artifact with palette swatches, a type specimen, and a layout mockup — see git history
+for the conversation, not persisted in-repo). Palette: wine (`#7a1e32`, bridal red) as
+primary, antique gold decorative-only (`#a9822e` for borders/accents, a separate darker
+bronze `#7a5d1f` for anywhere gold carries text or a focus ring — the lighter shade
+fails AA contrast as text, checked with the actual WCAG formula, not eyeballed), warm
+ivory background (`#fbf8f3`, chosen to match the same backdrop the shop's own item
+photos are shot on), plus semantic green/clay for success/attention. Type: Fraunces
+(self-hosted woff2 under `frontend/src/assets/fonts/`) for headings only, system-native
+font stack for everything else — deliberately not a webfont for UI/data text, for
+zero load time and native platform familiarity. Light-only by deliberate choice, no
+dark mode — this is a tool used in normal shop lighting, not a themeable product.
+Everything lives in `frontend/src/styles/shared.css`, extended rather than styled
+per-page: design tokens as CSS custom properties, a `.pill` status vocabulary (good /
+active / attention / neutral) shared by both item and booking status via a new
+`frontend/src/lib/statusPill.ts` helper, a pure-CSS responsive pattern that turns
+`.data-table` rows into stacked cards below 640px using `data-label` attributes on each
+`<td>` (added to `ItemsList`/`CustomersList`/`BookingsList`) rather than hiding data
+behind horizontal scroll, a fixed bottom tab bar for the four main sections (replacing
+the old plain-text nav — see `App.tsx`), and a single global `:focus-visible` rule so
+keyboard focus is never accidentally left unstyled on a future component. Copy audited
+across every page while restyling (e.g. "Log out" → "Log Out" for casing consistency,
+empty states rewritten with specific next-step text instead of "No items to show").
+
+Verified live, not just typechecked: `npm run build:frontend` succeeds and correctly
+emits the font as its own cacheable asset rather than inlining it. Browser-verified
+every page — Login, Dashboard, Items (list/wizard/edit), Customers, Bookings
+(list/create/return/detail) — at a genuine 390px mobile viewport (the browser
+automation's own `resize_window` doesn't actually shrink the real viewport in this
+environment, confirmed by checking `window.innerWidth` after calling it — so
+verification instead used a same-origin iframe sized to real phone dimensions, which
+does get its own true viewport) as well as at desktop width, confirming the
+table-to-card breakpoint, status pills, empty states, and the bottom tab bar all render
+correctly at both sizes. Confirmed keyboard focus is genuinely visible via real Tab
+navigation (not just autofocus) — screenshotted the gold-bronze focus ring landing on
+the bottom tab bar after three Tab presses. All verification used throwaway
+`ZZTEST`-prefixed data, cleaned up after; real data (`Peacock Bridal Set`) confirmed
+untouched throughout.
+
+**Not yet done:** this was all verified via browser automation at an emulated 390px
+viewport, not an actual phone — real touch-target sizing, iOS/Android font rendering,
+and the camera capture flow specifically still need a check on a real device before
+this is fully signed off, per the task's own explicit requirement.
+
 **Next step:** Phase 1 core operations (item intake, bookings, returns, dashboard) are
 now functionally complete. Per `PROJECT_PLAN_V2.md` §5, Phase 2 (bookkeeping —
 payments, expenses, P&L, GST invoices) is the natural next area; `payments.ts` and

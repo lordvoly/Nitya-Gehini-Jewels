@@ -66,7 +66,7 @@ export default function DashboardPage() {
         {urgentOverdue.map((b) => (
           <Link key={b.id} to={`/bookings?booking=${b.id}`} className="overdue-panel urgent dashboard-link">
             <p>
-              <span className="badge-urgent">Next customer waiting</span>
+              <span className="pill pill-attention">Next customer waiting</span>
             </p>
             <p>
               <strong>{b.booking_code}</strong> — {b.items?.item_code} {b.items?.name} · {b.customers?.name} ·{" "}

@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { Navigate, useLocation, useNavigate, type Location } from "react-router-dom";
 import { supabase } from "../lib/supabase";
 import { useAuth } from "../lib/auth";
+import "../styles/shared.css";
 
 export default function LoginPage() {
   const { session, loading } = useAuth();
@@ -33,23 +34,24 @@ export default function LoginPage() {
   }
 
   return (
-    <div>
-      <h1>Login</h1>
-      <form onSubmit={handleSubmit}>
-        <div>
-          <label>
+    <div className="page">
+      <form className="wizard-card" onSubmit={handleSubmit}>
+        <div className="wizard-step">
+          <h2>Nitya Gehini Jewels</h2>
+          <p className="wizard-hint">Sign in to continue.</p>
+
+          <label className="field-label">
             Email
             <input
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               autoComplete="email"
+              autoFocus
               required
             />
           </label>
-        </div>
-        <div>
-          <label>
+          <label className="field-label">
             Password
             <input
               type="password"
@@ -59,11 +61,18 @@ export default function LoginPage() {
               required
             />
           </label>
+
+          {error && (
+            <p className="wizard-error" role="alert">
+              {error}
+            </p>
+          )}
         </div>
-        {error && <p role="alert">{error}</p>}
-        <button type="submit" disabled={submitting}>
-          {submitting ? "Signing in…" : "Sign in"}
-        </button>
+        <div className="wizard-nav">
+          <button type="submit" className="btn-primary btn-save" disabled={submitting}>
+            {submitting ? "Signing in…" : "Sign In"}
+          </button>
+        </div>
       </form>
     </div>
   );
