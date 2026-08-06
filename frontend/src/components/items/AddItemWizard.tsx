@@ -1,8 +1,9 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   ITEM_CATEGORIES,
   ITEM_STATUSES,
   createItem,
+  fetchNextItemCode,
   type Item,
   type ItemCategory,
   type ItemStatus,
@@ -20,6 +21,7 @@ type StepKey = "photo" | "basics" | "components" | "prices" | "review";
 function emptyForm() {
   return {
     photos: [] as string[],
+    itemCode: "",
     name: "",
     category: ITEM_CATEGORIES[0] as ItemCategory,
     item_type: "single" as ItemType,
@@ -49,6 +51,17 @@ export function AddItemWizard({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<Item | null>(null);
+
+  // Pre-fill the (editable) item code with the server's suggested next
+  // NGJ-000N — a default to speed up the common case, not a lock-in; the
+  // operator can type over it with his own convention before saving.
+  useEffect(() => {
+    fetchNextItemCode()
+      .then(({ item_code }) => update("itemCode", item_code))
+      .catch(() => {});
+    // Runs once on mount; startAnother() re-fetches explicitly after reset.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const visibleSteps = useMemo<StepKey[]>(
     () => ["photo", "basics", ...(form.item_type === "set" ? (["components"] as StepKey[]) : []), "prices", "review"],
@@ -89,6 +102,7 @@ export function AddItemWizard({
     setError(null);
     setSaving(true);
     const payload: NewItem = {
+      item_code: form.itemCode.trim() || null,
       name: form.name.trim(),
       category: form.category,
       item_type: form.item_type,
@@ -119,6 +133,9 @@ export function AddItemWizard({
     setStepIndex(0);
     setSaved(null);
     setError(null);
+    fetchNextItemCode()
+      .then(({ item_code }) => update("itemCode", item_code))
+      .catch(() => {});
   }
 
   if (saved) {
@@ -169,6 +186,19 @@ export function AddItemWizard({
               placeholder="e.g. Peacock Bridal Set"
             />
           </label>
+
+          <label className="field-label">
+            Item Code
+            <input
+              type="text"
+              value={form.itemCode}
+              onChange={(e) => update("itemCode", e.target.value)}
+              placeholder="Auto-generated"
+            />
+          </label>
+          <p className="wizard-hint">
+            Suggested automatically — edit it if you'd rather use your own code.
+          </p>
 
           <p className="field-label">Category</p>
           <div className="button-grid">
@@ -338,6 +368,7 @@ export function AddItemWizard({
             <li>
               <strong>{form.name || "(no name)"}</strong>
             </li>
+            <li>Code: {form.itemCode.trim() || "(auto-generated on save)"}</li>
             <li>{form.category}</li>
             <li>
               {form.item_type === "set" ? "Set" : "Single"} · {form.tracking_type === "quantity" ? "Stock count" : "One of a kind"}

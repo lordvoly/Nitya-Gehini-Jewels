@@ -287,6 +287,71 @@ viewport, not an actual phone — real touch-target sizing, iOS/Android font ren
 and the camera capture flow specifically still need a check on a real device before
 this is fully signed off, per the task's own explicit requirement.
 
+Editable item codes, end to end — feedback from the shop's actual daily operator: he
+wanted to choose his own `item_code` rather than being locked into `NGJ-000N`. New `GET
+/api/items/next-code` returns the suggested next auto-generated code as a read-only
+preview (reserves nothing); `AddItemWizard` pre-fills its now-editable Item Code field
+with that suggestion on mount and again after "Add Another". `POST /api/items` treats
+any non-empty `item_code` in the request (whether left as the suggestion or typed over)
+as an explicit choice — validated for uniqueness via the existing UNIQUE constraint, a
+409 with a friendly message ("This item code is already in use — choose a different
+one.") on collision, no schema change. An empty/omitted `item_code` still falls through
+to the original server-generate-and-retry-on-23505 path, unchanged.
+
+While verifying this live, found and fixed a real bug it exposed in that
+auto-generate path: `nextItemCode()` used to derive "next" from whichever item was
+*most recently created*, which was a safe proxy only as long as every item_code was
+guaranteed to be `NGJ-000N`. The moment a custom code can exist, that proxy breaks —
+if the most recent item has a non-numeric suffix (e.g. `ZZTEST-DADCODE`), parsing it
+as a number silently fell back to 0, re-suggesting an already-taken low code on every
+one of its 3 retries, and the whole auto-generate path failed outright ("Could not
+generate a unique item code, please retry") for the *next* operator who left the field
+untouched. Fixed by deriving "next" from the highest existing `NGJ-%`-pattern code
+specifically (filtered query, then take the lexically-highest — safe because every
+generated code is zero-padded to the same width), which custom codes now can't perturb
+at all. Confirmed live: suggested-value pre-fill, editing to a custom code and saving,
+a duplicate-code save attempt showing the friendly error, and the auto-generate
+fallback all verified working via the real UI, plus direct API checks before and after
+the fix. Test data was `ZZTEST`-prefixed and cleaned up after — real data (`Peacock
+Bridal Set`, `NGJ-0001`) confirmed untouched. One thing surfaced during this that's
+*not* mine: a real item `Test Set` / `NGJ-0002` appeared in the database, created
+around the same time as this verification session but not by me — left untouched and
+flagged to the user rather than assumed to be leftover test data.
+
+Item search, in the same session — `ItemsList.tsx` gained a search box (name or code,
+case-insensitive substring, client-side over the already-fully-loaded items array —
+no new backend query needed, unlike Customers' search which does hit the backend since
+that list isn't preloaded in full). Deliberately returns every match rather than
+stopping at the first: two items sharing a name (or a near-miss) both surface
+together, each still showing its own `item_code` in the row, so the operator can tell
+them apart by code rather than guessing. Confirmed live with two throwaway items named
+`ZZTEST Kundan Necklace` / `ZZTEST Kundan Necklace (Gold)` — searching "Kundan
+Necklace" showed both with `NGJ-0050`/`NGJ-0051` visible; searching a bare code number
+narrowed to the one match; a no-match search showed a specific empty state instead of
+a blank list. Cleaned up after; real data untouched.
+
+Photo lightbox, also this session — more operator feedback: the items list only ever
+showed a small thumbnail, no way to see a photo full-size. `ItemsList`'s thumbnail is
+now a button opening a new `PhotoLightbox.tsx`, built on the existing shared `Modal`
+(same one `AddCustomerForm`/`CustomerPicker` already use) rather than a new overlay
+pattern. Prev/Next (plus arrow-key and Escape support) only render when an item has
+more than one photo; a small counter badge sits over the image. Confirmed live on both
+desktop and a genuine 390px mobile viewport (same same-origin-iframe technique as the
+design-pass verification): tapping a thumbnail opens the photo full-size, Next/Prev
+correctly cycles and wraps around, and Close returns cleanly to the list with nothing
+left behind. Verified using the real `NGJ` logo photo and a second real photo already
+present on `Test Set` (see below) — no new photo upload needed, both already-public
+Storage URLs referenced read-only in a throwaway test item's `photos` array, cleaned up
+after; the two real item rows themselves were never touched.
+
+**Note for the user:** while working this session, a real item `Test Set` / `NGJ-0002`
+appeared in the database mid-session — not created by me, and now has a real photo and
+real pricing (₹4000 rental / ₹45555 sale) attached, growing across the session. This
+looks like your dad actively using the live app while I was working, quite possibly
+testing the exact camera-capture flow flagged as unverified in the design-pass note
+above. Worth confirming with him — if so, that flagged gap may already be resolved in
+practice.
+
 **Next step:** Phase 1 core operations (item intake, bookings, returns, dashboard) are
 now functionally complete. Per `PROJECT_PLAN_V2.md` §5, Phase 2 (bookkeeping —
 payments, expenses, P&L, GST invoices) is the natural next area; `payments.ts` and

@@ -38,6 +38,10 @@ export interface Item {
 }
 
 export interface NewItem {
+  // Optional: the add-item wizard pre-fills this with the server-suggested
+  // next code but lets it be edited. Omitted/empty falls back to the
+  // backend's own auto-generation (see items.ts's POST / handler).
+  item_code?: string | null;
   name: string;
   category: ItemCategory;
   item_type: ItemType;
@@ -58,6 +62,12 @@ export interface NewItem {
 // argument — retired items stay visible there (just visually marked).
 export function fetchItems(opts?: { activeOnly?: boolean }) {
   return apiFetch<Item[]>(`/api/items${opts?.activeOnly ? "?active_only=true" : ""}`);
+}
+
+// The suggested next auto-generated code — used to pre-fill the (editable)
+// item_code field in the add-item wizard. Doesn't reserve anything.
+export function fetchNextItemCode() {
+  return apiFetch<{ item_code: string }>("/api/items/next-code");
 }
 
 export function createItem(item: NewItem) {

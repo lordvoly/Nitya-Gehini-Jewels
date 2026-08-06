@@ -22,6 +22,19 @@ itemsRouter.get("/", async (req, res) => {
   res.json(data);
 });
 
+// GET /api/items/next-code — the suggested next auto-generated code, to
+// pre-fill the (editable) item_code field in the add-item wizard. Read-only
+// preview, reserves nothing — POST / still retries on a real collision if
+// the suggestion goes stale before submit. Registered before GET /:id so
+// "next-code" isn't swallowed as an :id value.
+itemsRouter.get("/next-code", async (_req, res) => {
+  try {
+    res.json({ item_code: await nextItemCode() });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : "Failed to compute next item code" });
+  }
+});
+
 // GET /api/items/:id
 itemsRouter.get("/:id", async (req, res) => {
   const { data, error } = await supabase.from("items").select("*").eq("id", req.params.id).single();
@@ -45,11 +58,21 @@ itemsRouter.post("/photos", upload.single("photo"), async (req, res) => {
   res.status(201).json({ url: data.publicUrl });
 });
 
+// Highest existing NGJ-XXXX code, not "whatever the most-recently-created
+// item's code happens to be" — the latter broke as soon as a custom,
+// non-numeric item_code could exist and be more recent than the last
+// auto-generated one, since parsing its suffix as a number silently fell
+// back to 0 and re-suggested an already-taken low code every time (spun
+// through all 3 retries and failed). Filtering to the NGJ-% pattern first
+// means custom codes can't perturb this at all. Lexical ordering matches
+// numeric ordering here only because every generated code is zero-padded
+// to the same width.
 async function nextItemCode(): Promise<string> {
   const { data, error } = await supabase
     .from("items")
     .select("item_code")
-    .order("created_at", { ascending: false })
+    .ilike("item_code", "NGJ-%")
+    .order("item_code", { ascending: false })
     .limit(1);
   if (error) throw error;
   const last = data?.[0]?.item_code as string | undefined;
@@ -57,12 +80,26 @@ async function nextItemCode(): Promise<string> {
   return `NGJ-${String(lastNum + 1).padStart(4, "0")}`;
 }
 
-// POST /api/items — create (item intake flow). item_code is always
-// server-generated so the fast-entry UI never has to think about it; any
-// item_code in the request body is ignored. Retries on a rare unique-code
-// collision from a concurrent insert.
+// POST /api/items — create (item intake flow). item_code defaults to
+// server-generated (fast entry, retries on a rare unique-code collision
+// from a concurrent insert) but the wizard pre-fills that suggestion into
+// an editable field — if the operator sends their own non-empty item_code
+// (whether left as the suggestion or typed over), that exact value is used
+// and validated for uniqueness instead, since at that point it's an
+// explicit choice, not something to silently swap out from under them.
 itemsRouter.post("/", async (req, res) => {
-  const { item_code: _ignored, ...body } = req.body;
+  const { item_code: requestedCode, ...body } = req.body;
+  const customCode = typeof requestedCode === "string" ? requestedCode.trim() : "";
+
+  if (customCode) {
+    const { data, error } = await supabase.from("items").insert({ ...body, item_code: customCode }).select().single();
+    if (!error) return res.status(201).json(data);
+    if (error.code === "23505") {
+      return res.status(409).json({ error: "This item code is already in use — choose a different one." });
+    }
+    return res.status(400).json({ error: error.message });
+  }
+
   for (let attempt = 0; attempt < 3; attempt++) {
     const item_code = await nextItemCode();
     const { data, error } = await supabase

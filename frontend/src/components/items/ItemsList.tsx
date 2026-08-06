@@ -1,6 +1,7 @@
 import { useMemo, useState } from "react";
 import type { Item } from "../../lib/items";
 import { itemStatusPill } from "../../lib/statusPill";
+import { PhotoLightbox } from "./PhotoLightbox";
 
 type Filter = "all" | "active" | "retired";
 
@@ -28,16 +29,30 @@ export function ItemsList({
   onReactivate: (item: Item) => Promise<void>;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
+  const [search, setSearch] = useState("");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [togglingId, setTogglingId] = useState<string | null>(null);
   const [actionError, setActionError] = useState<string | null>(null);
+  const [viewingPhotosOf, setViewingPhotosOf] = useState<Item | null>(null);
 
   const filteredItems = useMemo(() => {
-    if (filter === "active") return items.filter((i) => i.is_active);
-    if (filter === "retired") return items.filter((i) => !i.is_active);
-    return items;
-  }, [items, filter]);
+    let result = items;
+    if (filter === "active") result = result.filter((i) => i.is_active);
+    if (filter === "retired") result = result.filter((i) => !i.is_active);
+
+    const term = search.trim().toLowerCase();
+    if (term) {
+      // Matches on code OR name, and never stops at the first hit — two
+      // items sharing a name (or a near-miss) both surface, each with its
+      // own code right there in the row, so the operator can tell them
+      // apart rather than guessing which one they meant.
+      result = result.filter(
+        (i) => i.item_code.toLowerCase().includes(term) || i.name.toLowerCase().includes(term),
+      );
+    }
+    return result;
+  }, [items, filter, search]);
 
   async function confirmDelete(item: Item) {
     setDeletingId(item.id);
@@ -87,6 +102,14 @@ export function ItemsList({
         </button>
       </div>
 
+      <input
+        className="search-input"
+        type="text"
+        placeholder="Search by name or code…"
+        value={search}
+        onChange={(e) => setSearch(e.target.value)}
+      />
+
       <div className="toggle-group filter-group">
         <button className={filter === "all" ? "toggle-btn active" : "toggle-btn"} onClick={() => setFilter("all")}>
           All
@@ -109,8 +132,17 @@ export function ItemsList({
 
       {filteredItems.length === 0 && !loading && (
         <div className="empty-state">
-          <h3>{empty.title}</h3>
-          <p>{empty.hint}</p>
+          {search.trim() ? (
+            <>
+              <h3>No matches</h3>
+              <p>Nothing found for "{search.trim()}" — try just the code, or part of the name.</p>
+            </>
+          ) : (
+            <>
+              <h3>{empty.title}</h3>
+              <p>{empty.hint}</p>
+            </>
+          )}
         </div>
       )}
 
@@ -135,7 +167,18 @@ export function ItemsList({
                 const pill = itemStatusPill(item.status);
                 return (
                   <tr key={item.id}>
-                    <td>{item.photos[0] && <img src={item.photos[0]} alt="" className="row-thumb" />}</td>
+                    <td>
+                      {item.photos[0] && (
+                        <button
+                          type="button"
+                          className="thumb-button"
+                          onClick={() => setViewingPhotosOf(item)}
+                          aria-label={`View photos of ${item.name}`}
+                        >
+                          <img src={item.photos[0]} alt="" className="row-thumb" />
+                        </button>
+                      )}
+                    </td>
                     <td data-label="Code">{item.item_code}</td>
                     <td data-label="Name">{item.name}</td>
                     <td data-label="Category">{item.category}</td>
@@ -201,6 +244,14 @@ export function ItemsList({
             </tbody>
           </table>
         </div>
+      )}
+
+      {viewingPhotosOf && (
+        <PhotoLightbox
+          photos={viewingPhotosOf.photos}
+          startIndex={0}
+          onClose={() => setViewingPhotosOf(null)}
+        />
       )}
     </div>
   );
