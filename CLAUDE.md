@@ -410,6 +410,23 @@ exclude one of a repeat customer's two bookings and checking her count stayed at
 1. All test data cleaned up after; real data (`Peacock Bridal Set`, `Test Set`)
 confirmed untouched throughout.
 
+Customer edit, same session — `CustomersPage` had always been add + search/list only,
+so there was no way to go back and fix a customer's `customer_type` (e.g. an
+influencer/MUA added before that field existed, or just mistagged) once it existed.
+New `PATCH /api/customers/:id` mirrors the create route's validation and
+phone-dedupe-on-conflict handling exactly; a duplicate-phone 409 here just surfaces as
+a plain error message rather than create's "use this customer instead" flow, since
+that affordance is specific to booking-time quick-add and doesn't fit editing an
+already-known record. New `CustomerEditForm.tsx` (modeled directly on
+`ItemEditForm.tsx`), an Edit button and a Type column added to `CustomersList`, and
+`CustomersPage` now holds `editingCustomer` state the same way `ItemsPage` holds
+`editingItem` — short-circuits the tab view, and the tab's active-highlight logic
+matches item editing's pattern too. Confirmed live: editing a throwaway customer's
+type from Regular to Influencer persisted correctly (checked directly against
+Supabase, not just the re-rendered list), and editing a second customer's phone to
+collide with the first's showed the friendly "already exists" error rather than a raw
+constraint failure. Test data cleaned up after; real data untouched.
+
 **Next step:** Per `PROJECT_PLAN_V2.md` §5, the rest of Phase 2 bookkeeping —
 payments, expenses, P&L, GST invoices — is the natural next area; `payments.ts` and
 `expenses.ts` are scaffolded but not yet wired into any frontend page.

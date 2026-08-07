@@ -93,3 +93,42 @@ customersRouter.post("/", async (req, res) => {
   }
   res.status(400).json({ error: error.message });
 });
+
+// PATCH /api/customers/:id — edit. The only way today to fix a customer's
+// customer_type after the fact (e.g. an influencer/MUA that was added as
+// "regular" before that distinction existed, or just tagged wrong) — there
+// was no edit screen at all until this. Same phone-dedupe-on-conflict
+// handling as create; updating a customer to their own unchanged phone
+// naturally never collides since it's the same row.
+customersRouter.patch("/:id", async (req, res) => {
+  const { name, phone, email, address, notes, customer_type } = req.body ?? {};
+  if (!name?.trim() || !phone?.trim() || !address?.trim()) {
+    return res.status(400).json({ error: "Name, phone, and address are required" });
+  }
+  const normalizedPhone = normalizePhone(phone);
+  if (!normalizedPhone) {
+    return res.status(400).json({ error: "Phone number is invalid" });
+  }
+  const type: CustomerType = CUSTOMER_TYPES.includes(customer_type) ? customer_type : "regular";
+
+  const { data, error } = await supabase
+    .from("customers")
+    .update({
+      name: name.trim(),
+      phone: normalizedPhone,
+      email: email?.trim() || null,
+      address: address.trim(),
+      notes: notes?.trim() || null,
+      customer_type: type,
+    })
+    .eq("id", req.params.id)
+    .select()
+    .single();
+
+  if (!error) return res.json(data);
+
+  if (error.code === "23505") {
+    return res.status(409).json({ error: "A customer with this phone number already exists" });
+  }
+  res.status(400).json({ error: error.message });
+});

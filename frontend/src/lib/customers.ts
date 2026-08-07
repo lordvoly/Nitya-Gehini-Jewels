@@ -35,6 +35,16 @@ export function fetchCustomers(search?: string) {
   return apiFetch<Customer[]>(`/api/customers${qs}`);
 }
 
+// Plain PATCH, matching updateItem's pattern — a duplicate-phone 409 here
+// just surfaces as a normal error message (unlike create's dedupe flow,
+// there's no "use this customer instead" affordance while editing).
+export function updateCustomer(id: string, input: NewCustomer) {
+  return apiFetch<Customer>(`/api/customers/${id}`, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  });
+}
+
 export type CreateCustomerResult =
   | { type: "created"; customer: Customer }
   | { type: "duplicate"; existingCustomer: Customer };

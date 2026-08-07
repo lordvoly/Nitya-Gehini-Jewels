@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
-import { fetchCustomers, type Customer } from "../../lib/customers";
+import { CUSTOMER_TYPE_LABELS, fetchCustomers, type Customer } from "../../lib/customers";
 
-export function CustomersList() {
+export function CustomersList({ onEdit }: { onEdit: (customer: Customer) => void }) {
   const [term, setTerm] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
@@ -66,6 +66,8 @@ export function CustomersList() {
                 <th>Phone</th>
                 <th>Email</th>
                 <th>Address</th>
+                <th>Type</th>
+                <th></th>
               </tr>
             </thead>
             <tbody>
@@ -75,6 +77,12 @@ export function CustomersList() {
                   <td data-label="Phone">{c.phone}</td>
                   <td data-label="Email">{c.email ?? "—"}</td>
                   <td data-label="Address">{c.address}</td>
+                  <td data-label="Type">{CUSTOMER_TYPE_LABELS[c.customer_type]}</td>
+                  <td className="row-actions">
+                    <button className="btn-secondary" onClick={() => onEdit(c)}>
+                      Edit
+                    </button>
+                  </td>
                 </tr>
               ))}
             </tbody>

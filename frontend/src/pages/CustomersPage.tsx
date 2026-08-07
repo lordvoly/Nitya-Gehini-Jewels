@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { AddCustomerForm } from "../components/customers/AddCustomerForm";
+import { CustomerEditForm } from "../components/customers/CustomerEditForm";
 import { CustomersList } from "../components/customers/CustomersList";
 import type { Customer } from "../lib/customers";
 import "../styles/shared.css";
@@ -7,31 +8,38 @@ import "../styles/shared.css";
 export default function CustomersPage() {
   const [view, setView] = useState<"add" | "list">("add");
   const [result, setResult] = useState<{ customer: Customer; wasExisting: boolean } | null>(null);
+  const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
+
+  function resetToTab(next: "add" | "list") {
+    setResult(null);
+    setEditingCustomer(null);
+    setView(next);
+  }
 
   return (
     <div className="page">
       <div className="page-tabs">
         <button
-          className={view === "add" ? "tab active" : "tab"}
-          onClick={() => {
-            setResult(null);
-            setView("add");
-          }}
+          className={view === "add" && !editingCustomer ? "tab active" : "tab"}
+          onClick={() => resetToTab("add")}
         >
           + Add Customer
         </button>
         <button
-          className={view === "list" ? "tab active" : "tab"}
-          onClick={() => {
-            setResult(null);
-            setView("list");
-          }}
+          className={view === "list" || editingCustomer ? "tab active" : "tab"}
+          onClick={() => resetToTab("list")}
         >
           All Customers
         </button>
       </div>
 
-      {view === "add" ? (
+      {editingCustomer ? (
+        <CustomerEditForm
+          customer={editingCustomer}
+          onCancel={() => setEditingCustomer(null)}
+          onSaved={() => setEditingCustomer(null)}
+        />
+      ) : view === "add" ? (
         result ? (
           <div className="wizard-card wizard-success">
             <p className="success-check">{result.wasExisting ? "✓ Found existing customer" : "✓ Saved"}</p>
@@ -50,7 +58,7 @@ export default function CustomersPage() {
           <AddCustomerForm onCustomerReady={(customer, wasExisting) => setResult({ customer, wasExisting })} />
         )
       ) : (
-        <CustomersList />
+        <CustomersList onEdit={setEditingCustomer} />
       )}
     </div>
   );
