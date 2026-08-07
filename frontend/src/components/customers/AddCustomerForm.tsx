@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from "react";
-import { createCustomer, type Customer } from "../../lib/customers";
+import { CUSTOMER_TYPE_LABELS, CUSTOMER_TYPES, createCustomer, type Customer, type CustomerType } from "../../lib/customers";
 
 // Deliberately self-contained (no page-level state, no routing) so it can be
 // dropped into a modal from the future booking screen — "create or find a
@@ -15,6 +15,7 @@ export function AddCustomerForm({
   const [phone, setPhone] = useState("");
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
+  const [customerType, setCustomerType] = useState<CustomerType>("regular");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -34,6 +35,7 @@ export function AddCustomerForm({
         email: email.trim() || null,
         address: address.trim(),
         notes: notes.trim() || null,
+        customer_type: customerType,
       });
       if (result.type === "created") {
         onCustomerReady(result.customer, false);
@@ -95,6 +97,19 @@ export function AddCustomerForm({
           Address
           <textarea value={address} onChange={(e) => setAddress(e.target.value)} rows={2} />
         </label>
+        <p className="field-label">Customer Type</p>
+        <div className="toggle-group">
+          {CUSTOMER_TYPES.map((t) => (
+            <button
+              type="button"
+              key={t}
+              className={customerType === t ? "toggle-btn active" : "toggle-btn"}
+              onClick={() => setCustomerType(t)}
+            >
+              {CUSTOMER_TYPE_LABELS[t]}
+            </button>
+          ))}
+        </div>
         <label className="field-label">
           Notes
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional" />

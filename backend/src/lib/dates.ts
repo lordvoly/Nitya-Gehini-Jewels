@@ -25,3 +25,24 @@ export function istWeekStart(): string {
   today.setDate(today.getDate() - diffToMonday);
   return today.toLocaleDateString("en-CA");
 }
+
+/**
+ * First and last day of the current calendar month in IST, as YYYY-MM-DD
+ * — the default date range for Reports.
+ */
+export function istMonthRange(): { from: string; to: string } {
+  const today = new Date(`${istToday()}T00:00:00`);
+  const from = new Date(today.getFullYear(), today.getMonth(), 1);
+  const to = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+  return { from: from.toLocaleDateString("en-CA"), to: to.toLocaleDateString("en-CA") };
+}
+
+/**
+ * `days` days before today in IST, as YYYY-MM-DD — e.g. the "last 90 days"
+ * cutoff for idle-inventory detection.
+ */
+export function istDaysAgo(days: number): string {
+  const today = new Date(`${istToday()}T00:00:00`);
+  today.setDate(today.getDate() - days);
+  return today.toLocaleDateString("en-CA");
+}

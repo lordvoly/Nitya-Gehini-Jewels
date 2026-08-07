@@ -366,9 +366,52 @@ through the existing upload-and-thumbnail flow correctly; the two buttons stay
 side-by-side and fully tappable down to a 360px-wide viewport, wrapping their label
 text gracefully rather than breaking the layout.
 
-**Next step:** Phase 1 core operations (item intake, bookings, returns, dashboard) are
-now functionally complete. Per `PROJECT_PLAN_V2.md` §5, Phase 2 (bookkeeping —
-payments, expenses, P&L, GST invoices) is the natural next area; `payments.ts` and
+Reports page, end to end — first Phase-2-adjacent feature. A new migration
+(`supabase/migrations/20260807000000_customer_type.sql`) adds `customers.customer_type`
+(enum `regular`/`influencer`/`mua`, default `regular`) — single value, same modeling
+choice as `items.category`, exposed via a three-way toggle in `AddCustomerForm` (no
+customer-edit flow exists yet, so that's the only place it needed adding). New `GET
+/api/reports?from=&to=&include_collabs=` (`backend/src/routes/reports.ts`) computes all
+four sections by fetching filtered bookings and aggregating in JS — not SQL
+views/functions, since the date range and collab toggle are both runtime parameters a
+fixed view can't take, and this app has no precedent for parameterized Postgres
+functions; at this data volume, fetch-then-aggregate in the route (the same pattern
+`booking_financials`-adjacent merges already use elsewhere) is simpler and more
+debuggable than a first RPC. `from`/`to` default to the current IST calendar month
+(new `istMonthRange()` in `dates.ts`, same `new Date(`${istToday()}...`)` local-Date
+arithmetic pattern as `istWeekStart()`) when omitted, and the resolved values are
+echoed back in the response so the frontend's date inputs display "this month"
+without ever computing a date itself. A cancelled booking counts toward nothing
+anywhere in Reports (revenue, counts, most-booked, repeat-customers, or "recent
+activity" for idle detection) — it never actually happened; this is an interpretation
+the task didn't spell out explicitly, applied consistently everywhere for that reason.
+`most_booked_items`/`repeat_customers` are the only two sections affected by
+`include_collabs` (default off); `summary` and `idle_inventory` always include every
+booking regardless. `repeat_customers` is deliberately a second, separate,
+unfiltered-by-date query — all-time by design, not scoped to the report's own date
+range. `idle_inventory` uses a fixed 90-day-from-today cutoff (new `istDaysAgo()`),
+also independent of the date-range picker, and filters to `is_active=true` items only
+— a retired item's history still counts fully everywhere else in Reports, it just
+can't itself be "idle inventory" worth reactivating.
+
+All verified live against real Supabase queries, not just the API's own response: with
+a throwaway dataset (2 regular-customer bookings on one item, 2 influencer-customer
+bookings on a second item, one 60-day-old booking on a third item, plus a permanently
+unbooked fourth item), the summary's `total_bookings`/`total_revenue` matched a direct
+hand-count exactly both with the toggle on and off (proving collabs always count
+there); `most_booked_items` correctly excluded the influencer's item by default and
+included it once toggled; `repeat_customers` did the same for the influencer customer;
+`idle_inventory` correctly listed only the truly-untouched item (plus the two real
+zero-booking items) and correctly excluded the 60-day-old item even though its booking
+fell outside the report's own date range — confirming idle detection's independence
+from the date picker specifically, not just asserted. Also specifically re-confirmed
+`repeat_customers`' "not scoped to the date filter" behavior by narrowing the range to
+exclude one of a repeat customer's two bookings and checking her count stayed at 2, not
+1. All test data cleaned up after; real data (`Peacock Bridal Set`, `Test Set`)
+confirmed untouched throughout.
+
+**Next step:** Per `PROJECT_PLAN_V2.md` §5, the rest of Phase 2 bookkeeping —
+payments, expenses, P&L, GST invoices — is the natural next area; `payments.ts` and
 `expenses.ts` are scaffolded but not yet wired into any frontend page.
 
 ## Tech stack
@@ -464,12 +507,14 @@ Matches v1's model — don't split this into a normalized child table.
 ## Data model summary
 
 See `supabase/migrations/20260804000000_init_schema.sql` for the authoritative schema
-(enums, constraints, indexes, views, RLS). Six tables:
+(enums, constraints, indexes, views, RLS) and later migrations for additive changes.
+Six tables:
 
 - **items** — inventory. `item_type` (`set`/`single`) determines whether `components`
   is used; `tracking_type` (`unique`/`quantity`) determines whether the item is a single
   trackable physical piece or a stock count.
-- **customers** — dedupe on `phone` (unique) before creating.
+- **customers** — dedupe on `phone` (unique) before creating. `customer_type`
+  (`regular`/`influencer`/`mua`, default `regular`) drives the Reports collab toggle.
 - **bookings** — covers both rentals and sales (`type`). `price_charged` is a snapshot.
   `return_date` is required for rentals, not for sales.
 - **payments** — supports multiple partial payments per booking (advance + balance, or

@@ -893,3 +893,13 @@ a {
 .filter-group {
   margin-bottom: 14px;
 }
+
+.date-range-row {
+  margin-bottom: 8px;
+}
+
+.checkbox-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}

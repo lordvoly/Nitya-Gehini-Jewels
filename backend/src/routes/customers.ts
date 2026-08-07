@@ -3,6 +3,9 @@ import { supabase } from "../lib/supabase.js";
 
 export const customersRouter = Router();
 
+const CUSTOMER_TYPES = ["regular", "influencer", "mua"] as const;
+type CustomerType = (typeof CUSTOMER_TYPES)[number];
+
 // Strips everything but digits, then keeps only the last 10 — so a leading
 // country code (+91, 0091, a bare 91) doesn't make the same real number look
 // like a different one. Indian mobile numbers are 10 digits; shorter/partial
@@ -52,7 +55,7 @@ customersRouter.get("/:id", async (req, res) => {
 // insert-then-catch (rather than a separate pre-check GET) avoids a race
 // between the check and the create.
 customersRouter.post("/", async (req, res) => {
-  const { name, phone, email, address, notes } = req.body ?? {};
+  const { name, phone, email, address, notes, customer_type } = req.body ?? {};
   if (!name?.trim() || !phone?.trim() || !address?.trim()) {
     return res.status(400).json({ error: "Name, phone, and address are required" });
   }
@@ -60,6 +63,7 @@ customersRouter.post("/", async (req, res) => {
   if (!normalizedPhone) {
     return res.status(400).json({ error: "Phone number is invalid" });
   }
+  const type: CustomerType = CUSTOMER_TYPES.includes(customer_type) ? customer_type : "regular";
 
   const { data, error } = await supabase
     .from("customers")
@@ -69,6 +73,7 @@ customersRouter.post("/", async (req, res) => {
       email: email?.trim() || null,
       address: address.trim(),
       notes: notes?.trim() || null,
+      customer_type: type,
     })
     .select()
     .single();

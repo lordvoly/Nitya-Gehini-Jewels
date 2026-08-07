@@ -1,5 +1,15 @@
 import { apiFetch, ApiError } from "./api";
 
+export type CustomerType = "regular" | "influencer" | "mua";
+
+export const CUSTOMER_TYPES: CustomerType[] = ["regular", "influencer", "mua"];
+
+export const CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {
+  regular: "Regular",
+  influencer: "Influencer",
+  mua: "MUA",
+};
+
 export interface Customer {
   id: string;
   name: string;
@@ -7,6 +17,7 @@ export interface Customer {
   email: string | null;
   address: string;
   notes: string | null;
+  customer_type: CustomerType;
   created_at: string;
 }
 
@@ -16,6 +27,7 @@ export interface NewCustomer {
   email: string | null;
   address: string;
   notes: string | null;
+  customer_type: CustomerType;
 }
 
 export function fetchCustomers(search?: string) {
