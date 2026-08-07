@@ -45,6 +45,10 @@ export function updateCustomer(id: string, input: NewCustomer) {
   });
 }
 
+export function deleteCustomer(id: string) {
+  return apiFetch<{ ok: true }>(`/api/customers/${id}`, { method: "DELETE" });
+}
+
 export type CreateCustomerResult =
   | { type: "created"; customer: Customer }
   | { type: "duplicate"; existingCustomer: Customer };

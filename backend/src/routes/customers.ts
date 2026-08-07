@@ -132,3 +132,17 @@ customersRouter.patch("/:id", async (req, res) => {
   }
   res.status(400).json({ error: error.message });
 });
+
+// DELETE /api/customers/:id — customers with booking history are protected
+// by the bookings->customers foreign key (no ON DELETE CASCADE), same as
+// items; surfaces that as a clear message instead of a raw constraint error.
+customersRouter.delete("/:id", async (req, res) => {
+  const { error } = await supabase.from("customers").delete().eq("id", req.params.id);
+  if (error) {
+    if (error.code === "23503") {
+      return res.status(409).json({ error: "This customer has booking history and can't be deleted." });
+    }
+    return res.status(400).json({ error: error.message });
+  }
+  res.status(200).json({ ok: true });
+});

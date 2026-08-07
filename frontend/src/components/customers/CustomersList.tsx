@@ -1,10 +1,13 @@
 import { useEffect, useState } from "react";
-import { CUSTOMER_TYPE_LABELS, fetchCustomers, type Customer } from "../../lib/customers";
+import { CUSTOMER_TYPE_LABELS, deleteCustomer, fetchCustomers, type Customer } from "../../lib/customers";
 
 export function CustomersList({ onEdit }: { onEdit: (customer: Customer) => void }) {
   const [term, setTerm] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
+  const [confirmingId, setConfirmingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -27,6 +30,20 @@ export function CustomersList({ onEdit }: { onEdit: (customer: Customer) => void
     };
   }, [term]);
 
+  async function confirmDelete(customer: Customer) {
+    setDeletingId(customer.id);
+    setActionError(null);
+    try {
+      await deleteCustomer(customer.id);
+      setCustomers((prev) => prev.filter((c) => c.id !== customer.id));
+      setConfirmingId(null);
+    } catch (e) {
+      setActionError(e instanceof Error ? e.message : "Failed to delete customer");
+    } finally {
+      setDeletingId(null);
+    }
+  }
+
   return (
     <div>
       <input
@@ -40,6 +57,8 @@ export function CustomersList({ onEdit }: { onEdit: (customer: Customer) => void
         <h2>{term ? `Results (${customers.length})` : `All Customers (${customers.length})`}</h2>
         {loading && <span className="wizard-hint">Searching…</span>}
       </div>
+
+      {actionError && <p className="wizard-error">{actionError}</p>}
 
       {customers.length === 0 && !loading && (
         <div className="empty-state">
@@ -79,9 +98,30 @@ export function CustomersList({ onEdit }: { onEdit: (customer: Customer) => void
                   <td data-label="Address">{c.address}</td>
                   <td data-label="Type">{CUSTOMER_TYPE_LABELS[c.customer_type]}</td>
                   <td className="row-actions">
-                    <button className="btn-secondary" onClick={() => onEdit(c)}>
-                      Edit
-                    </button>
+                    {confirmingId === c.id ? (
+                      <>
+                        <span>Delete this customer?</span>
+                        <button
+                          className="btn-danger"
+                          onClick={() => confirmDelete(c)}
+                          disabled={deletingId === c.id}
+                        >
+                          {deletingId === c.id ? "…" : "Yes, Delete"}
+                        </button>
+                        <button className="btn-secondary" onClick={() => setConfirmingId(null)}>
+                          Cancel
+                        </button>
+                      </>
+                    ) : (
+                      <>
+                        <button className="btn-secondary" onClick={() => onEdit(c)}>
+                          Edit
+                        </button>
+                        <button className="btn-danger" onClick={() => setConfirmingId(c.id)}>
+                          Delete
+                        </button>
+                      </>
+                    )}
                   </td>
                 </tr>
               ))}

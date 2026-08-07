@@ -427,9 +427,36 @@ Supabase, not just the re-rendered list), and editing a second customer's phone 
 collide with the first's showed the friendly "already exists" error rather than a raw
 constraint failure. Test data cleaned up after; real data untouched.
 
-**Next step:** Per `PROJECT_PLAN_V2.md` §5, the rest of Phase 2 bookkeeping —
-payments, expenses, P&L, GST invoices — is the natural next area; `payments.ts` and
-`expenses.ts` are scaffolded but not yet wired into any frontend page.
+Customer delete, end to end, same session — the customer screen had edit but no
+delete. `DELETE /api/customers/:id` mirrors `items.ts`'s exact pattern: a `23503`
+foreign-key violation (customer has booking history) surfaces as "This customer has
+booking history and can't be deleted" instead of a raw constraint error, same
+confirm-inline-in-the-row UX (`btn-danger`, "Delete this customer? / Yes, Delete /
+Cancel") as `ItemsList`. Confirmed live: created a throwaway customer, deleted it
+through the actual UI, confirmed directly against Supabase that it's gone and that
+the two real customers already in the database (`Aryan Batheja` ×2, added by the
+user testing the app directly — not by me) were untouched throughout.
+
+**Next step — Phase 2 (bookkeeping), starting point for tomorrow:** Phase 1 is fully
+complete (items, customers, bookings, returns, dashboard, reports, and now full CRUD
+on both items and customers). Per `PROJECT_PLAN_V2.md` §5, Phase 2 is:
+- **Payments** (multiple partial payments per booking) — `backend/src/routes/payments.ts`
+  has `GET /api/payments?booking_id=` and `POST /api/payments`, both scaffolded and
+  unused by any frontend page. `booking_financials` (the view, not a table) already
+  computes `total_paid`/`balance_due` from whatever's in the `payments` table, so the
+  read side is done — what's missing is a UI to actually record a payment against a
+  booking (natural home: a "Record Payment" action from `BookingDetail`).
+- **Expenses** — `backend/src/routes/expenses.ts` has `GET /api/expenses?from=&to=`
+  and `POST /api/expenses`, same situation: scaffolded, no frontend at all yet, not
+  even a nav entry.
+- **P&L by period** and **outstanding dues report** — neither exists yet in any form
+  (not even scaffolded backend routes). Reports' existing date-range-picker pattern
+  (`istMonthRange()`, resolved-range-echoed-back-in-response) is the template to reuse
+  rather than reinvent.
+- **GST invoice generation (PDF)** — blocked on real input, not a coding task yet: per
+  `PROJECT_PLAN_V2.md` §6, the actual HSN code(s) and GST rate(s) still need
+  confirming with the family's CA. Don't guess a value here — `bookings.hsn_code`/
+  `tax_rate` stay nullable/configurable until that's answered.
 
 ## Tech stack
 
