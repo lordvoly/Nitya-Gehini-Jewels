@@ -11,6 +11,7 @@ function formFromCustomer(customer: Customer) {
   return {
     name: customer.name,
     phone: customer.phone,
+    phoneSecondary: customer.phone_secondary ?? "",
     email: customer.email ?? "",
     address: customer.address,
     customerType: customer.customer_type,
@@ -48,6 +49,7 @@ export function CustomerEditForm({
       const saved = await updateCustomer(customer.id, {
         name: form.name.trim(),
         phone: form.phone.trim(),
+        phone_secondary: form.phoneSecondary.trim() || null,
         email: form.email.trim() || null,
         address: form.address.trim(),
         notes: form.notes.trim() || null,
@@ -73,6 +75,15 @@ export function CustomerEditForm({
         <label className="field-label">
           Phone
           <input type="tel" value={form.phone} onChange={(e) => update("phone", e.target.value)} />
+        </label>
+        <label className="field-label">
+          Alternate Phone
+          <input
+            type="tel"
+            value={form.phoneSecondary}
+            onChange={(e) => update("phoneSecondary", e.target.value)}
+            placeholder="Optional"
+          />
         </label>
         <label className="field-label">
           Email

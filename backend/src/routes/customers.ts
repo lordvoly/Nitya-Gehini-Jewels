@@ -16,10 +16,12 @@ function normalizePhone(phone: string): string {
 }
 
 // GET /api/customers?search=... — matches name (substring, case-insensitive)
-// OR phone (substring match against digits-only, so callers can search with
-// or without spaces/dashes/+91). Two separate queries + merge, rather than a
-// single .or() filter, so a search term containing a comma or parenthesis
-// can't break PostgREST's filter syntax.
+// OR phone OR phone_secondary (substring match against digits-only, so
+// callers can search with or without spaces/dashes/+91). Separate queries +
+// merge, rather than a single .or() filter, so a search term containing a
+// comma or parenthesis can't break PostgREST's filter syntax. phone_secondary
+// is search-only here — it never participates in duplicate detection (see
+// POST/PATCH below).
 customersRouter.get("/", async (req, res) => {
   const term = typeof req.query.search === "string" ? req.query.search.trim() : "";
 
@@ -30,15 +32,17 @@ customersRouter.get("/", async (req, res) => {
   }
 
   const digits = normalizePhone(term);
-  const [byName, byPhone] = await Promise.all([
+  const [byName, byPhone, byPhoneSecondary] = await Promise.all([
     supabase.from("customers").select("*").ilike("name", `%${term}%`),
     digits ? supabase.from("customers").select("*").ilike("phone", `%${digits}%`) : Promise.resolve({ data: [], error: null }),
+    digits ? supabase.from("customers").select("*").ilike("phone_secondary", `%${digits}%`) : Promise.resolve({ data: [], error: null }),
   ]);
   if (byName.error) return res.status(500).json({ error: byName.error.message });
   if (byPhone.error) return res.status(500).json({ error: byPhone.error.message });
+  if (byPhoneSecondary.error) return res.status(500).json({ error: byPhoneSecondary.error.message });
 
   const merged = new Map<string, (typeof byName.data)[number]>();
-  for (const c of [...(byName.data ?? []), ...(byPhone.data ?? [])]) merged.set(c.id, c);
+  for (const c of [...(byName.data ?? []), ...(byPhone.data ?? []), ...(byPhoneSecondary.data ?? [])]) merged.set(c.id, c);
   const results = Array.from(merged.values()).sort((a, b) => (b.created_at as string).localeCompare(a.created_at));
   res.json(results);
 });
@@ -55,7 +59,7 @@ customersRouter.get("/:id", async (req, res) => {
 // insert-then-catch (rather than a separate pre-check GET) avoids a race
 // between the check and the create.
 customersRouter.post("/", async (req, res) => {
-  const { name, phone, email, address, notes, customer_type } = req.body ?? {};
+  const { name, phone, phone_secondary, email, address, notes, customer_type } = req.body ?? {};
   if (!name?.trim() || !phone?.trim() || !address?.trim()) {
     return res.status(400).json({ error: "Name, phone, and address are required" });
   }
@@ -63,6 +67,9 @@ customersRouter.post("/", async (req, res) => {
   if (!normalizedPhone) {
     return res.status(400).json({ error: "Phone number is invalid" });
   }
+  // Plain contact info, not a second identifier — unlike the primary phone,
+  // an unparseable/empty value here just means "none given", not a 400.
+  const normalizedPhoneSecondary = phone_secondary?.trim() ? normalizePhone(phone_secondary) || null : null;
   const type: CustomerType = CUSTOMER_TYPES.includes(customer_type) ? customer_type : "regular";
 
   const { data, error } = await supabase
@@ -70,6 +77,7 @@ customersRouter.post("/", async (req, res) => {
     .insert({
       name: name.trim(),
       phone: normalizedPhone,
+      phone_secondary: normalizedPhoneSecondary,
       email: email?.trim() || null,
       address: address.trim(),
       notes: notes?.trim() || null,
@@ -101,7 +109,7 @@ customersRouter.post("/", async (req, res) => {
 // handling as create; updating a customer to their own unchanged phone
 // naturally never collides since it's the same row.
 customersRouter.patch("/:id", async (req, res) => {
-  const { name, phone, email, address, notes, customer_type } = req.body ?? {};
+  const { name, phone, phone_secondary, email, address, notes, customer_type } = req.body ?? {};
   if (!name?.trim() || !phone?.trim() || !address?.trim()) {
     return res.status(400).json({ error: "Name, phone, and address are required" });
   }
@@ -109,6 +117,7 @@ customersRouter.patch("/:id", async (req, res) => {
   if (!normalizedPhone) {
     return res.status(400).json({ error: "Phone number is invalid" });
   }
+  const normalizedPhoneSecondary = phone_secondary?.trim() ? normalizePhone(phone_secondary) || null : null;
   const type: CustomerType = CUSTOMER_TYPES.includes(customer_type) ? customer_type : "regular";
 
   const { data, error } = await supabase
@@ -116,6 +125,7 @@ customersRouter.patch("/:id", async (req, res) => {
     .update({
       name: name.trim(),
       phone: normalizedPhone,
+      phone_secondary: normalizedPhoneSecondary,
       email: email?.trim() || null,
       address: address.trim(),
       notes: notes?.trim() || null,

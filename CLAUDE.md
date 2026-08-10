@@ -515,6 +515,37 @@ would be a computed "currently out" indicator on that page (sourced from active
 bookings, the same way `overdue_rentals` is computed) — not implemented, not asked
 for yet, flagged here as a possible future small addition if wanted.
 
+`customers.phone_secondary`, new session — a plain optional alternate contact number
+(new migration `supabase/migrations/20260810000000_customer_phone_secondary.sql`,
+nullable, no unique constraint). Deliberately scoped down per explicit instruction:
+it's a contact field only, not a second identifier — `phone` alone still drives
+duplicate detection (the unique constraint and the `23505` handling in
+`customers.ts`), and `phone_secondary` is never checked or touched by that path.
+Backend: `POST`/`PATCH /api/customers` normalize it the same way as the primary phone
+(digits-only, last-10, via the same `normalizePhone()`) when present, but unlike the
+primary phone an empty or unparseable value is never a 400 — it just becomes `null`,
+since this field can't block a save the way a missing primary phone can. `GET
+/api/customers?search=` gained a third parallel query (`ilike` against
+`phone_secondary`, same digits-substring approach as the existing phone search),
+merged into the same result set alongside the name/phone matches. Frontend:
+`AddCustomerForm` and `CustomerEditForm` both gained an "Alternate Phone" field,
+placed directly under the primary Phone field.
+
+Verified live against real Supabase rows, not just typechecked: added a throwaway
+customer through the actual UI with a deliberately messy alternate phone
+(`+91-90022 44556`) — confirmed it normalized to `9002244556` in the database, same
+as the primary phone's own normalization. Searched by a fragment that only appears in
+the alternate number (`44556`, absent from the primary phone entirely) and confirmed
+the customer surfaced. Edited the same customer's alternate phone via
+`CustomerEditForm` (pre-filled correctly with the normalized value) to `9007778899`
+and confirmed the change persisted. Then, to specifically confirm the "not a second
+identifier" requirement: created a second throwaway customer whose **primary** phone
+was set to that exact same `9007778899` — it saved cleanly with no duplicate-detection
+409 and no "already exists" panel, confirmed both in the UI and directly against
+Supabase (both rows coexisting with the same digits, one as `phone`, one as
+`phone_secondary`). Both throwaway customers cleaned up after; the three real
+customers confirmed untouched throughout.
+
 **Next step — Phase 2 (bookkeeping), continued:** Payments is now done (see above).
 Per `PROJECT_PLAN_V2.md` §5, still remaining:
 - **Expenses** — `backend/src/routes/expenses.ts` has `GET /api/expenses?from=&to=`

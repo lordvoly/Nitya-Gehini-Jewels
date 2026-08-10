@@ -13,6 +13,7 @@ export function AddCustomerForm({
 }) {
   const [name, setName] = useState("");
   const [phone, setPhone] = useState("");
+  const [phoneSecondary, setPhoneSecondary] = useState("");
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [customerType, setCustomerType] = useState<CustomerType>("regular");
@@ -32,6 +33,7 @@ export function AddCustomerForm({
       const result = await createCustomer({
         name: name.trim(),
         phone: phone.trim(),
+        phone_secondary: phoneSecondary.trim() || null,
         email: email.trim() || null,
         address: address.trim(),
         notes: notes.trim() || null,
@@ -87,6 +89,15 @@ export function AddCustomerForm({
             value={phone}
             onChange={(e) => setPhone(e.target.value)}
             placeholder="e.g. 98765 43210"
+          />
+        </label>
+        <label className="field-label">
+          Alternate Phone
+          <input
+            type="tel"
+            value={phoneSecondary}
+            onChange={(e) => setPhoneSecondary(e.target.value)}
+            placeholder="Optional"
           />
         </label>
         <label className="field-label">

@@ -14,6 +14,7 @@ export interface Customer {
   id: string;
   name: string;
   phone: string;
+  phone_secondary: string | null;
   email: string | null;
   address: string;
   notes: string | null;
@@ -24,6 +25,7 @@ export interface Customer {
 export interface NewCustomer {
   name: string;
   phone: string;
+  phone_secondary: string | null;
   email: string | null;
   address: string;
   notes: string | null;
