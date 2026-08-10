@@ -18,6 +18,7 @@ const COMMON_COMPONENTS = ["Necklace", "Earrings", "Tika", "Bangles", "Maang Tik
 function formFromItem(item: Item) {
   return {
     photos: item.photos,
+    itemCode: item.item_code,
     name: item.name,
     category: item.category,
     item_type: item.item_type,
@@ -75,8 +76,15 @@ export function ItemEditForm({
 
   async function handleSave() {
     setError(null);
+    // Unlike create, there's no "leave blank to auto-generate" fallback for
+    // an item that already exists — an empty code here is just a mistake.
+    if (!form.itemCode.trim()) {
+      setError("Item code is required.");
+      return;
+    }
     setSaving(true);
     const payload: NewItem = {
+      item_code: form.itemCode.trim(),
       name: form.name.trim(),
       category: form.category,
       item_type: form.item_type,
@@ -117,6 +125,11 @@ export function ItemEditForm({
         <label className="field-label">
           Name
           <input type="text" value={form.name} onChange={(e) => update("name", e.target.value)} />
+        </label>
+
+        <label className="field-label">
+          Item Code
+          <input type="text" value={form.itemCode} onChange={(e) => update("itemCode", e.target.value)} />
         </label>
 
         <p className="field-label">Category</p>

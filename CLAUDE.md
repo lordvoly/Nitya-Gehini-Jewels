@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Rebuild of the v1 Airtable + static HTML system as a real backend + database.
 Full context and rationale: `PROJECT_PLAN_V2.md` (keep it in sync if the plan changes).
 
-## Current status (2026-08-05)
+## Current status (2026-08-10)
 
 **Done:** Auth (login/logout, protected routes, `/api/me` role scaffold — not yet used
 to gate anything). Items, end to end, including edit/delete: backend
@@ -436,6 +436,21 @@ Cancel") as `ItemsList`. Confirmed live: created a throwaway customer, deleted i
 through the actual UI, confirmed directly against Supabase that it's gone and that
 the two real customers already in the database (`Aryan Batheja` ×2, added by the
 user testing the app directly — not by me) were untouched throughout.
+
+`item_code` editable on existing items, new session — `ItemEditForm` previously showed
+every field except the code itself. Extended the same philosophy already used for the
+create-time override (`POST /api/items`'s optional explicit `item_code`) to edit:
+`PATCH /api/items/:id` now catches `23505` on the update and returns the same friendly
+"This item code is already in use — choose a different one." 409 instead of a raw
+constraint error. Unlike create, edit has no auto-generate fallback — an existing item
+must always have some code — so `ItemEditForm.handleSave` adds a client-side "Item code
+is required" guard before ever calling the API, rather than silently falling back to
+anything. Confirmed live against real Supabase rows with two throwaway items: editing
+one's code to a new unused value saved correctly; editing it to the other throwaway
+item's existing code showed the friendly error with no crash and left the original
+(already-saved) code unchanged; both real items (`NGJ-0001` Peacock Bridal Set,
+`NGJ-0003` Polki Bridal #1930) confirmed untouched throughout. Test items cleaned up
+after.
 
 **Next step — Phase 2 (bookkeeping), starting point for tomorrow:** Phase 1 is fully
 complete (items, customers, bookings, returns, dashboard, reports, and now full CRUD

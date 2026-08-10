@@ -114,11 +114,18 @@ itemsRouter.post("/", async (req, res) => {
 });
 
 // PATCH /api/items/:id — update editable fields only (never status/quantity
-// derived from bookings — those change via the bookings routes)
+// derived from bookings — those change via the bookings routes). item_code
+// is editable here too, same as the create-time override: validated for
+// uniqueness on save, friendly 409 on collision rather than a raw
+// constraint error, since at edit time it's always an explicit choice
+// (there's no "leave blank to auto-generate" fallback once an item exists).
 itemsRouter.patch("/:id", async (req, res) => {
   const { data, error } = await supabase.from("items").update(req.body).eq("id", req.params.id).select().single();
-  if (error) return res.status(400).json({ error: error.message });
-  res.json(data);
+  if (!error) return res.json(data);
+  if (error.code === "23505") {
+    return res.status(409).json({ error: "This item code is already in use — choose a different one." });
+  }
+  res.status(400).json({ error: error.message });
 });
 
 // DELETE /api/items/:id — items with booking history are protected by the
