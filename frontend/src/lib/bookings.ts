@@ -145,12 +145,16 @@ export interface BookingChainLink {
 }
 
 // What GET /api/bookings/:id returns — the booking plus the "When Returns"
-// chain (next/previous booking for the same item), fully computed
-// server-side from the booking_sequence view each time, never stored.
+// chain for the same item, fully computed server-side each time, never
+// stored. previous_booking is the single immediate-previous booking;
+// future_bookings is the FULL forward chain (every later, non-cancelled
+// booking on this item, in pickup_date order) — not just the immediate
+// next — so an empty array is a meaningful "nothing booked ahead", not a
+// loading state.
 export interface BookingDetail extends Booking {
   items: BookingItemSummary | null;
   customers: BookingCustomerSummary | null;
-  next_booking: BookingChainLink | null;
+  future_bookings: BookingChainLink[];
   previous_booking: BookingChainLink | null;
   // Merged in from booking_financials, same as BookingWithDetails above —
   // computed at read time, never stored.

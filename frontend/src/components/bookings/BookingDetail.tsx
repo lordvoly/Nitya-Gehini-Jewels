@@ -98,12 +98,22 @@ export function BookingDetail({ bookingId, onBack }: { bookingId: string; onBack
                 hand-off between consecutive bookings. A quantity item can
                 have many bookings active at once, so "next in line" isn't a
                 single well-defined thing there. */}
-            {booking.items?.tracking_type === "unique" && booking.next_booking && (
+            {booking.items?.tracking_type === "unique" && (
               <div className="found-panel">
                 <p>
-                  <strong>When Returns →</strong> {booking.next_booking.booking_code} —{" "}
-                  {booking.next_booking.customer_name} ({booking.next_booking.pickup_date})
+                  <strong>When Returns →</strong>
                 </p>
+                {booking.future_bookings.length === 0 ? (
+                  <p className="wizard-hint">No bookings ahead.</p>
+                ) : (
+                  <ul className="review-list">
+                    {booking.future_bookings.map((fb) => (
+                      <li key={fb.id}>
+                        {fb.booking_code} — {fb.customer_name} ({fb.pickup_date})
+                      </li>
+                    ))}
+                  </ul>
+                )}
               </div>
             )}
 

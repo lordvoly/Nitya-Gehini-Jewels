@@ -61,10 +61,17 @@ bookingsRouter.get("/upcoming-returns", async (_req, res) => {
 });
 
 // GET /api/bookings/:id — single booking detail, including the "When
-// Returns" chain (next/previous booking for the same item) from the
-// booking_sequence view. Registered after the literal /overdue and
-// /upcoming-returns routes above so Express's registration-order matching
-// doesn't let :id swallow those paths first.
+// Returns" chain for the same item. previous_booking (immediate previous)
+// still comes from the booking_sequence view — unchanged. future_bookings is
+// the FULL forward chain (every later, non-cancelled booking on this item,
+// in pickup_date order), which needs more than booking_sequence's single
+// LEAD column can give, so it's built from a direct query over `bookings`
+// instead: fetch every non-cancelled booking for this item_id in the same
+// (pickup_date, created_at) order booking_sequence itself uses, locate this
+// booking's own position in that list, and take everything after it. Fully
+// computed at request time, same as booking_sequence — nothing is stored,
+// so a cancellation or date edit elsewhere is reflected on the very next
+// load with no cleanup step.
 bookingsRouter.get("/:id", async (req, res) => {
   const { data: booking, error } = await supabase
     .from("bookings")
@@ -78,10 +85,30 @@ bookingsRouter.get("/:id", async (req, res) => {
   // missing row here is an expected, non-error case.
   const { data: sequence, error: sequenceError } = await supabase
     .from("booking_sequence")
-    .select("*")
+    .select("prev_booking_id, prev_booking_code, prev_customer_name, prev_pickup_date")
     .eq("booking_id", req.params.id)
     .maybeSingle();
   if (sequenceError) return res.status(500).json({ error: sequenceError.message });
+
+  const { data: itemBookings, error: chainError } = await supabase
+    .from("bookings")
+    .select("id, booking_code, pickup_date, customers(name)")
+    .eq("item_id", booking.item_id)
+    .neq("status", "cancelled")
+    .order("pickup_date", { ascending: true })
+    .order("created_at", { ascending: true });
+  if (chainError) return res.status(500).json({ error: chainError.message });
+
+  const currentIndex = (itemBookings ?? []).findIndex((b) => b.id === booking.id);
+  const futureBookings =
+    currentIndex === -1
+      ? []
+      : (itemBookings ?? []).slice(currentIndex + 1).map((b) => ({
+          id: b.id,
+          booking_code: b.booking_code,
+          customer_name: (b as unknown as { customers: { name: string } | null }).customers?.name ?? null,
+          pickup_date: b.pickup_date,
+        }));
 
   // Same two-queries-plus-merge pattern as GET / above — booking_financials
   // is a view with no real FK, so it can't be embedded via relationship
@@ -97,14 +124,7 @@ bookingsRouter.get("/:id", async (req, res) => {
     ...booking,
     total_paid: financials?.total_paid ?? 0,
     balance_due: financials?.balance_due ?? booking.price_charged,
-    next_booking: sequence?.next_booking_id
-      ? {
-          id: sequence.next_booking_id,
-          booking_code: sequence.next_booking_code,
-          customer_name: sequence.next_customer_name,
-          pickup_date: sequence.next_pickup_date,
-        }
-      : null,
+    future_bookings: futureBookings,
     previous_booking: sequence?.prev_booking_id
       ? {
           id: sequence.prev_booking_id,
