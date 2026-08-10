@@ -546,6 +546,45 @@ Supabase (both rows coexisting with the same digits, one as `phone`, one as
 `phone_secondary`). Both throwaway customers cleaned up after; the three real
 customers confirmed untouched throughout.
 
+`bookings.custom_addons`, same session — free-text extra items an operator adds at
+booking time (new migration `supabase/migrations/20260810120000_booking_custom_addons.sql`,
+`jsonb not null default '[]'`), kept deliberately separate from and never writing to
+`items.components` — that stays the item's own reusable template regardless of what
+gets added to any individual booking. Backend: `POST /api/bookings` accepts an
+optional `custom_addons` array, trims/dedupes it, and stores it on the booking.
+`POST /api/bookings/:id/return` now builds `return_checklist` from **two** combined
+sources — `items.components` (only when `item_type = 'set'`) and the booking's own
+`custom_addons` (regardless of item type) — concatenated into one flat list before
+the existing checked/unchecked-with-no-notes warning logic runs unchanged over it.
+This is a real behavior change from before: a `single`-type item, which previously
+never got a return checklist at all, now gets one whenever its booking has
+`custom_addons`, exactly like `ReturnForm`'s heading was accordingly renamed from
+"Components Checklist" to "Return Checklist" to reflect the combined source. Frontend:
+`BookingForm` gained an "Additional Items" chip-list input (same
+add/remove-chip pattern already used for `ItemEditForm`'s components list) sitting
+right under the item picker, empty by default; `ReturnForm` computes
+`componentNames`/`addonNames`/`checklistNames` and renders/toggles/submits over the
+combined list instead of components alone.
+
+Verified live against real Supabase rows: created a throwaway Set-type item (2 real
+components) and a throwaway Single-type item (no components at all), booked each
+through the actual UI — the Set-item booking with 2 custom add-ons added via the
+Additional Items input, the Single-item booking with 1. Confirmed both bookings'
+`custom_addons` persisted correctly via direct query. Processed the Set-item
+booking's return: the checklist showed all 4 entries together (`Necklace`,
+`Earrings`, plus the 2 add-ons) exactly as required; checked all 4 and confirmed
+`return_checklist` saved with all 4 keys `true`, no warning shown, and — the key
+check — `items.components` on that item queried immediately after and still showed
+exactly its original 2 real entries, completely untouched. Processed the Single-item
+booking's return: confirmed a checklist appeared at all (normally it wouldn't for a
+`single` item) containing just the one add-on; left it unchecked with no notes to
+also confirm the existing warning path still fires correctly on this newly-enabled
+case, and confirmed via direct query that this item's `components` stayed exactly
+`null` throughout, never touched. All throwaway bookings/items/customer cleaned up
+after; real items (`NGJ-0001`, `NGJ-0003`, both with their real multi-entry
+`components` lists) and the real booking `RNT-0001` (`custom_addons: []` via the
+column default) confirmed untouched throughout.
+
 **Next step — Phase 2 (bookkeeping), continued:** Payments is now done (see above).
 Per `PROJECT_PLAN_V2.md` §5, still remaining:
 - **Expenses** — `backend/src/routes/expenses.ts` has `GET /api/expenses?from=&to=`

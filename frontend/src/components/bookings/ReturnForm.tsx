@@ -2,9 +2,17 @@ import { useState, type FormEvent } from "react";
 import { processReturn, type Booking, type BookingWithDetails } from "../../lib/bookings";
 
 export function ReturnForm({ booking, onCancel }: { booking: BookingWithDetails; onCancel: () => void }) {
-  const components = booking.items?.item_type === "set" ? booking.items.components ?? [] : null;
+  // Combined from two sources: the item's own components template (only
+  // for set items — items.components itself is never touched here) and
+  // this booking's own custom_addons (free-text extras added at booking
+  // time, regardless of item type). Either alone, both together, or
+  // neither all produce a sensible checklist — a single item with
+  // custom_addons now gets one too, where normally it wouldn't.
+  const componentNames = booking.items?.item_type === "set" ? booking.items.components ?? [] : [];
+  const addonNames = booking.custom_addons ?? [];
+  const checklistNames = [...componentNames, ...addonNames];
   const [checklist, setChecklist] = useState<Record<string, boolean>>(
-    Object.fromEntries((components ?? []).map((name) => [name, false])),
+    Object.fromEntries(checklistNames.map((name) => [name, false])),
   );
   const [returnNotes, setReturnNotes] = useState("");
   // Left blank on purpose — the backend defaults to today in IST when this
@@ -27,7 +35,7 @@ export function ReturnForm({ booking, onCancel }: { booking: BookingWithDetails;
     setSaving(true);
     try {
       const updated = await processReturn(booking.id, {
-        return_checklist: components ? checklist : null,
+        return_checklist: checklistNames.length > 0 ? checklist : null,
         return_notes: returnNotes.trim() || null,
         actual_return_date: actualReturnDate || null,
         deposit_refunded: booking.deposit_collected ? depositRefunded : null,
@@ -68,11 +76,11 @@ export function ReturnForm({ booking, onCancel }: { booking: BookingWithDetails;
           {booking.items?.item_code} — {booking.items?.name} · {booking.customers?.name}
         </p>
 
-        {components && (
+        {checklistNames.length > 0 && (
           <>
-            <p className="field-label">Components Checklist</p>
+            <p className="field-label">Return Checklist</p>
             <div className="checklist">
-              {components.map((name) => (
+              {checklistNames.map((name) => (
                 <label key={name} className="checklist-item">
                   <input type="checkbox" checked={checklist[name] ?? false} onChange={() => toggleComponent(name)} />
                   {name}

@@ -19,6 +19,8 @@ export function BookingForm() {
   const [depositCollected, setDepositCollected] = useState(false);
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [advanceMethod, setAdvanceMethod] = useState<PaymentMethod>("cash");
+  const [customAddons, setCustomAddons] = useState<string[]>([]);
+  const [newAddon, setNewAddon] = useState("");
   const [gstApplicable, setGstApplicable] = useState(false);
   const [gstInvoiceNumber, setGstInvoiceNumber] = useState("");
   const [hsnCode, setHsnCode] = useState("");
@@ -40,6 +42,17 @@ export function BookingForm() {
     [items],
   );
   const selectedItem = items.find((i) => i.id === itemId) ?? null;
+
+  function addCustomAddon() {
+    const name = newAddon.trim();
+    if (!name || customAddons.includes(name)) return;
+    setCustomAddons((a) => [...a, name]);
+    setNewAddon("");
+  }
+
+  function removeCustomAddon(name: string) {
+    setCustomAddons((a) => a.filter((n) => n !== name));
+  }
 
   // Re-derive the suggested price whenever the item or booking type changes
   // — but only then, so a manually typed value (a negotiated discount)
@@ -95,6 +108,7 @@ export function BookingForm() {
         tax_rate: gstApplicable ? toNumberOrNull(taxRate) : null,
         advance_amount: toNumberOrNull(advanceAmount) ?? 0,
         advance_method: (toNumberOrNull(advanceAmount) ?? 0) > 0 ? advanceMethod : null,
+        custom_addons: customAddons,
       });
       if (result.type === "created") {
         setSaved(result.booking);
@@ -121,6 +135,8 @@ export function BookingForm() {
     setDepositCollected(false);
     setAdvanceAmount("");
     setAdvanceMethod("cash");
+    setCustomAddons([]);
+    setNewAddon("");
     setGstApplicable(false);
     setGstInvoiceNumber("");
     setHsnCode("");
@@ -200,6 +216,35 @@ export function BookingForm() {
               onChange={(e) => setQuantityBooked(e.target.value)}
             />
           </label>
+        )}
+
+        <p className="field-label">Additional Items</p>
+        <p className="wizard-hint">
+          Extra items for this booking only — doesn't change the item's own components.
+        </p>
+        <div className="add-custom-row">
+          <input
+            type="text"
+            placeholder="e.g. borrowed pouch"
+            value={newAddon}
+            onChange={(e) => setNewAddon(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomAddon())}
+          />
+          <button type="button" className="btn-secondary" onClick={addCustomAddon}>
+            Add
+          </button>
+        </div>
+        {customAddons.length > 0 && (
+          <div className="chip-list">
+            {customAddons.map((name) => (
+              <span className="chip" key={name}>
+                {name}
+                <button type="button" onClick={() => removeCustomAddon(name)} aria-label={`Remove ${name}`}>
+                  ×
+                </button>
+              </span>
+            ))}
+          </div>
         )}
 
         <p className="field-label">Customer</p>

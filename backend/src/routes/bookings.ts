@@ -172,6 +172,7 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
     tax_rate,
     advance_amount,
     advance_method,
+    custom_addons,
   } = req.body ?? {};
 
   if (type !== "rental" && type !== "sale") {
@@ -190,6 +191,13 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
   if (advanceAmount > 0 && !advance_method) {
     return res.status(400).json({ error: "advance_method is required when recording an advance payment" });
   }
+  // Free-text extras the operator adds for this specific booking — never
+  // written to items.components, which stays the item's own reusable
+  // template. Deduped and trimmed here so a stray blank/repeat entry from
+  // the UI doesn't produce a confusing return checklist later.
+  const customAddons: string[] = Array.isArray(custom_addons)
+    ? Array.from(new Set(custom_addons.map((s: unknown) => (typeof s === "string" ? s.trim() : "")).filter(Boolean)))
+    : [];
 
   const { data: item, error: itemError } = await supabase.from("items").select("*").eq("id", item_id).single();
   if (itemError || !item) return res.status(400).json({ error: "Item not found" });
@@ -292,6 +300,7 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
         gst_invoice_number: gst_applicable ? gst_invoice_number ?? null : null,
         hsn_code: gst_applicable ? hsn_code ?? null : null,
         tax_rate: gst_applicable ? tax_rate ?? null : null,
+        custom_addons: customAddons,
         created_by: req.user?.id ?? null,
       })
       .select()
@@ -333,15 +342,20 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
 // POST /api/bookings/:id/return — returns processing. Only valid while the
 // booking is still active (booked/out) — rejects double-processing.
 //
-// For a `set` item, return_checklist is normalized from the item's
-// `components`: whatever the operator submits as checked stays checked,
-// anything else (including components they never mention) is recorded
-// false. If anything ends up unchecked and there's no return_notes
-// explaining why, this returns a non-blocking `warning` rather than
-// blocking — same pattern as the booking-creation same-day-turnover
-// warning: the shop needs to be able to close out an incomplete return
-// ("chasing the missing piece") rather than get stuck unable to record it
-// at all.
+// return_checklist is built from TWO combined sources: the item's own
+// `components` (only when item_type = 'set' — items.components stays the
+// reusable template, never touched here) and this booking's own
+// `custom_addons` (free-text extras added at booking time, whatever the
+// item type). Either source alone, or both together, produce one flat
+// checklist — so a `single` item with custom_addons now gets a checklist
+// too, even though a plain `single` item with no add-ons still gets none.
+// Whatever the operator submits as checked stays checked; anything else
+// (including names they never mention) is recorded false. If anything ends
+// up unchecked and there's no return_notes explaining why, this returns a
+// non-blocking `warning` rather than blocking — same pattern as the
+// booking-creation same-day-turnover warning: the shop needs to be able to
+// close out an incomplete return ("chasing the missing piece") rather than
+// get stuck unable to record it at all.
 //
 // A `unique` item's status flips back to 'available' here. A `quantity`
 // item needs no stock adjustment — availability is computed live from
@@ -366,13 +380,16 @@ bookingsRouter.post("/:id/return", async (req, res) => {
   const item = booking.items as { item_type: string; components: string[] | null; tracking_type: string } | null;
   const { return_notes, actual_return_date, deposit_refunded, deposit_refund_date } = req.body ?? {};
 
+  const componentNames = item?.item_type === "set" ? item.components ?? [] : [];
+  const addonNames = (booking.custom_addons ?? []) as string[];
+  const checklistNames = [...componentNames, ...addonNames];
+
   let return_checklist: Record<string, boolean> | null = null;
   let warning: string | undefined;
-  if (item?.item_type === "set") {
-    const components = item.components ?? [];
+  if (checklistNames.length > 0) {
     const submitted = (req.body?.return_checklist ?? {}) as Record<string, boolean>;
-    return_checklist = Object.fromEntries(components.map((name) => [name, submitted[name] === true]));
-    const anyUnchecked = components.some((name) => !return_checklist![name]);
+    return_checklist = Object.fromEntries(checklistNames.map((name) => [name, submitted[name] === true]));
+    const anyUnchecked = checklistNames.some((name) => !return_checklist![name]);
     if (anyUnchecked && !return_notes?.trim()) {
       warning =
         "One or more components weren't checked off and there's no return note explaining it — consider adding one.";

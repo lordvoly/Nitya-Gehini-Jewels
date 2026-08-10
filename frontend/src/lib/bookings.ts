@@ -26,6 +26,10 @@ export interface Booking {
   tax_rate: number | null;
   return_checklist: Record<string, boolean> | null;
   return_notes: string | null;
+  // Free-text extras added at booking time, separate from and never
+  // modifying the item's own components template. Combined with
+  // items.components (for set items) into return_checklist at return time.
+  custom_addons: string[];
   created_at: string;
   updated_at: string;
   // Not a DB column — present only when the backend has a non-blocking
@@ -84,6 +88,9 @@ export interface NewBooking {
   // the booking itself has saved. Zero/omitted records nothing.
   advance_amount: number;
   advance_method: PaymentMethod | null;
+  // Optional free-text extras for this booking only — never written to
+  // items.components. Empty by default.
+  custom_addons: string[];
 }
 
 export type CreateBookingResult =
