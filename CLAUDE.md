@@ -452,15 +452,71 @@ item's existing code showed the friendly error with no crash and left the origin
 `NGJ-0003` Polki Bridal #1930) confirmed untouched throughout. Test items cleaned up
 after.
 
-**Next step — Phase 2 (bookkeeping), starting point for tomorrow:** Phase 1 is fully
-complete (items, customers, bookings, returns, dashboard, reports, and now full CRUD
-on both items and customers). Per `PROJECT_PLAN_V2.md` §5, Phase 2 is:
-- **Payments** (multiple partial payments per booking) — `backend/src/routes/payments.ts`
-  has `GET /api/payments?booking_id=` and `POST /api/payments`, both scaffolded and
-  unused by any frontend page. `booking_financials` (the view, not a table) already
-  computes `total_paid`/`balance_due` from whatever's in the `payments` table, so the
-  read side is done — what's missing is a UI to actually record a payment against a
-  booking (natural home: a "Record Payment" action from `BookingDetail`).
+Payment recording, first Phase-2 feature — no new "advance" concept: an advance is
+just a real row in `payments`, recorded through the same table and the same
+`booking_financials` view Phase 1 already scaffolded. `POST /api/bookings` gained
+optional `advance_amount`/`advance_method`; after the booking itself saves, if the
+amount is > 0 a payment row is inserted directly (not by calling the payments route
+internally — same direct-`supabase` pattern already used for the sale-flips-status
+side effect just above it in the same handler), dated `istToday()`, with
+`advance_method` required whenever the amount is > 0 (validated up front, before the
+booking is even created). If that payment insert itself fails, the booking is not
+rolled back — it already exists — so a non-blocking `warning` is appended instead,
+telling the operator to add it manually from the booking's detail page, same
+non-blocking-warning shape as the same-day-turnover and incomplete-return-checklist
+cases elsewhere in this file. `POST /api/payments` (previously an unvalidated
+pass-through) now checks `booking_id`/`amount`/`method` are present and `amount > 0`,
+and defaults `payment_date` to `istToday()` when omitted — the same
+left-blank-on-purpose pattern as `ReturnForm`'s `actual_return_date`, applied here to
+`BookingDetail`'s new "Record Payment" form. `GET /api/bookings/:id` was extended to
+merge in `total_paid`/`balance_due` from `booking_financials` (it previously only
+returned the booking + item/customer + booking_sequence chain) — same
+two-queries-plus-merge pattern used everywhere else for this view, since it has no
+real FK to embed through. Frontend: `BookingForm` gained an Advance Received amount
+field that reveals a Payment Method select (reusing the same `PAYMENT_METHODS` enum
+now centralized in a new `frontend/src/lib/payments.ts`) only once an amount is
+entered, and the success panel confirms the amount/method recorded. `BookingDetail`
+(previously a minimal read-only summary, flagged as the future fuller version back
+when it was first built) now shows Total Paid/Balance Due alongside Price Charged, a
+Payments history list, and a "Record Payment" action (amount, method, date, notes)
+that reloads both the booking and the payments list on save.
+
+All verified live against real Supabase rows, not just the API response: created a
+throwaway rental booking through the actual UI with a ₹1500 UPI advance — confirmed a
+real `payments` row existed (`amount: 1500, method: "UPI"`) and `booking_financials`
+showed `total_paid: 1500, balance_due: 3500` both via direct query and on the
+Booking Detail page. Recorded a second, final ₹3500 Card payment through the
+"Record Payment" action on that same booking — `balance_due` correctly dropped to
+`0`, `total_paid` rose to `5000`, and both payments (UPI and Card, correct amounts
+and dates) appeared in the Payments history, confirmed both in the rendered page and
+via a direct Supabase query. Test booking (and its cascaded payment rows), item, and
+customer all cleaned up after; real data (`Peacock Bridal Set` / `NGJ-0001`,
+`Polki Bridal #1930` / `NGJ-0003`, both real customers, and real booking `RNT-0001`)
+confirmed untouched throughout.
+
+**Note for the user — the `NGJ-0003` item-status question:** not a bug. `items.status`
+for a `unique` item only ever means "available" or "sold" — it is deliberately never
+flipped to `rented_out` when a rental is created (see the long comment above
+`POST /api/bookings` in `backend/src/routes/bookings.ts`). The reason: a unique item
+can legitimately have several future, non-overlapping rentals booked against it, and
+the *only* thing `POST /api/bookings` checks before allowing a new rental is
+`item.status === 'available'` — if creating a booking flipped that to `rented_out`,
+every subsequent booking attempt on that item would be wrongly blocked even when the
+new dates don't overlap at all. Whether the item is *currently* out is tracked
+per-booking (`bookings.status`), not per-item, and is always computed at query time
+from the real, live bookings — never denormalized onto `items.status`, per this
+project's "never write to computed fields" rule elsewhere in this file. **Do not
+manually flip `NGJ-0003`'s status to `rented_out`/`in_maintenance`/etc. to "correct"
+this** — it isn't stored anywhere derived from bookings, nothing will ever flip it
+back automatically, and while it's stuck on a non-`available` value it will silently
+block every future rental attempt on that item with a confusing 409. If the
+available/booked mismatch on the Items list is confusing day to day, the real fix
+would be a computed "currently out" indicator on that page (sourced from active
+bookings, the same way `overdue_rentals` is computed) — not implemented, not asked
+for yet, flagged here as a possible future small addition if wanted.
+
+**Next step — Phase 2 (bookkeeping), continued:** Payments is now done (see above).
+Per `PROJECT_PLAN_V2.md` §5, still remaining:
 - **Expenses** — `backend/src/routes/expenses.ts` has `GET /api/expenses?from=&to=`
   and `POST /api/expenses`, same situation: scaffolded, no frontend at all yet, not
   even a nav entry.

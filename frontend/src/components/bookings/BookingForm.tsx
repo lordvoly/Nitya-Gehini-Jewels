@@ -3,6 +3,7 @@ import { fetchItems, type Item } from "../../lib/items";
 import type { Customer } from "../../lib/customers";
 import { createBooking, type Booking, type BookingType, type ConflictingBooking } from "../../lib/bookings";
 import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/payments";
 import { CustomerPicker } from "./CustomerPicker";
 
 export function BookingForm() {
@@ -16,6 +17,8 @@ export function BookingForm() {
   const [price, setPrice] = useState("");
   const [depositAmount, setDepositAmount] = useState("");
   const [depositCollected, setDepositCollected] = useState(false);
+  const [advanceAmount, setAdvanceAmount] = useState("");
+  const [advanceMethod, setAdvanceMethod] = useState<PaymentMethod>("cash");
   const [gstApplicable, setGstApplicable] = useState(false);
   const [gstInvoiceNumber, setGstInvoiceNumber] = useState("");
   const [hsnCode, setHsnCode] = useState("");
@@ -90,6 +93,8 @@ export function BookingForm() {
         gst_invoice_number: gstApplicable ? gstInvoiceNumber.trim() || null : null,
         hsn_code: gstApplicable ? hsnCode.trim() || null : null,
         tax_rate: gstApplicable ? toNumberOrNull(taxRate) : null,
+        advance_amount: toNumberOrNull(advanceAmount) ?? 0,
+        advance_method: (toNumberOrNull(advanceAmount) ?? 0) > 0 ? advanceMethod : null,
       });
       if (result.type === "created") {
         setSaved(result.booking);
@@ -114,6 +119,8 @@ export function BookingForm() {
     setPrice("");
     setDepositAmount("");
     setDepositCollected(false);
+    setAdvanceAmount("");
+    setAdvanceMethod("cash");
     setGstApplicable(false);
     setGstInvoiceNumber("");
     setHsnCode("");
@@ -129,6 +136,11 @@ export function BookingForm() {
         <p className="success-check">✓ Booking Created</p>
         <p className="success-code">{saved.booking_code}</p>
         <p>{customer?.name}</p>
+        {(toNumberOrNull(advanceAmount) ?? 0) > 0 && (
+          <p className="wizard-hint">
+            Advance of ₹{advanceAmount} ({PAYMENT_METHOD_LABELS[advanceMethod]}) recorded.
+          </p>
+        )}
         {saved.warning && (
           <div className="found-panel">
             <p>{saved.warning}</p>
@@ -214,6 +226,29 @@ export function BookingForm() {
           Price Charged (₹)
           <input type="number" min={0} value={price} onChange={(e) => setPrice(e.target.value)} />
         </label>
+
+        <label className="field-label">
+          Advance Received (₹)
+          <input
+            type="number"
+            min={0}
+            value={advanceAmount}
+            onChange={(e) => setAdvanceAmount(e.target.value)}
+            placeholder="Optional"
+          />
+        </label>
+        {(toNumberOrNull(advanceAmount) ?? 0) > 0 && (
+          <label className="field-label">
+            Payment Method
+            <select value={advanceMethod} onChange={(e) => setAdvanceMethod(e.target.value as PaymentMethod)}>
+              {PAYMENT_METHODS.map((m) => (
+                <option key={m} value={m}>
+                  {PAYMENT_METHOD_LABELS[m]}
+                </option>
+              ))}
+            </select>
+          </label>
+        )}
 
         {type === "rental" && (
           <>

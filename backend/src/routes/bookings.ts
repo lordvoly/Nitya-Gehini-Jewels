@@ -83,8 +83,20 @@ bookingsRouter.get("/:id", async (req, res) => {
     .maybeSingle();
   if (sequenceError) return res.status(500).json({ error: sequenceError.message });
 
+  // Same two-queries-plus-merge pattern as GET / above — booking_financials
+  // is a view with no real FK, so it can't be embedded via relationship
+  // syntax.
+  const { data: financials, error: financialsError } = await supabase
+    .from("booking_financials")
+    .select("total_paid, balance_due")
+    .eq("booking_id", req.params.id)
+    .maybeSingle();
+  if (financialsError) return res.status(500).json({ error: financialsError.message });
+
   res.json({
     ...booking,
+    total_paid: financials?.total_paid ?? 0,
+    balance_due: financials?.balance_due ?? booking.price_charged,
     next_booking: sequence?.next_booking_id
       ? {
           id: sequence.next_booking_id,
@@ -158,6 +170,8 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
     gst_invoice_number,
     hsn_code,
     tax_rate,
+    advance_amount,
+    advance_method,
   } = req.body ?? {};
 
   if (type !== "rental" && type !== "sale") {
@@ -171,6 +185,10 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
   }
   if (price_charged == null) {
     return res.status(400).json({ error: "price_charged is required" });
+  }
+  const advanceAmount = advance_amount != null ? Number(advance_amount) : 0;
+  if (advanceAmount > 0 && !advance_method) {
+    return res.status(400).json({ error: "advance_method is required when recording an advance payment" });
   }
 
   const { data: item, error: itemError } = await supabase.from("items").select("*").eq("id", item_id).single();
@@ -282,6 +300,26 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
     if (!error) {
       if (type === "sale" && item.tracking_type === "unique") {
         await supabase.from("items").update({ status: "sold" }).eq("id", item_id);
+      }
+      // Advance received at booking time is just a real payment recorded
+      // against the new booking — same payments table, same
+      // booking_financials view computes balance_due from it. Not a
+      // separate "advance" concept; POST /api/payments' own validation is
+      // bypassed here in favor of a direct insert since advanceAmount > 0
+      // and advance_method are already validated above.
+      if (advanceAmount > 0) {
+        const { error: paymentError } = await supabase.from("payments").insert({
+          booking_id: data.id,
+          amount: advanceAmount,
+          method: advance_method,
+          payment_date: istToday(),
+          recorded_by: req.user?.id ?? null,
+        });
+        if (paymentError) {
+          warning = warning
+            ? `${warning} Also, the advance payment couldn't be recorded — add it manually from the booking's detail page.`
+            : "The booking was created but the advance payment couldn't be recorded — add it manually from the booking's detail page.";
+        }
       }
       // `warning` is undefined (dropped by JSON.stringify) when there's
       // nothing to flag — the response shape is unchanged in the common case.

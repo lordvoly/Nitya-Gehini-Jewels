@@ -1,4 +1,5 @@
 import { apiFetch, ApiError } from "./api";
+import type { PaymentMethod } from "./payments";
 
 export type BookingType = "rental" | "sale";
 export type BookingStatus = "booked" | "out" | "returned" | "completed" | "cancelled";
@@ -78,6 +79,11 @@ export interface NewBooking {
   gst_invoice_number: string | null;
   hsn_code: string | null;
   tax_rate: number | null;
+  // Optional advance received at booking time — not a separate concept from
+  // a normal payment, just recorded as one (in the same payments table) once
+  // the booking itself has saved. Zero/omitted records nothing.
+  advance_amount: number;
+  advance_method: PaymentMethod | null;
 }
 
 export type CreateBookingResult =
@@ -139,6 +145,10 @@ export interface BookingDetail extends Booking {
   customers: BookingCustomerSummary | null;
   next_booking: BookingChainLink | null;
   previous_booking: BookingChainLink | null;
+  // Merged in from booking_financials, same as BookingWithDetails above —
+  // computed at read time, never stored.
+  total_paid: number;
+  balance_due: number;
 }
 
 export function fetchBooking(id: string) {
