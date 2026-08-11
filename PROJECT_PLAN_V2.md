@@ -215,7 +215,169 @@ This document is meant to be handed to Claude Code as the spec to scaffold from.
 
 ---
 
-## 8. Multi-Item Bookings Restructuring (Checkpoint (b) DONE 2026-08-11 — Stage 2 not yet executed)
+## 8. Multi-Item Bookings Restructuring (Checkpoint (c) DONE 2026-08-11 — Stage 2 not yet executed)
+
+**Checkpoint (c) — Booking-specific component cluster — DONE 2026-08-11,
+tested against the real Vercel preview + `ngj-backend-checkpoint-a`. Three
+real bugs found and fixed live, not in review — this was the last checkpoint
+before Stage 2's cutover, per the standing plan.**
+
+`BookingForm.tsx`, `BookingsList.tsx`, `BookingDetail.tsx`, `ReturnForm.tsx`,
+`BookingsPage.tsx` rewritten and `EditBookingForm.tsx` created new, per the
+plan below. `shared.css` gained `.booking-card*`/`.line-item-card*` rules
+from existing design tokens, no new visual language. `BookingForm` moved to
+a repeatable `LineItemDraft[]` array (one row per line item, "+ Add Another
+Item", per-row remove, per-row auto-price-fill and per-row conflict-error
+display keyed by index). `BookingsList` moved off the shared `.data-table`
+to one `.booking-card` per family booking with nested per-item rows, each
+with its own status pill and a "Process Return" button when eligible.
+`BookingDetail` gained one sub-section per line item (own status, dates,
+price, deposit, custom add-ons, its own "When Returns →" panel gated on
+`tracking_type === 'unique'`) plus an Edit Booking entry point.
+`ReturnForm` rescoped to `{ booking, item }` instead of a whole flat
+booking, calling `processReturn(booking.id, item.item_id, payload)`
+directly. `EditBookingForm` (new): parent fields (customer, GST) via
+`updateBooking`; per-active-item field edits via `updateBookingItem`; an
+Add Item mini-form via `addBookingItem` (same fields/conflict-handling as
+`BookingForm`'s rows); a Remove action per active item via
+`cancelBookingItem`, with the same inline-confirm pattern as
+`CustomersList`'s delete ("Remove this item? / Yes, Remove / Cancel"),
+surfacing the backend's negative-balance-block message verbatim. Per
+decision 6, confirmed live (not just by not writing the code) that **no
+"cancel whole booking" control exists anywhere in this component** — only
+Back/Done and the per-item add/edit/remove affordances.
+
+**The legacy bridge (Checkpoint (b)'s temporary adapter) is now fully
+deleted, confirmed by grep, not just "no longer imported."** The entire
+`LEGACY BRIDGE` section of `lib/bookings.ts`
+(`LegacyFlatBookingWithDetails`/`createLegacyBooking`/`fetchLegacyBookings`/
+`fetchLegacyBooking`/`processLegacyReturn`) and `lib/statusPill.ts`'s old
+`bookingStatusPill(status: LegacyBookingItemStatus)` were removed outright.
+`grep -rn "Legacy" frontend/src` returns **zero matches** — not "unused,"
+genuinely gone.
+
+**`booking_code` re-confirmed editable in the actual rewritten form, live,
+not just present in the source** (the user's explicit second ask): created
+a real booking through the rewritten `BookingForm` with the suggested code
+(`BK-0001`) overridden to `ZZTEST-BK-C1` — the success panel and a direct
+Supabase query both showed the literal override stored, not an
+auto-generated fallback.
+
+**Bug 1 — found live: `POST /api/bookings`'s success response never merged
+`booking_financials_v2`/`booking_status_v2`.** `GET /` and `GET /:id` both
+already did this two-queries-plus-merge for `total_paid`/`balance_due`/
+`price_charged`/`computed_status`/`*_item_count`, but the create route's
+`return res.status(201).json({ ...full, warning })` never did — so
+`BookingForm`'s new success panel (which reads `saved.price_charged`)
+rendered a blank price on every single successful booking creation. Caught
+by actually looking at the rendered success panel, not by reading the
+response shape. Fixed by running the same merge (`Promise.all` across the
+full-row fetch plus both views) before responding. Re-verified live: the
+same test booking above now shows `price_charged: 1500`/`2500` correctly
+in both the raw API response and the rendered panel.
+
+**Bug 2 — found live: `EditBookingForm`'s save handlers trusted the PATCH
+response's declared TypeScript type over its real (narrower) payload.**
+`PATCH /:id` returns only the updated `bookings` row's own columns (no
+`customers`/`booking_items` embed); `PATCH .../items/:itemId` returns only
+the raw `booking_items` row (no nested `items(item_code, name, ...)`
+embed) — but both were typed as the full `Booking`/`BookingItem` shape in
+`lib/bookings.ts`, and the original handlers did `setBooking(updated)` /
+spliced the response directly into `booking.booking_items`. Saving the
+parent GST fields would have wiped `booking.booking_items` to `undefined`
+and crashed the item list on the next render; saving a line item's fields
+would have permanently blanked that row's item name/code in its header.
+Caught by actually clicking Save and watching the item list stay intact,
+not by reading the type annotations. Fixed by re-fetching the full booking
+via the existing `load()` after both mutations instead of trusting either
+response's shape. Re-verified live: toggled GST on and saved, then edited
+a line item's price and saved — the item names/codes stayed correct after
+both, confirmed by screenshot, not just "no console error."
+
+**Bug 3 — found live: nothing prevented the same physical item from
+appearing twice in one family booking, and when it did, every per-item
+route broke.** Added a quantity item (`NGJ-0007`) to a booking twice —
+once as a sale via `BookingForm`, once as a rental via `EditBookingForm`'s
+Add Item — neither the create-time RPC nor `POST /:bookingId/items`
+rejected it, since `checkItemConflict` only checks for date/quantity
+oversell against *other* bookings, not "is this item_id already a
+non-cancelled row in *this* booking." Every route keyed by
+`(booking_id, item_id)` — `PATCH .../items/:itemId`,
+`.../items/:itemId/cancel`, `.../items/:itemId/return` — uses `.single()`
+or `.eq(...).single()` expecting exactly one match; with two rows sharing
+that `item_id`, the lookup became ambiguous and **every edit/remove/return
+attempt on either row failed** ("Booking item not found" from `.single()`
+throwing on 2 rows). Caught live clicking "Remove Item" and getting a
+generic failure instead of the expected confirm-then-succeed flow — not
+found by reading the routes, found by actually exercising them end to end.
+Fixed with an explicit invariant enforced at both entry points:
+`POST /` now checks the submitted `items[]` array itself for a repeated
+`item_id` before ever calling the RPC (reported through the same
+per-index `item_conflicts` shape as other row conflicts, so it renders
+inline on the right row); `POST /:bookingId/items` now checks for an
+existing non-cancelled row for that `item_id` in the same booking before
+inserting, returning a 409 (`"This item is already included in this
+booking"`). A second live pass then caught that the existence check
+itself used `.maybeSingle()`, which throws the identical "multiple rows"
+error when 2+ rows already match — exactly the corrupted state the check
+exists to prevent, hit immediately against the already-broken test booking
+from Bug 3's own repro. Switched to `.limit(1)` + a length check so the
+guard degrades gracefully instead of 500ing. Re-verified live after both
+fixes redeployed: attempting to add `NGJ-0007` a second time to a booking
+that already had it returned the friendly 409, no 500; a fresh
+create-request with the same `item_id` twice returned the per-row
+`item_conflicts` 409 instead of silently succeeding.
+
+**What else was verified live, with real results, not just "should work,"**
+using a fresh throwaway auth user and `ZZTEST`-prefixed fixtures, all
+cleaned up after:
+- Multi-item creation: one booking with a rental (`NGJ-0006`, unique) and a
+  sale (`NGJ-0007`, quantity, with a `custom_addons` chip) submitted
+  together in one `Create Booking` — both items correctly persisted under
+  one parent, ₹500 Cash advance recorded and reflected in
+  `booking_financials_v2` immediately.
+- Card list: `.booking-card` correctly showed the computed-status pill +
+  "X of Y items returned" fraction, per-item rows each with their own
+  status pill, and "Process Return" only on the rental item (never on the
+  sale — a sale has no return concept, matching the existing backend
+  rule).
+- Return processing: marked the rental item returned from the card list —
+  item flipped to `Returned`, the booking's rollup correctly flipped to
+  `Completed` (a sale item counts as immediately "resolved" per
+  `booking_status_v2`'s own definition, independent of any physical
+  return), and the real `RNT-0001` booking/customers were confirmed
+  untouched throughout via direct Supabase queries at multiple checkpoints.
+- `BookingDetail`: per-item sub-sections, the "When Returns →" panel
+  (correctly shown only for the `unique` item, correctly absent for the
+  quantity item), and Payments all rendered correctly; deep-linking via
+  `/bookings?booking=<id>` (unchanged from Checkpoint (a)) still works
+  against the rewritten component.
+- `EditBookingForm` — Add Item: added a new rental line item through the
+  mini-form, confirmed it appeared as a genuine third, independently
+  editable `booking_items` row with correct dates/price.
+- `EditBookingForm` — Remove Item, all 3 rules: (1) a returned item shows
+  no Remove control at all (read-only "Returned — no further edits."); (2)
+  removing an item that would push `balance_due` negative was blocked with
+  the exact backend message (`"Removing this item would mean refunding
+  ₹500.00, which isn't supported yet"`), rendered inline via the same
+  confirm-row pattern; (3) removing an item where the remaining total still
+  covers what's been paid succeeded cleanly, dropping the item count and
+  leaving the rest of the booking intact.
+- Confirmed, live, that the "test set 1"/"test set 2" non-`ZZTEST`-prefixed
+  items noted during Stage 1's backfill (§8 above) are pre-existing and
+  untouched by any of this checkpoint's fixtures or cleanup.
+
+All fixtures (2 items, 1 customer, 3 bookings, their payments, the
+throwaway auth user) deleted after; confirmed directly against Supabase:
+`bookings_count = 1`/`booking_items_count = 1` (just the real `RNT-0001`),
+3 real customers, 4 real items — all back to exactly the pre-checkpoint
+baseline.
+
+**⚠ Action for the user, now that Checkpoint (c) is done**: per the standing
+reminder below, the temporary `ngj-backend-checkpoint-a` Render service and
+its cross-wired Vercel Preview env vars are no longer needed once this
+branch merges to `master` and Stage 2 cuts over — delete the Render service
+at that point.
 
 **Editable `booking_code`, added 2026-08-11 before starting Checkpoint (c)
 proper — a real gap, not previously built.** Confirmed against the actual
