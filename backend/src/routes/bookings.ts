@@ -5,340 +5,404 @@ import type { AuthedRequest } from "../middleware/auth.js";
 
 export const bookingsRouter = Router();
 
-// "Still consuming inventory" — excludes returned/completed/cancelled.
+// "Still consuming inventory" — excludes returned/cancelled. Now describes
+// booking_items.status (booked/out/returned/cancelled), not bookings.status
+// — the parent no longer has a status column at all (see PROJECT_PLAN_V2.md
+// §8). Kept as the same exported name/shape since every consumer (dashboard,
+// reports, tools) still wants exactly this list.
 export const ACTIVE_STATUSES = ["booked", "out"];
 
-// GET /api/bookings?status=&item_id=&customer_id=
+// NOTE — Checkpoint (a) / preview-branch code: every view name below is
+// suffixed `_v2` (booking_financials_v2, booking_status_v2, etc.) because
+// Stage 2 (03_schema_cutover.sql) hasn't renamed them into their permanent
+// names yet — see PROJECT_PLAN_V2.md §8. At cutover time this is a
+// mechanical find-and-replace of "_v2" -> "" across this file, done in the
+// same deploy as the cutover migration, not before.
+
+const ITEMS_EMBED = "item_code, name, item_type, tracking_type, components";
+const BOOKING_ITEMS_EMBED = `*, items(${ITEMS_EMBED})`;
+
+// GET /api/bookings?item_id=&customer_id=&computed_status=
 //
-// booking_financials is a computed VIEW (bookings joined with a payments
-// sum), not a table with a real foreign key to bookings, so PostgREST can't
-// embed it via relationship syntax the way items/customers below are —
-// that was tried in the original scaffold and just 500'd. total_paid/
-// balance_due are fetched with a second query and merged by booking_id
-// instead, the same two-queries-plus-merge pattern the customers search
-// already uses. Never store these on the booking row itself — they must
-// stay computed at read time.
+// booking_items.booking_id / .item_id are real FKs (unlike the old
+// bookings.item_id, which pointed at a single item per row) — so, unlike
+// booking_financials/booking_status below, the item nesting itself is a
+// genuine PostgREST relationship embed, not a two-query merge.
+// booking_financials_v2/booking_status_v2 remain computed VIEWS with no real
+// FK to bookings, so total_paid/balance_due/computed_status/*_item_count
+// still need the same two-queries-plus-merge pattern used everywhere else
+// in this codebase for that reason.
 bookingsRouter.get("/", async (req, res) => {
   let query = supabase
     .from("bookings")
-    .select("*, items(item_code, name, item_type, components, tracking_type), customers(name, phone)")
-    .order("pickup_date", { ascending: false });
-  if (typeof req.query.status === "string") query = query.eq("status", req.query.status);
-  if (typeof req.query.item_id === "string") query = query.eq("item_id", req.query.item_id);
+    .select(`*, customers(name, phone), booking_items(${BOOKING_ITEMS_EMBED})`)
+    .order("created_at", { ascending: false });
   if (typeof req.query.customer_id === "string") query = query.eq("customer_id", req.query.customer_id);
+  if (typeof req.query.item_id === "string") query = query.eq("booking_items.item_id", req.query.item_id);
   const { data: bookings, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
 
   const ids = (bookings ?? []).map((b) => b.id);
-  if (ids.length === 0) return res.json(bookings);
+  if (ids.length === 0) return res.json([]);
 
-  const { data: financials, error: financialsError } = await supabase
-    .from("booking_financials")
-    .select("booking_id, total_paid, balance_due")
-    .in("booking_id", ids);
+  const [{ data: financials, error: financialsError }, { data: statuses, error: statusesError }] = await Promise.all([
+    supabase.from("booking_financials_v2").select("booking_id, total_paid, balance_due, price_charged").in("booking_id", ids),
+    supabase
+      .from("booking_status_v2")
+      .select("booking_id, computed_status, active_item_count, resolved_item_count")
+      .in("booking_id", ids),
+  ]);
   if (financialsError) return res.status(500).json({ error: financialsError.message });
+  if (statusesError) return res.status(500).json({ error: statusesError.message });
 
   const financialsByBookingId = new Map((financials ?? []).map((f) => [f.booking_id, f]));
-  res.json(
-    bookings.map((b) => ({
-      ...b,
-      total_paid: financialsByBookingId.get(b.id)?.total_paid ?? 0,
-      balance_due: financialsByBookingId.get(b.id)?.balance_due ?? b.price_charged,
-    })),
-  );
+  const statusByBookingId = new Map((statuses ?? []).map((s) => [s.booking_id, s]));
+
+  let result = bookings.map((b) => ({
+    ...b,
+    total_paid: financialsByBookingId.get(b.id)?.total_paid ?? 0,
+    balance_due: financialsByBookingId.get(b.id)?.balance_due ?? 0,
+    price_charged: financialsByBookingId.get(b.id)?.price_charged ?? 0,
+    computed_status: statusByBookingId.get(b.id)?.computed_status ?? "cancelled",
+    active_item_count: statusByBookingId.get(b.id)?.active_item_count ?? 0,
+    resolved_item_count: statusByBookingId.get(b.id)?.resolved_item_count ?? 0,
+  }));
+
+  // computed_status lives on a merged-in view, not a real column, so it's
+  // filtered here in JS after the merge rather than in the initial query.
+  if (typeof req.query.computed_status === "string") {
+    result = result.filter((b) => b.computed_status === req.query.computed_status);
+  }
+
+  res.json(result);
 });
 
 bookingsRouter.get("/overdue", async (_req, res) => {
-  const { data, error } = await supabase.from("overdue_rentals").select("*");
+  const { data, error } = await supabase.from("overdue_rentals_v2").select("*");
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
 bookingsRouter.get("/upcoming-returns", async (_req, res) => {
-  const { data, error } = await supabase.from("upcoming_returns").select("*");
+  const { data, error } = await supabase.from("upcoming_returns_v2").select("*");
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
-// GET /api/bookings/:id — single booking detail, including the "When
-// Returns" chain for the same item. previous_booking (immediate previous)
-// still comes from the booking_sequence view — unchanged. future_bookings is
-// the FULL forward chain (every later, non-cancelled booking on this item,
-// in pickup_date order), which needs more than booking_sequence's single
-// LEAD column can give, so it's built from a direct query over `bookings`
-// instead: fetch every non-cancelled booking for this item_id in the same
-// (pickup_date, created_at) order booking_sequence itself uses, locate this
-// booking's own position in that list, and take everything after it. Fully
-// computed at request time, same as booking_sequence — nothing is stored,
-// so a cancellation or date edit elsewhere is reflected on the very next
-// load with no cleanup step.
+// GET /api/bookings/:id — parent + nested line items, each carrying its own
+// "When Returns" chain (previous_booking_item / future_booking_items),
+// computed from booking_sequence_v2 keyed by booking_item_id — a 3-item
+// family booking has three independent physical items, each with its own
+// neighbors, so this is N independent chains, not one for the whole
+// booking (§8 decision 5). Only meaningful for tracking_type = 'unique'
+// items; a 'quantity' item's chain is left null (no single well-defined
+// "next in line" when many bookings can be active on it at once).
 bookingsRouter.get("/:id", async (req, res) => {
   const { data: booking, error } = await supabase
     .from("bookings")
-    .select("*, items(item_code, name, item_type, tracking_type), customers(name, phone)")
+    .select(`*, customers(name, phone), booking_items(${BOOKING_ITEMS_EMBED})`)
     .eq("id", req.params.id)
     .single();
   if (error || !booking) return res.status(404).json({ error: "Booking not found" });
 
-  // maybeSingle, not single: a cancelled booking has no row in
-  // booking_sequence at all (excluded from the sequence by design), so a
-  // missing row here is an expected, non-error case.
-  const { data: sequence, error: sequenceError } = await supabase
-    .from("booking_sequence")
-    .select("prev_booking_id, prev_booking_code, prev_customer_name, prev_pickup_date")
-    .eq("booking_id", req.params.id)
-    .maybeSingle();
-  if (sequenceError) return res.status(500).json({ error: sequenceError.message });
+  const items = (booking.booking_items ?? []) as Array<{
+    id: string;
+    item_id: string;
+    pickup_date: string;
+    items: { tracking_type: string } | null;
+  }>;
 
-  const { data: itemBookings, error: chainError } = await supabase
-    .from("bookings")
-    .select("id, booking_code, pickup_date, customers(name)")
-    .eq("item_id", booking.item_id)
-    .neq("status", "cancelled")
-    .order("pickup_date", { ascending: true })
-    .order("created_at", { ascending: true });
-  if (chainError) return res.status(500).json({ error: chainError.message });
+  const itemsWithChains = await Promise.all(
+    items.map(async (bi) => {
+      if (bi.items?.tracking_type !== "unique") {
+        return { ...bi, previous_booking_item: null, future_booking_items: [] };
+      }
 
-  const currentIndex = (itemBookings ?? []).findIndex((b) => b.id === booking.id);
-  const futureBookings =
-    currentIndex === -1
-      ? []
-      : (itemBookings ?? []).slice(currentIndex + 1).map((b) => ({
-          id: b.id,
-          booking_code: b.booking_code,
-          customer_name: (b as unknown as { customers: { name: string } | null }).customers?.name ?? null,
-          pickup_date: b.pickup_date,
-        }));
+      const { data: sequence, error: sequenceError } = await supabase
+        .from("booking_sequence_v2")
+        .select("prev_booking_item_id, prev_booking_code, prev_customer_name, prev_pickup_date")
+        .eq("booking_item_id", bi.id)
+        .maybeSingle();
+      if (sequenceError) throw sequenceError;
 
-  // Same two-queries-plus-merge pattern as GET / above — booking_financials
-  // is a view with no real FK, so it can't be embedded via relationship
-  // syntax.
-  const { data: financials, error: financialsError } = await supabase
-    .from("booking_financials")
-    .select("total_paid, balance_due")
-    .eq("booking_id", req.params.id)
-    .maybeSingle();
+      const { data: itemChain, error: chainError } = await supabase
+        .from("booking_items")
+        .select("id, pickup_date, bookings(booking_code, customers(name))")
+        .eq("item_id", bi.item_id)
+        .neq("status", "cancelled")
+        .order("pickup_date", { ascending: true })
+        .order("created_at", { ascending: true });
+      if (chainError) throw chainError;
+
+      const currentIndex = (itemChain ?? []).findIndex((row) => row.id === bi.id);
+      const futureBookingItems =
+        currentIndex === -1
+          ? []
+          : (itemChain ?? []).slice(currentIndex + 1).map((row) => ({
+              id: row.id,
+              booking_code: (row as unknown as { bookings: { booking_code: string; customers: { name: string } | null } | null })
+                .bookings?.booking_code,
+              customer_name: (row as unknown as { bookings: { booking_code: string; customers: { name: string } | null } | null })
+                .bookings?.customers?.name ?? null,
+              pickup_date: row.pickup_date,
+            }));
+
+      return {
+        ...bi,
+        previous_booking_item: sequence?.prev_booking_item_id
+          ? {
+              id: sequence.prev_booking_item_id,
+              booking_code: sequence.prev_booking_code,
+              customer_name: sequence.prev_customer_name,
+              pickup_date: sequence.prev_pickup_date,
+            }
+          : null,
+        future_booking_items: futureBookingItems,
+      };
+    }),
+  );
+
+  const [{ data: financials, error: financialsError }, { data: status, error: statusError }] = await Promise.all([
+    supabase.from("booking_financials_v2").select("total_paid, balance_due, price_charged").eq("booking_id", req.params.id).maybeSingle(),
+    supabase
+      .from("booking_status_v2")
+      .select("computed_status, active_item_count, resolved_item_count")
+      .eq("booking_id", req.params.id)
+      .maybeSingle(),
+  ]);
   if (financialsError) return res.status(500).json({ error: financialsError.message });
+  if (statusError) return res.status(500).json({ error: statusError.message });
 
   res.json({
     ...booking,
+    booking_items: itemsWithChains,
     total_paid: financials?.total_paid ?? 0,
-    balance_due: financials?.balance_due ?? booking.price_charged,
-    future_bookings: futureBookings,
-    previous_booking: sequence?.prev_booking_id
-      ? {
-          id: sequence.prev_booking_id,
-          booking_code: sequence.prev_booking_code,
-          customer_name: sequence.prev_customer_name,
-          pickup_date: sequence.prev_pickup_date,
-        }
-      : null,
+    balance_due: financials?.balance_due ?? 0,
+    price_charged: financials?.price_charged ?? 0,
+    computed_status: status?.computed_status ?? "cancelled",
+    active_item_count: status?.active_item_count ?? 0,
+    resolved_item_count: status?.resolved_item_count ?? 0,
   });
 });
 
-const CODE_PREFIX = { rental: "RNT", sale: "SALE" } as const;
-
-async function nextBookingCode(type: "rental" | "sale"): Promise<string> {
-  const prefix = CODE_PREFIX[type];
+async function nextBookingCode(): Promise<string> {
   const { data, error } = await supabase
     .from("bookings")
     .select("booking_code")
-    .eq("type", type)
-    .order("created_at", { ascending: false })
+    .like("booking_code", "BK-%")
+    .order("booking_code", { ascending: false })
     .limit(1);
   if (error) throw error;
   const last = data?.[0]?.booking_code as string | undefined;
   const lastNum = last ? parseInt(last.slice(last.lastIndexOf("-") + 1), 10) || 0 : 0;
-  return `${prefix}-${String(lastNum + 1).padStart(4, "0")}`;
+  return `BK-${String(lastNum + 1).padStart(4, "0")}`;
 }
 
 function sumQuantity(rows: { quantity_booked: number }[] | null | undefined): number {
   return (rows ?? []).reduce((sum, r) => sum + r.quantity_booked, 0);
 }
 
-// POST /api/bookings — create a rental or sale, with conflict detection.
-//
-// `unique` items: item.status must be 'available' (mirrors the item
-// picker's own filter, as a server-side backstop). Rentals additionally
-// must not overlap an existing active (booked/out) rental's date range on
-// that item — the item's status is deliberately NOT flipped to
-// 'rented_out' on rental creation, since a unique item can legitimately
-// have multiple non-overlapping future rentals; the date-overlap check is
-// the real guard. A unique-item sale, by contrast, is permanent, so it
-// does flip status to 'sold' below.
-//
-// `quantity` items: requested quantity_booked must not exceed
-// quantity_on_hand minus (a) quantity already permanently consumed by
-// active sales, and for rentals also (b) quantity reserved by other
-// active rentals whose date range overlaps the requested one.
-// quantity_on_hand itself is never decremented — "how much is left" is
-// always computed from existing bookings at check time, the same way
-// balances/overdue status are computed rather than stored elsewhere in
-// this codebase.
+interface NewBookingItemInput {
+  type: "rental" | "sale";
+  item_id: string;
+  quantity_booked?: number;
+  pickup_date: string;
+  return_date?: string | null;
+  price_charged: number;
+  deposit_amount?: number;
+  deposit_collected?: boolean;
+  custom_addons?: string[];
+}
+
+interface ItemConflict {
+  index: number;
+  item_id: string;
+  error: string;
+  conflicts?: unknown[];
+}
+
+// Re-checks one requested line item for conflicts against booking_items —
+// the same rules bookings.ts always enforced for a single-item booking,
+// just parameterized so POST / (creation) and POST /:bookingId/items (add
+// one item to an existing booking) can share it. Returns null when clear,
+// or a message + optional structured conflicts when not. This is the
+// application-level pre-check (§8 decision 1) — a fast-fail before ever
+// calling the transactional RPC (for creation) or doing the plain insert
+// (for add-item); create_booking_with_items also re-validates internally as
+// a second, transaction-safe layer for the small race window this pre-check
+// alone can't close.
+async function checkItemConflict(
+  input: NewBookingItemInput,
+): Promise<{ error: string; conflicts?: unknown[] } | null> {
+  const { data: item, error: itemError } = await supabase.from("items").select("*").eq("id", input.item_id).single();
+  if (itemError || !item) return { error: "Item not found" };
+
+  const qty = input.quantity_booked ?? 1;
+
+  if (item.tracking_type === "unique") {
+    if (item.status !== "available") {
+      return { error: `This item isn't available right now (status: ${item.status})` };
+    }
+    if (input.type === "rental") {
+      const { data: conflicts, error: conflictError } = await supabase
+        .from("booking_items")
+        .select("*, bookings(booking_code, customers(name))")
+        .eq("item_id", input.item_id)
+        .eq("type", "rental")
+        .in("status", ACTIVE_STATUSES)
+        .lt("pickup_date", input.return_date as string)
+        .gt("return_date", input.pickup_date);
+      if (conflictError) throw conflictError;
+      if (conflicts && conflicts.length > 0) {
+        return { error: "This item is already booked for an overlapping date range", conflicts };
+      }
+    }
+  } else {
+    const { data: activeSales, error: salesError } = await supabase
+      .from("booking_items")
+      .select("quantity_booked")
+      .eq("item_id", input.item_id)
+      .eq("type", "sale")
+      .in("status", ACTIVE_STATUSES);
+    if (salesError) throw salesError;
+    const alreadySold = sumQuantity(activeSales);
+
+    let alreadyReservedForDates = 0;
+    if (input.type === "rental") {
+      const { data: overlappingRentals, error: rentalError } = await supabase
+        .from("booking_items")
+        .select("quantity_booked")
+        .eq("item_id", input.item_id)
+        .eq("type", "rental")
+        .in("status", ACTIVE_STATUSES)
+        .lt("pickup_date", input.return_date as string)
+        .gt("return_date", input.pickup_date);
+      if (rentalError) throw rentalError;
+      alreadyReservedForDates = sumQuantity(overlappingRentals);
+    }
+
+    const available = (item.quantity_on_hand ?? 0) - alreadySold - alreadyReservedForDates;
+    if (qty > available) {
+      return {
+        error: `Only ${Math.max(available, 0)} available${input.type === "rental" ? " for these dates" : ""}, requested ${qty}`,
+      };
+    }
+  }
+  return null;
+}
+
+async function checkSameDayWarning(input: NewBookingItemInput): Promise<string | null> {
+  if (input.type !== "rental") return null;
+  const { data: sameDayReturns, error } = await supabase
+    .from("booking_items")
+    .select("*, bookings(booking_code)")
+    .eq("item_id", input.item_id)
+    .eq("type", "rental")
+    .in("status", ACTIVE_STATUSES)
+    .eq("return_date", input.pickup_date);
+  if (error) throw error;
+  if (sameDayReturns && sameDayReturns.length > 0) {
+    return "This item has another booking returning today — confirm it's been checked in before handing it over.";
+  }
+  return null;
+}
+
+// POST /api/bookings — creates a family transaction with one or more line
+// items in a single real database transaction (create_booking_with_items,
+// see supabase/proposed/20260811_booking_items_restructure/
+// 01c_create_booking_with_items_rpc.sql) — either every item lands, or
+// none do. Conflict-checked here FIRST, before the RPC is ever called (no
+// writes at all if anything conflicts) — the RPC re-checks internally too,
+// as a transaction-safe safety net for the small gap between this check and
+// the call.
 bookingsRouter.post("/", async (req: AuthedRequest, res) => {
   const {
-    type,
-    item_id,
-    quantity_booked,
     customer_id,
-    pickup_date,
-    return_date,
-    price_charged,
-    deposit_amount,
-    deposit_collected,
     gst_applicable,
     gst_invoice_number,
     hsn_code,
     tax_rate,
     advance_amount,
     advance_method,
-    custom_addons,
+    items,
   } = req.body ?? {};
 
-  if (type !== "rental" && type !== "sale") {
-    return res.status(400).json({ error: "type must be 'rental' or 'sale'" });
+  if (!customer_id) return res.status(400).json({ error: "customer_id is required" });
+  if (!Array.isArray(items) || items.length === 0) {
+    return res.status(400).json({ error: "At least one item is required" });
   }
-  if (!item_id || !customer_id || !pickup_date) {
-    return res.status(400).json({ error: "item_id, customer_id, and pickup_date are required" });
+
+  const lineItems = items as NewBookingItemInput[];
+  for (let i = 0; i < lineItems.length; i++) {
+    const it = lineItems[i];
+    if (it.type !== "rental" && it.type !== "sale") {
+      return res.status(400).json({ error: `Item ${i + 1}: type must be 'rental' or 'sale'` });
+    }
+    if (!it.item_id || !it.pickup_date) {
+      return res.status(400).json({ error: `Item ${i + 1}: item_id and pickup_date are required` });
+    }
+    if (it.type === "rental" && !it.return_date) {
+      return res.status(400).json({ error: `Item ${i + 1}: return_date is required for rentals` });
+    }
+    if (it.price_charged == null) {
+      return res.status(400).json({ error: `Item ${i + 1}: price_charged is required` });
+    }
   }
-  if (type === "rental" && !return_date) {
-    return res.status(400).json({ error: "return_date is required for rentals" });
-  }
-  if (price_charged == null) {
-    return res.status(400).json({ error: "price_charged is required" });
-  }
+
   const advanceAmount = advance_amount != null ? Number(advance_amount) : 0;
   if (advanceAmount > 0 && !advance_method) {
     return res.status(400).json({ error: "advance_method is required when recording an advance payment" });
   }
-  // Free-text extras the operator adds for this specific booking — never
-  // written to items.components, which stays the item's own reusable
-  // template. Deduped and trimmed here so a stray blank/repeat entry from
-  // the UI doesn't produce a confusing return checklist later.
-  const customAddons: string[] = Array.isArray(custom_addons)
-    ? Array.from(new Set(custom_addons.map((s: unknown) => (typeof s === "string" ? s.trim() : "")).filter(Boolean)))
-    : [];
 
-  const { data: item, error: itemError } = await supabase.from("items").select("*").eq("id", item_id).single();
-  if (itemError || !item) return res.status(400).json({ error: "Item not found" });
-
-  const qty = quantity_booked ?? 1;
-
-  if (item.tracking_type === "unique") {
-    if (item.status !== "available") {
-      return res.status(409).json({ error: `This item isn't available right now (status: ${item.status})` });
-    }
-    if (type === "rental") {
-      // Strict inequality: a new booking's pickup_date landing exactly on an
-      // existing booking's return_date is same-day turnover (returns in the
-      // morning, goes back out that evening) — common in wedding season and
-      // must succeed, not block. Only a genuine overlap is a hard conflict.
-      const { data: conflicts, error: conflictError } = await supabase
-        .from("bookings")
-        .select("*, customers(name)")
-        .eq("item_id", item_id)
-        .eq("type", "rental")
-        .in("status", ACTIVE_STATUSES)
-        .lt("pickup_date", return_date)
-        .gt("return_date", pickup_date);
-      if (conflictError) return res.status(500).json({ error: conflictError.message });
-      if (conflicts && conflicts.length > 0) {
-        return res.status(409).json({
-          error: "This item is already booked for an overlapping date range",
-          conflicts,
-        });
-      }
-    }
-  } else {
-    const { data: activeSales, error: salesError } = await supabase
-      .from("bookings")
-      .select("quantity_booked")
-      .eq("item_id", item_id)
-      .eq("type", "sale")
-      .in("status", ACTIVE_STATUSES);
-    if (salesError) return res.status(500).json({ error: salesError.message });
-    const alreadySold = sumQuantity(activeSales);
-
-    let alreadyReservedForDates = 0;
-    if (type === "rental") {
-      // Same strict-inequality boundary as the unique-item check above.
-      const { data: overlappingRentals, error: rentalError } = await supabase
-        .from("bookings")
-        .select("quantity_booked")
-        .eq("item_id", item_id)
-        .eq("type", "rental")
-        .in("status", ACTIVE_STATUSES)
-        .lt("pickup_date", return_date)
-        .gt("return_date", pickup_date);
-      if (rentalError) return res.status(500).json({ error: rentalError.message });
-      alreadyReservedForDates = sumQuantity(overlappingRentals);
-    }
-
-    const available = (item.quantity_on_hand ?? 0) - alreadySold - alreadyReservedForDates;
-    if (qty > available) {
-      return res.status(409).json({
-        error: `Only ${Math.max(available, 0)} available${type === "rental" ? " for these dates" : ""}, requested ${qty}`,
-      });
+  const itemConflicts: ItemConflict[] = [];
+  const warnings: string[] = [];
+  for (let i = 0; i < lineItems.length; i++) {
+    const conflict = await checkItemConflict(lineItems[i]);
+    if (conflict) {
+      itemConflicts.push({ index: i, item_id: lineItems[i].item_id, error: conflict.error, conflicts: conflict.conflicts });
+    } else {
+      const warning = await checkSameDayWarning(lineItems[i]);
+      if (warning) warnings.push(warning);
     }
   }
-
-  // Not a conflict (see the strict-inequality checks above), but worth a
-  // heads-up: this booking's pickup lands the same day another active
-  // rental on this item is due back, so the operator should confirm the
-  // check-in actually happened before handing this one over.
-  let warning: string | undefined;
-  if (type === "rental") {
-    const { data: sameDayReturns, error: sameDayError } = await supabase
-      .from("bookings")
-      .select("booking_code")
-      .eq("item_id", item_id)
-      .eq("type", "rental")
-      .in("status", ACTIVE_STATUSES)
-      .eq("return_date", pickup_date);
-    if (sameDayError) return res.status(500).json({ error: sameDayError.message });
-    if (sameDayReturns && sameDayReturns.length > 0) {
-      warning = "This item has another booking returning today — confirm it's been checked in before handing it over.";
-    }
+  if (itemConflicts.length > 0) {
+    return res.status(409).json({
+      error: "One or more items have conflicts",
+      item_conflicts: itemConflicts,
+    });
   }
+
+  const rpcItems = lineItems.map((it) => ({
+    type: it.type,
+    item_id: it.item_id,
+    quantity_booked: it.quantity_booked ?? 1,
+    pickup_date: it.pickup_date,
+    return_date: it.type === "rental" ? it.return_date : null,
+    price_charged: it.price_charged,
+    deposit_amount: it.type === "rental" ? it.deposit_amount ?? 0 : 0,
+    deposit_collected: it.type === "rental" ? it.deposit_collected ?? false : false,
+    custom_addons: it.custom_addons ?? [],
+  }));
 
   for (let attempt = 0; attempt < 3; attempt++) {
-    const booking_code = await nextBookingCode(type);
-    const { data, error } = await supabase
-      .from("bookings")
-      .insert({
-        booking_code,
-        type,
-        item_id,
-        quantity_booked: qty,
-        customer_id,
-        pickup_date,
-        return_date: type === "rental" ? return_date : null,
-        price_charged,
-        deposit_amount: deposit_amount ?? 0,
-        deposit_collected: deposit_collected ?? false,
-        gst_applicable: gst_applicable ?? false,
-        gst_invoice_number: gst_applicable ? gst_invoice_number ?? null : null,
-        hsn_code: gst_applicable ? hsn_code ?? null : null,
-        tax_rate: gst_applicable ? tax_rate ?? null : null,
-        custom_addons: customAddons,
-        created_by: req.user?.id ?? null,
-      })
-      .select()
-      .single();
+    const booking_code = await nextBookingCode();
+    const { data, error } = await supabase.rpc("create_booking_with_items", {
+      p_booking_code: booking_code,
+      p_customer_id: customer_id,
+      p_gst_applicable: gst_applicable ?? false,
+      p_gst_invoice_number: gst_applicable ? gst_invoice_number ?? null : null,
+      p_hsn_code: gst_applicable ? hsn_code ?? null : null,
+      p_tax_rate: gst_applicable ? tax_rate ?? null : null,
+      p_created_by: req.user?.id ?? null,
+      p_items: rpcItems,
+    });
 
     if (!error) {
-      if (type === "sale" && item.tracking_type === "unique") {
-        await supabase.from("items").update({ status: "sold" }).eq("id", item_id);
-      }
-      // Advance received at booking time is just a real payment recorded
-      // against the new booking — same payments table, same
-      // booking_financials view computes balance_due from it. Not a
-      // separate "advance" concept; POST /api/payments' own validation is
-      // bypassed here in favor of a direct insert since advanceAmount > 0
-      // and advance_method are already validated above.
+      let warning = warnings.length > 0 ? warnings.join(" ") : undefined;
+
       if (advanceAmount > 0) {
         const { error: paymentError } = await supabase.from("payments").insert({
-          booking_id: data.id,
+          booking_id: (data as { id: string }).id,
           amount: advanceAmount,
           method: advance_method,
           payment_date: istToday(),
@@ -350,58 +414,245 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
             : "The booking was created but the advance payment couldn't be recorded — add it manually from the booking's detail page.";
         }
       }
-      // `warning` is undefined (dropped by JSON.stringify) when there's
-      // nothing to flag — the response shape is unchanged in the common case.
-      return res.status(201).json({ ...data, warning });
+
+      const { data: full, error: fullError } = await supabase
+        .from("bookings")
+        .select(`*, customers(name, phone), booking_items(${BOOKING_ITEMS_EMBED})`)
+        .eq("id", (data as { id: string }).id)
+        .single();
+      if (fullError) return res.status(500).json({ error: fullError.message });
+
+      return res.status(201).json({ ...full, warning });
     }
+
+    // P0001 = the RPC's own RAISE EXCEPTION (a conflict slipped past the
+    // pre-check above, or a same-item-twice-in-one-request case) — surface
+    // its message as a clean 409, never the raw error/PL-pgSQL context.
+    if (error.code === "P0001") {
+      return res.status(409).json({ error: error.message });
+    }
+    // 23505 = booking_code collision — retry with a freshly generated code,
+    // same pattern as items.ts's item_code generation.
     if (error.code !== "23505") return res.status(400).json({ error: error.message });
   }
   res.status(500).json({ error: "Could not generate a unique booking code, please retry" });
 });
 
-// POST /api/bookings/:id/return — returns processing. Only valid while the
-// booking is still active (booked/out) — rejects double-processing.
-//
-// return_checklist is built from TWO combined sources: the item's own
-// `components` (only when item_type = 'set' — items.components stays the
-// reusable template, never touched here) and this booking's own
-// `custom_addons` (free-text extras added at booking time, whatever the
-// item type). Either source alone, or both together, produce one flat
-// checklist — so a `single` item with custom_addons now gets a checklist
-// too, even though a plain `single` item with no add-ons still gets none.
-// Whatever the operator submits as checked stays checked; anything else
-// (including names they never mention) is recorded false. If anything ends
-// up unchecked and there's no return_notes explaining why, this returns a
-// non-blocking `warning` rather than blocking — same pattern as the
-// booking-creation same-day-turnover warning: the shop needs to be able to
-// close out an incomplete return ("chasing the missing piece") rather than
-// get stuck unable to record it at all.
-//
-// A `unique` item's status flips back to 'available' here. A `quantity`
-// item needs no stock adjustment — availability is computed live from
-// active (booked/out) bookings, so flipping this one's status to
-// 'returned' already removes it from that count; see the POST / handler's
-// comment for why quantity_on_hand itself is never decremented.
-bookingsRouter.post("/:id/return", async (req, res) => {
+// POST /api/bookings/:bookingId/items — add a single new item to an
+// already-created booking (§8 decision 4, expanded scope). Same
+// per-item conflict check as creation; a plain single-row insert is
+// already atomic on its own, no RPC needed.
+bookingsRouter.post("/:bookingId/items", async (req, res) => {
   const { data: booking, error: bookingError } = await supabase
     .from("bookings")
-    .select("*, items(item_type, components, tracking_type)")
-    .eq("id", req.params.id)
+    .select("id")
+    .eq("id", req.params.bookingId)
     .single();
   if (bookingError || !booking) return res.status(404).json({ error: "Booking not found" });
 
-  if (booking.type !== "rental") {
-    return res.status(400).json({ error: "Only rentals go through returns processing" });
+  const input = (req.body ?? {}) as NewBookingItemInput;
+  if (input.type !== "rental" && input.type !== "sale") {
+    return res.status(400).json({ error: "type must be 'rental' or 'sale'" });
   }
-  if (!ACTIVE_STATUSES.includes(booking.status)) {
-    return res.status(409).json({ error: `This booking is already '${booking.status}' and can't be returned again` });
+  if (!input.item_id || !input.pickup_date) {
+    return res.status(400).json({ error: "item_id and pickup_date are required" });
+  }
+  if (input.type === "rental" && !input.return_date) {
+    return res.status(400).json({ error: "return_date is required for rentals" });
+  }
+  if (input.price_charged == null) {
+    return res.status(400).json({ error: "price_charged is required" });
   }
 
-  const item = booking.items as { item_type: string; components: string[] | null; tracking_type: string } | null;
+  const conflict = await checkItemConflict(input);
+  if (conflict) {
+    return res.status(409).json({ error: conflict.error, conflicts: conflict.conflicts });
+  }
+  const warning = await checkSameDayWarning(input);
+
+  const { data, error } = await supabase
+    .from("booking_items")
+    .insert({
+      booking_id: req.params.bookingId,
+      item_id: input.item_id,
+      quantity_booked: input.quantity_booked ?? 1,
+      type: input.type,
+      pickup_date: input.pickup_date,
+      return_date: input.type === "rental" ? input.return_date : null,
+      price_charged: input.price_charged,
+      deposit_amount: input.type === "rental" ? input.deposit_amount ?? 0 : 0,
+      deposit_collected: input.type === "rental" ? input.deposit_collected ?? false : false,
+      custom_addons: input.custom_addons ?? [],
+    })
+    .select(`*, items(${ITEMS_EMBED})`)
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+
+  res.status(201).json({ ...data, warning });
+});
+
+// POST /api/bookings/:bookingId/items/:itemId/cancel — remove a line item
+// (§8 decision 4). Never a hard delete — status -> 'cancelled', same
+// "never destroy booking history" rule used everywhere else in this
+// schema. Blocked if it would push balance_due negative (money already
+// collected must still fit under the reduced total), and only while the
+// item is still booked/out (an already-returned item can't be
+// retroactively un-booked).
+bookingsRouter.post("/:bookingId/items/:itemId/cancel", async (req, res) => {
+  const { data: bookingItem, error: itemFetchError } = await supabase
+    .from("booking_items")
+    .select("*")
+    .eq("booking_id", req.params.bookingId)
+    .eq("item_id", req.params.itemId)
+    .single();
+  if (itemFetchError || !bookingItem) return res.status(404).json({ error: "Booking item not found" });
+
+  if (!ACTIVE_STATUSES.includes(bookingItem.status)) {
+    return res.status(409).json({ error: `This item is already '${bookingItem.status}' and can't be removed` });
+  }
+
+  const { data: siblings, error: siblingsError } = await supabase
+    .from("booking_items")
+    .select("id, price_charged, status")
+    .eq("booking_id", req.params.bookingId)
+    .neq("status", "cancelled");
+  if (siblingsError) return res.status(500).json({ error: siblingsError.message });
+
+  const newTotal = (siblings ?? [])
+    .filter((s) => s.id !== bookingItem.id)
+    .reduce((sum, s) => sum + Number(s.price_charged), 0);
+
+  const { data: financials, error: financialsError } = await supabase
+    .from("booking_financials_v2")
+    .select("total_paid")
+    .eq("booking_id", req.params.bookingId)
+    .maybeSingle();
+  if (financialsError) return res.status(500).json({ error: financialsError.message });
+
+  const totalPaid = Number(financials?.total_paid ?? 0);
+  if (totalPaid > newTotal) {
+    const overpaid = (totalPaid - newTotal).toFixed(2);
+    return res.status(409).json({
+      error: `Removing this item would mean refunding ₹${overpaid}, which isn't supported yet`,
+    });
+  }
+
+  const { data, error } = await supabase
+    .from("booking_items")
+    .update({ status: "cancelled" })
+    .eq("id", bookingItem.id)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+
+  res.status(200).json(data);
+});
+
+// PATCH /api/bookings/:id — parent-level fields only (customer_id, GST
+// fields). Line-item fields are edited through the endpoint below.
+bookingsRouter.patch("/:id", async (req, res) => {
+  const { customer_id, gst_applicable, gst_invoice_number, hsn_code, tax_rate } = req.body ?? {};
+  const update: Record<string, unknown> = {};
+  if (customer_id !== undefined) update.customer_id = customer_id;
+  if (gst_applicable !== undefined) {
+    update.gst_applicable = gst_applicable;
+    update.gst_invoice_number = gst_applicable ? gst_invoice_number ?? null : null;
+    update.hsn_code = gst_applicable ? hsn_code ?? null : null;
+    update.tax_rate = gst_applicable ? tax_rate ?? null : null;
+  }
+
+  const { data, error } = await supabase.from("bookings").update(update).eq("id", req.params.id).select().single();
+  if (error) return res.status(400).json({ error: error.message });
+  res.status(200).json(data);
+});
+
+// PATCH /api/bookings/:bookingId/items/:itemId — edit an existing line
+// item's editable fields (§8 decision 4). Re-runs the same conflict check
+// as creation whenever dates/quantity change. Blocked for a
+// returned/cancelled item — nothing to conflict-check against, and it
+// would rewrite history.
+bookingsRouter.patch("/:bookingId/items/:itemId", async (req, res) => {
+  const { data: bookingItem, error: fetchError } = await supabase
+    .from("booking_items")
+    .select("*")
+    .eq("booking_id", req.params.bookingId)
+    .eq("item_id", req.params.itemId)
+    .single();
+  if (fetchError || !bookingItem) return res.status(404).json({ error: "Booking item not found" });
+
+  if (!ACTIVE_STATUSES.includes(bookingItem.status)) {
+    return res.status(409).json({ error: `This item is already '${bookingItem.status}' and can't be edited` });
+  }
+
+  const { pickup_date, return_date, price_charged, quantity_booked, deposit_amount, deposit_collected, custom_addons } =
+    req.body ?? {};
+
+  const datesOrQuantityChanged =
+    (pickup_date !== undefined && pickup_date !== bookingItem.pickup_date) ||
+    (return_date !== undefined && return_date !== bookingItem.return_date) ||
+    (quantity_booked !== undefined && quantity_booked !== bookingItem.quantity_booked);
+
+  if (datesOrQuantityChanged) {
+    const conflict = await checkItemConflict({
+      type: bookingItem.type,
+      item_id: bookingItem.item_id,
+      quantity_booked: quantity_booked ?? bookingItem.quantity_booked,
+      pickup_date: pickup_date ?? bookingItem.pickup_date,
+      return_date: return_date ?? bookingItem.return_date,
+      price_charged: price_charged ?? bookingItem.price_charged,
+    });
+    // The item's own current row would otherwise conflict with itself in
+    // the overlap check above — exclude it before deciding to block.
+    if (conflict?.conflicts) {
+      const others = (conflict.conflicts as { id: string }[]).filter((c) => c.id !== bookingItem.id);
+      if (others.length > 0) {
+        return res.status(409).json({ error: conflict.error, conflicts: others });
+      }
+    } else if (conflict) {
+      return res.status(409).json({ error: conflict.error });
+    }
+  }
+
+  const update: Record<string, unknown> = {};
+  if (pickup_date !== undefined) update.pickup_date = pickup_date;
+  if (return_date !== undefined) update.return_date = return_date;
+  if (price_charged !== undefined) update.price_charged = price_charged;
+  if (quantity_booked !== undefined) update.quantity_booked = quantity_booked;
+  if (deposit_amount !== undefined) update.deposit_amount = deposit_amount;
+  if (deposit_collected !== undefined) update.deposit_collected = deposit_collected;
+  if (custom_addons !== undefined) update.custom_addons = custom_addons;
+
+  const { data, error } = await supabase.from("booking_items").update(update).eq("id", bookingItem.id).select().single();
+  if (error) return res.status(400).json({ error: error.message });
+  res.status(200).json(data);
+});
+
+// POST /api/bookings/:bookingId/items/:itemId/return — returns processing,
+// now scoped to one booking_items row (§8 decision D) rather than a whole
+// booking. Assumes an item appears at most once per booking — .single()
+// below is a data-integrity backstop for that assumption, not just a
+// convenience.
+bookingsRouter.post("/:bookingId/items/:itemId/return", async (req, res) => {
+  const { data: bookingItem, error: bookingError } = await supabase
+    .from("booking_items")
+    .select(`*, items(${ITEMS_EMBED})`)
+    .eq("booking_id", req.params.bookingId)
+    .eq("item_id", req.params.itemId)
+    .single();
+  if (bookingError || !bookingItem) return res.status(404).json({ error: "Booking item not found" });
+
+  if (bookingItem.type !== "rental") {
+    return res.status(400).json({ error: "Only rentals go through returns processing" });
+  }
+  if (!ACTIVE_STATUSES.includes(bookingItem.status)) {
+    return res.status(409).json({ error: `This item is already '${bookingItem.status}' and can't be returned again` });
+  }
+
+  const item = bookingItem.items as { item_type: string; components: string[] | null; tracking_type: string } | null;
   const { return_notes, actual_return_date, deposit_refunded, deposit_refund_date } = req.body ?? {};
 
   const componentNames = item?.item_type === "set" ? item.components ?? [] : [];
-  const addonNames = (booking.custom_addons ?? []) as string[];
+  const addonNames = (bookingItem.custom_addons ?? []) as string[];
   const checklistNames = [...componentNames, ...addonNames];
 
   let return_checklist: Record<string, boolean> | null = null;
@@ -423,21 +674,21 @@ bookingsRouter.post("/:id/return", async (req, res) => {
     return_checklist,
     return_notes: return_notes?.trim() || null,
   };
-  if (booking.deposit_collected) {
+  if (bookingItem.deposit_collected) {
     updatePayload.deposit_refunded = deposit_refunded ?? false;
     updatePayload.deposit_refund_date = deposit_refunded ? deposit_refund_date || effectiveReturnDate : null;
   }
 
   const { data, error } = await supabase
-    .from("bookings")
+    .from("booking_items")
     .update(updatePayload)
-    .eq("id", req.params.id)
+    .eq("id", bookingItem.id)
     .select()
     .single();
   if (error) return res.status(400).json({ error: error.message });
 
   if (item?.tracking_type === "unique") {
-    await supabase.from("items").update({ status: "available" }).eq("id", booking.item_id);
+    await supabase.from("items").update({ status: "available" }).eq("id", req.params.itemId);
   }
 
   res.status(200).json({ ...data, warning });

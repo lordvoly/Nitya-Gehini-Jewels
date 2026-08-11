@@ -212,3 +212,948 @@ Claude calls these tools, gets real data back from Postgres, and answers in plai
 
 ## 7. Next Steps
 This document is meant to be handed to Claude Code as the spec to scaffold from. Suggested order: set up Supabase project + schema → backend API + auth → Phase 1 frontend screens → test end-to-end with real data entry → Phase 2 → Phase 3.
+
+---
+
+## 8. Multi-Item Bookings Restructuring (Stage 1 fully applied AND acceptance-tested 2026-08-11 — Stage 2 not yet executed)
+
+**Acceptance-test scenarios (`verification_scenarios.sql`) run 2026-08-11 —
+both green-lit. Real output pasted, not just pass/fail. Run against
+`booking_sequence_v2`/`booking_status_v2` (Stage 2 hasn't renamed them yet);
+`bookings`' still-present old NOT NULL columns were filled with placeholder
+values matching each scenario's own data purely to satisfy the pre-cutover
+schema — not meaningful test data, and specifically for Scenario B (one
+family booking, 3 items) impossible for the old single-item columns to
+represent faithfully, which is exactly the limitation this migration fixes.**
+
+- **Scenario A — out-of-order "When Returns" chain.** Created B (15–18 Aug),
+  then C (19–21 Aug), then A (13–14 Aug) last. CHECK A1 —
+  `booking_sequence_v2` read: **A → B → C by pickup_date**, not creation
+  order (A: prev=null, next=B; B: prev=A, next=C; C: prev=B, next=null) —
+  exact match to the predicted chain. Cancelled B. CHECK A2 — chain
+  re-linked to **A → C directly** (A: next='BK-ZZTEST-C'; C:
+  prev='BK-ZZTEST-A'); B showed `status: cancelled` with `prev`/`next` both
+  null — entirely excluded from the view, not just skipped over. No gap, no
+  dangling reference.
+- **Scenario B — real multi-item booking, independent returns, rollup.** One
+  family booking, 3 rental items on staggered return dates (17/19/21 Aug).
+  `booking_status_v2` read at each stage: **CHECK B1** (none returned) →
+  `active`, `resolved_item_count: 0`, `active_item_count: 3`. Returned item A
+  → **CHECK B2** → `active`, `1`, `3` — independence check confirmed items B/C
+  still `status: booked`, `actual_return_date: null`, completely untouched by
+  A's return. Returned item B → **CHECK B3** → `active`, `2`, `3` — the exact
+  "2 of 3 items returned" scenario named in the task. Returned item C (the
+  last one) → **CHECK B4** → `completed`, `3`, `3` — flips only once every
+  item is resolved, not before.
+
+Both scenarios' throwaway `ZZTEST`-prefixed fixtures were fully deleted
+after. Post-cleanup: `booking_items_count = 1`, `bookings_count = 1` (back to
+just the one real `RNT-0001` booking), zero leftover `ZZTEST`-prefixed rows.
+
+**Green light given by the user to start building application code against
+the `_v2` views on a preview branch**, per this result. Stage 2
+(`03_schema_cutover.sql`) still not run — production untouched throughout
+all of the above.
+
+**Stage 1 backfill results (`02_data_backfill.sql`, run 2026-08-11):** the
+transaction committed (its own in-script row-count assertion passed). Full
+`verification_plan.sql` gate checks run and pasted below, not just asserted:
+
+- `bookings_count = 1`, `booking_items_count = 1` — exact parity.
+- Legacy `status = 'completed'` count: **0**. The backfill's `RAISE NOTICE` did
+  **not** fire — confirmed directly (not inferred from the notice) by querying
+  `bookings` status distribution post-backfill: the only status present is
+  `booked` (count 1). Consistent with the earlier code-grep finding that no
+  code path ever writes `'completed'` or `'out'`. Nothing to review.
+- Duplicate-row check (`booking_items` grouped by `booking_id` having count ≠
+  1): 0 rows. Orphaned-parent check (`bookings` with no matching
+  `booking_items` row): 0 rows.
+- Status-distribution diff between `bookings` and `booking_items`
+  (`EXCEPT`): 0 rows.
+- Financial totals: `sum(price_charged)` 3500 = 3500, `sum(deposit_amount)` 0
+  = 0, both tables.
+- `payments_count`: 0 before and after (no payments exist on the real
+  booking yet — unaffected either way, this migration never touches
+  `payments`).
+
+**Byte-for-byte spot-check — correction to this doc's standing assumption:**
+`Peacock Bridal Set` / `NGJ-0001` currently has **zero bookings** — querying
+for it (both the old `bookings.item_id` path and the new `booking_items`
+path) correctly returned zero rows on both sides, which is consistent, not a
+failure, just not the useful spot-check target this doc assumed. The one
+real booking, `RNT-0001`, is actually on `NGJ-0003` (`Polki Bridal #1930
+(Green Beads)`). Spot-checked that one instead, old path vs. new path,
+every field: `booking_code`, `type`, `pickup_date`, `return_date`,
+`actual_return_date`, `status`, `price_charged`, `deposit_amount`,
+`deposit_collected`, `deposit_refunded`, `return_checklist`, `return_notes`,
+`custom_addons`, `customer_id`, `item_code`, `item_name` — identical on both
+sides, field for field. (Also noted in passing, not touched: two items,
+`NGJ-0004`/`NGJ-0005` ("test set 1"/"test set  2"), exist without the
+`ZZTEST` prefix this project's own convention uses for throwaway data — not
+created by this migration, left alone.)
+
+`booking_items` and the five `_v2` views are now live with real backfilled
+data. `bookings` still has every old column intact — Stage 2
+(`03_schema_cutover.sql`) has not run. Production app is unaffected; it
+never reads `booking_items` or the `_v2` views.
+
+**Status**: design agreed, all four open questions resolved, migration SQL proposed
+(`supabase/proposed/20260811_booking_items_restructure/`) as a blue-green rollout —
+five views (the original four plus the new `booking_status` rollup for decision B)
+land under temporary `_v2` names in the additive step, get exercised against real
+backfilled data from a Vercel preview branch, and step 3 is reduced to a fast
+drop-old / rename-`_v2`-into-place swap. Two acceptance-test scenario scripts
+(`verification_scenarios.sql`) are also proposed, covering the out-of-order "When
+Returns" chain and a real 3-item booking's independent-return/status-rollup
+behavior.
+
+**`01_schema_additive.sql` (the `booking_items` table + the five `_v2` views) has
+now been applied to the live database** — run via `supabase db query --linked -f`
+(the Supabase CLI, available locally through `npx`, has a `db query` subcommand
+that executes arbitrary SQL/files against the linked project's Management API; no
+`psql`/direct Postgres credentials were needed or used). Purely additive — nothing
+in `bookings` was touched, and the production app's own code paths are completely
+unaffected, since it never reads `booking_items` or the `_v2` views.
+`02_data_backfill.sql` (the real data backfill) has **not** been run yet — separate
+explicit go-ahead needed for that, since unlike the schema step it operates on every
+real `bookings` row. No application code has been changed or deployed.
+
+**A real, currently-live bug was found and fixed before this went in**, per an
+explicit request to verify against the actual code rather than assume: grepping
+every `.update(`/`.insert(` touching `bookings.status` in `backend/src` shows
+exactly one write to that column anywhere in the app — the return handler setting
+`status: "returned"`. Booking creation's insert never sets `status` at all (it falls
+through to the column default, `'booked'`), and there is no check-in/"mark as out"
+step anywhere. **`'out'` is therefore unreachable by any real booking** — meaning
+the currently-live `overdue_rentals`/`upcoming_returns` views (`status = 'out'`
+only) have never matched a single real booking, ever. Fixed in the `_v2` versions of
+both views: filter changed to `status in ('booked', 'out')`, since a rental between
+its `pickup_date` and `return_date` is "out" in the real-world sense regardless of
+which literal status string happens to be stored. Not applied to the OLD
+(currently-live) views — those stay untouched per Stage 1's non-destructive design;
+the fix only lands for real once Stage 2 renames `_v2` into the permanent names. The
+OLD views' brokenness is a **pre-existing bug that predates this migration**, not
+something this migration introduced — flagged here for the record, not something
+being silently carried forward.
+
+Re-verified against real data on the live database, then cleaned up: inserted a
+throwaway `booking_items` row with `return_date` in the past, deliberately not
+specifying `status` (so it took the same default real booking creation actually
+uses) — confirmed it landed as `status = 'booked'`, confirmed it did NOT match
+`status = 'out'` (proving the fix was genuinely necessary, not just theoretically
+sound), and confirmed it DID appear in `overdue_rentals_v2` with the correct
+`days_until_return: -6` and `balance_due: 5000`. All throwaway rows deleted
+afterward; post-cleanup counts confirmed `booking_items` back to empty (correct,
+pre-backfill) and the one real `bookings` row untouched.
+
+This section documents the design regardless of when it's actually executed, per
+project practice of keeping this doc in sync with decisions as they're made.
+
+### Motivation
+The v1/v2-so-far model is one booking row = one item. In practice a single customer
+transaction (one pickup visit) can include several items — e.g. a bridal set plus a
+separate temple choker — picked up together but not necessarily returned together
+(different rental durations, one might be a sale mixed with a rental, etc.). The
+schema needs a real parent/child split: one **transaction** (`bookings`) containing
+multiple **line items** (`booking_items`), each independently trackable.
+
+### New schema
+
+**`bookings`** (restructured — becomes the parent/transaction record)
+
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid | |
+| booking_code | text, unique | One per family transaction, not per item — see assumption 1 below |
+| customer_id | uuid, FK → customers | |
+| gst_applicable | boolean | Whole-transaction level — see assumption 2 below |
+| gst_invoice_number | text, nullable | |
+| hsn_code | text, nullable | |
+| tax_rate | numeric, nullable | |
+| created_by | uuid, FK → users | |
+| created_at, updated_at | timestamptz | |
+
+Removed from `bookings` (all move to `booking_items`): `item_id`, `quantity_booked`,
+`type`, `pickup_date`, `return_date`, `actual_return_date`, `status`, `price_charged`,
+`deposit_amount`, `deposit_collected`, `deposit_refunded`, `deposit_refund_date`,
+`return_checklist`, `custom_addons`.
+
+A booking-level "status" (e.g. for list-view display) becomes a **computed** value
+derived from its `booking_items`' statuses — never stored, same rule as
+balance_due/overdue elsewhere in this app (§ Key Rules in CLAUDE.md). Exact rollup
+logic (what a mixed rental+sale, or partially-returned, family booking's status
+should read as) is an open question — see below.
+
+**`booking_items`** (new table — one row per item within a booking)
+
+| Field | Type | Notes |
+|---|---|---|
+| id | uuid | |
+| booking_id | uuid, FK → bookings | |
+| item_id | uuid, FK → items | |
+| quantity_booked | integer, default 1 | |
+| type | enum | `rental` or `sale` — now per-item, not per-transaction |
+| pickup_date | date | |
+| return_date | date, nullable | Required for rentals |
+| actual_return_date | date, nullable | |
+| status | enum | `booked`, `out`, `returned`, `cancelled` |
+| price_charged | numeric | Snapshot at booking time, same rule as before |
+| deposit_amount | numeric, default 0 | |
+| deposit_collected | boolean | |
+| deposit_refunded | boolean | |
+| deposit_refund_date | date, nullable | |
+| return_checklist | jsonb, nullable | |
+| custom_addons | jsonb, nullable | |
+| created_at, updated_at | timestamptz | |
+
+**`payments`** — unchanged structurally. `booking_id` still points at the **parent**
+`bookings` row, representing one running balance for the whole family transaction,
+not per item. This is deliberate: some clients pay the full amount upfront regardless
+of individual item pickup dates, others pay per item as it's picked up — a single
+running balance (total `price_charged` across all `booking_items` for that booking,
+minus total payments) correctly supports both without needing to track which payment
+applies to which item. `booking_financials` becomes an aggregate over `booking_items`
+grouped by `booking_id`, rather than a 1:1 read off `bookings`.
+
+### Two assumptions (confirmed, not flagged as wrong)
+1. **One `booking_code` per family transaction, not per item.** Consistent with the
+   schema above. Downstream effect: anywhere that used to treat "one booking row" as
+   "one item" (list views, most-booked-items, repeat-customer counts) now has a
+   grain decision to make — see open questions below.
+2. **GST stays at the booking (whole-transaction) level, not per item.** Consistent
+   with the schema above — one invoice per transaction. Implicit simplification worth
+   flagging: this means one `tax_rate`/`hsn_code` covers every item in a mixed family
+   booking. Since HSN/tax rate are already unconfirmed placeholders pending the CA
+   (§6), this isn't a new problem introduced here — but if the CA's eventual answer
+   requires per-item HSN codes (e.g. different rates for gold vs. imitation jewelry),
+   this assumption would need revisiting then.
+
+### Open questions — resolved 2026-08-11
+
+- **A. Booking code prefix.** New neutral prefix `BK-0001` for the family
+  transaction, generated the same way existing codes are (editable override at
+  create time, retry-on-`23505` collision) — `nextBookingCode()` in
+  `backend/src/routes/bookings.ts` drops its per-type `RNT`/`SALE` branching
+  entirely and always generates `BK-`. **Already-issued `RNT-`/`SALE-` codes are
+  not renamed** — the data migration leaves `bookings.booking_code` completely
+  untouched; this only governs codes generated for bookings created after the
+  cutover ships. No schema/data-migration SQL is needed for this decision on its
+  own — `booking_code` stays exactly as-is through both the backfill and the
+  cutover; it's purely a future change to the app's code-generation function.
+
+- **B. Computed booking-level status rollup.** Computed at query/app time, never
+  stored (same rule as balance_due/overdue elsewhere in this app). Based on
+  **non-cancelled `booking_items` only**:
+  - A `sale`-type item is treated as immediately resolved — it never has a
+    "return" step, so it doesn't count against the rollup the way an
+    unreturned rental would.
+  - All rental items returned (or there are no rental items at all, e.g. an
+    all-sale family booking) → **Completed**.
+  - Any rental item still `booked`/`out` → **Active**, shown with a computed
+    fraction, e.g. *"2 of 3 items returned"* (denominator = non-cancelled
+    items; numerator = those `returned` or resolved-sale).
+  - Every item cancelled → **Cancelled**.
+
+  Now actually built, not just illustrative — a fifth view, `booking_status`,
+  added to the blue-green rollout (see the schema migration section below)
+  alongside the original four, matching this app's existing convention of
+  computing status via SQL views (`booking_financials`, `overdue_rentals`)
+  rather than in application code. It exposes raw `active_item_count`/
+  `resolved_item_count` integers plus `computed_status`; the app layer
+  formats the "2 of 3 items returned" string from those two numbers, the
+  same "compute the numbers, format at the edge" pattern every other view
+  here follows.
+
+  **Naming collision caught while building this**: the view can't be
+  created as `booking_status` right away — that name is already taken by
+  the *enum type* `booking_status` from the original schema
+  (`bookings.status booking_status`), and Postgres doesn't allow a view and
+  a type to share a name in the same schema. It's created as
+  `booking_status_v2` in the additive step like the other four, and the
+  cutover step drops the now-orphaned `booking_status` enum (its only user,
+  `bookings.status`, is dropped in that same step) immediately before
+  renaming the view into the freed-up name.
+
+- **C. "Booking count" grain.** `total_bookings`, `bookings_this_week` (Reports/
+  Dashboard), and `repeat_customers`' `booking_count` all count **family
+  transactions** — i.e. `count(distinct booking_id)` / rows in the parent
+  `bookings` table — matching "how many times has this customer actually
+  visited." `most_booked_items` stays at **item grain**, i.e.
+  `count(*)`/`count(booking_item.id)` grouped by `item_id` over `booking_items`
+  — that's inherently what it measures (how often a specific piece goes out),
+  independent of how many other items rode along in the same family
+  transaction, so this question doesn't apply to it. Affects
+  `backend/src/routes/reports.ts` and `dashboard.ts` — not part of this
+  migration's SQL, tracked in the blast radius below.
+
+- **D. Return processing API surface.** Confirmed:
+  `POST /api/bookings/:bookingId/items/:itemId/return`, scoped to one
+  `booking_items` row. Replaces `POST /api/bookings/:id/return`.
+
+### Schema and data migration (proposed 2026-08-11, revised 2026-08-11 to a
+blue-green view rollout — not yet applied)
+
+Three ordered SQL files under `supabase/proposed/20260811_booking_items_restructure/`
+(kept out of `supabase/migrations/` deliberately, so a routine `supabase db push`
+can't apply them — this needs the manual verification gate between steps, and app
+code deployed in lockstep with step 3):
+
+1. **`01_schema_additive.sql`** — creates `booking_item_status` enum and the
+   `booking_items` table (indexes, `updated_at` trigger, RLS enabled to match
+   every other table) — AND, in the same file, the five new computed views
+   under temporary **`_v2`** names: `booking_financials_v2`,
+   `booking_sequence_v2`, `overdue_rentals_v2`, `upcoming_returns_v2`,
+   `booking_status_v2` (decision B's rollup — see above), with exactly the
+   bodies the permanent views will have after cutover (see step 3). Views are
+   just queries, not materialized, so creating them here doesn't require
+   `booking_items` to have data yet — they simply return 0 rows (or, for
+   `booking_status_v2`, one all-zero/`cancelled`-fallback row per existing
+   booking) until step 2 backfills it, with no further action needed. Purely
+   additive — `bookings` and the OLD `booking_financials`/`booking_sequence`/
+   `overdue_rentals`/`upcoming_returns` are completely untouched, so the
+   production app keeps working unmodified throughout. Safe to apply to the
+   live DB on its own.
+2. **`02_data_backfill.sql`** — converts every existing `bookings` row into
+   exactly one `booking_items` row (`booking_items.booking_id` = the original
+   `bookings.id`, so `payments.booking_id` and every `booking_code` need zero
+   remapping). Wrapped in one transaction with a row-count assertion (`RAISE
+   EXCEPTION` on mismatch, rolling back the whole thing) — either fully
+   succeeds and verified-equal, or nothing is committed. `bookings` is still
+   untouched after this step. The moment this commits, the `_v2` views from
+   step 1 start reflecting real backfilled data with zero extra action —
+   this is the point at which new backend/frontend code can be built and
+   fully tested against real data (built against `booking_items` and the
+   `_v2` views, never the old columns/views) on a **Vercel preview branch**,
+   while production keeps serving the live app unmodified against the old
+   schema, for as long as that testing takes.
+3. **`03_schema_cutover.sql`** — the destructive step, run only once the
+   preview-branch testing above is signed off. Drops the now-redundant
+   columns from `bookings` (`item_id`, `quantity_booked`, `type`, `pickup_date`,
+   `return_date`, `actual_return_date`, `status`, `price_charged`,
+   `deposit_amount`, `deposit_collected`, `deposit_refunded`,
+   `deposit_refund_date`, `return_checklist`, `custom_addons`, and
+   **`return_notes`** — not in this section's original removed-fields list
+   above; added as a correction, since return notes explaining an incomplete
+   checklist only make sense per-item once a family booking can mix resolved
+   and unresolved items, so it moves to `booking_items` alongside
+   `return_checklist`), drops the four OLD views (which must go first —
+   Postgres won't allow the column drops while a view still references them),
+   drops the now-orphaned `booking_status` enum type (frees that name for
+   the view rename below — see decision B above), and then — this is the
+   change from the original proposal — **does not recreate the views from
+   scratch**. It just renames the already-created, already-tested `_v2`
+   views into the now-vacated permanent names
+   (`alter view booking_financials_v2 rename to booking_financials;`, etc.,
+   including `booking_status_v2` → `booking_status`). A rename doesn't
+   disturb a view's internal dependencies (Postgres tracks those by OID, not
+   name), so `overdue_rentals_v2`'s join to `booking_financials_v2` keeps
+   resolving correctly through the rename regardless of order. Net effect:
+   step 3 becomes a fast, well-rehearsed final swap — drop old columns, drop
+   old views/enum, rename new views into place, deploy the already-tested
+   app code — done together in one deliberate moment, rather than something
+   debugged live for the first time. **Must be deployed together with the
+   application code changes in the blast radius below.**
+
+Notable view-shape changes carried into the `_v2`/permanent views (unchanged
+from the original proposal): `booking_financials.price_charged`/`total_paid`/
+`balance_due` become a sum across every line item in the family booking (one
+running balance per transaction, supporting both "client pays the whole
+family total upfront" and "client pays per item"); `is_overdue`/
+`days_until_return` are dropped from `booking_financials` (overdue-ness is now
+inherently per-item, not per-transaction — that signal lives in
+`overdue_rentals` at the `booking_items` grain instead); `booking_sequence`'s
+key column is renamed `booking_item_id` (was `booking_id`) since it now
+identifies a line item, not a family transaction.
+
+`verification_plan.sql` in the same folder has the exact before/after checks —
+row counts, per-status distribution, financial-total parity, a byte-for-byte
+spot-check of the real `Peacock Bridal Set` / `NGJ-0001` booking(s) by name,
+a direct old-view-vs-`_v2`-view agreement check for every existing booking, and
+(new) `booking_status`/`booking_status_v2` checks (including the "zero
+booking_items" fallback reading as `cancelled`, and confirming no real booking
+reads that way once backfilled) — at each gate (before anything runs; after
+step 1; after step 2/during preview-branch testing/before step 3; after step
+3). Nothing in this migration should be applied to the live database until
+each gate has been checked, and step 3 specifically should not run until
+preview-branch testing of the new app code against the `_v2` views has been
+signed off.
+
+`verification_scenarios.sql` (new, in the same folder) has two acceptance-test
+runbooks to execute once both stages are live, using throwaway
+`ZZTEST`-prefixed fixtures cleaned up at the end of each script:
+- **Scenario A — out-of-order "When Returns" chain.** Creates three bookings
+  on one throwaway item in the order B (15–18 Aug) → C (19–21 Aug) → A
+  (13–14 Aug, created last but dated earliest), and confirms
+  `booking_sequence` orders the chain A → B → C by `pickup_date`, not
+  creation order. Then cancels B and confirms the chain closes to A → C with
+  no dangling reference — cancelled rows are excluded from `booking_sequence`
+  entirely (not just skipped over), per that view's existing `where status <>
+  'cancelled'` filter.
+- **Scenario B — real multi-item booking.** One family booking with 3
+  throwaway rental items on staggered return dates. Confirms each item
+  returns independently (returning one never touches the other two's
+  `status`/`actual_return_date`), `booking_status` reads exactly "2 of 3
+  items returned" (`resolved_item_count=2, active_item_count=3`) at the
+  halfway point named in the task, and flips to `completed` only once the
+  third and last item is returned.
+
+### Application-code migration plan (scoped 2026-08-11, revised 2026-08-11 after
+review — not yet built)
+
+Scoped against the actual current code (every file below was read in full, not
+assumed), to be built on a preview branch against the `_v2` views/`booking_items`
+with real backfilled data, production untouched throughout. **Explicitly out of
+scope for this pass**: the lost-and-found/refund feature, AND — per review —
+**plain Cancel Booking (whole booking, no refund) as well**, held entirely until
+the refund/lost-and-found infrastructure exists (see decision 6 below; this is a
+change from the first draft of this plan, which only excluded the refund case).
+
+**Design decisions (updated after review — changes from the first draft are
+marked):**
+
+1. **REVISED — multi-item creation IS wrapped in a real Postgres transaction,
+   via a new RPC function**, not the insert-then-compensating-delete approach
+   this plan originally proposed. Removes the "what if the cleanup itself fails"
+   edge case entirely. A new `create_booking_with_items(...)` Postgres function
+   (added via a small additive migration, called through `supabase.rpc(...)`)
+   takes the parent fields plus a `jsonb` array of line items and inserts the
+   parent `bookings` row and every `booking_items` row in one function body —
+   which Postgres runs as a single atomic transaction by default, no explicit
+   `BEGIN`/`COMMIT` needed inside a function. This is a deliberate, explicit
+   exception to this codebase's prior no-RPC convention (see `reports.ts`'s own
+   reasoning for why it normally fetch-and-aggregates in JS instead) — justified
+   here because real cross-table atomicity is what's actually being asked for,
+   and a stored function is the only way to get it through `supabase-js`/
+   PostgREST, which has no multi-statement transaction API of its own. The
+   **pre-write conflict-check stays exactly as originally planned and
+   unchanged**: validate and check conflicts for every requested line item up
+   front, before calling the RPC at all; if any item conflicts, call nothing,
+   write nothing, and return a per-item-indexed conflict list. This pre-check
+   race window (another request could theoretically slip a conflicting booking
+   in between the check and the RPC call) is **explicitly accepted as-is**,
+   consistent with the existing single-item code's identical race window today
+   — not being tightened here, not a new risk.
+
+   **Prerequisite this revision surfaces**: pre-cutover, `bookings` still has its
+   old single-item `NOT NULL` columns (`item_id`, `type`, `pickup_date`,
+   `price_charged`) — the new RPC's parent-only insert (`customer_id`, GST
+   fields, nothing else) would fail those constraints until `03_schema_cutover.sql`
+   finally drops them, which can't happen until *after* this application code is
+   built and tested. Resolved with a new small additive migration —
+   `supabase/proposed/20260811_booking_items_restructure/01b_relax_legacy_not_null_for_transition.sql`
+   — that relaxes (doesn't remove) just those four `NOT NULL` constraints.
+   Purely additive/reversible: the still-live production code path always
+   supplies all four values anyway, so relaxing a constraint it was already
+   satisfying has zero effect on it; `03_schema_cutover.sql` drops these columns
+   outright regardless, so nothing here ever needs to be undone.
+
+   **Both `01b_relax_legacy_not_null_for_transition.sql` and
+   `01c_create_booking_with_items_rpc.sql` (the RPC itself) applied to the live
+   database 2026-08-11.** The RPC's rollback behavior was proven, not just
+   asserted: created a throwaway free item and a throwaway item with a real
+   existing conflicting booking already on it, then called
+   `create_booking_with_items(...)` with item 1 (free, valid) processed first
+   and item 2 (conflicting) second. The call failed with `ERROR: P0001: Item
+   ZZTEST-RPC-02 (ZZTEST RPC Item Conflicting) is already booked for an
+   overlapping date range`. Directly queried afterward — not inferred from the
+   error — and confirmed `bookings_count`/`booking_items_count` were **exactly
+   unchanged** from baseline, no row existed for the attempted new
+   `booking_code`, and critically, item 1's `booking_items` row (already
+   inserted successfully earlier in the same function call, before the loop
+   ever reached the conflicting item 2) also did not exist. Full transactional
+   rollback confirmed, not a partial insert silently left behind. All
+   throwaway fixtures cleaned up after; real data (`RNT-0001`) confirmed
+   untouched throughout.
+
+   **Follow-up test, same day**: the same unique item appearing TWICE in one
+   call, as two overlapping rental line items (no pre-existing booking on the
+   item at all — the only possible conflict is between the two lines in the
+   same request). Line 1 (valid on its own) inserts first inside the loop;
+   line 2's conflict check then correctly found line 1's just-inserted
+   sibling row and rejected: `ERROR: P0001: Item ZZTEST-RPC-03 (ZZTEST RPC
+   Same Item Twice) is already booked for an overlapping date range` — proof
+   the per-item check sees writes made earlier in the same transaction, not
+   just pre-existing committed rows (guaranteed by Postgres MVCC
+   read-your-own-writes-within-a-transaction semantics, but confirmed live
+   rather than assumed). Verified afterward the same way as the cross-item
+   test: row counts exactly unchanged, no new parent row, and line 1's row
+   also absent — full rollback, not a partial insert. Fixtures cleaned up;
+   real data confirmed untouched. (This also means the app doesn't strictly
+   need its own separate "same item twice" validation at the route level —
+   the RPC already rejects it correctly on its own — though the route may
+   still choose to reject it earlier/faster at the pre-check stage for a
+   quicker user-facing error, same "two layers" relationship as any other
+   conflict.)
+
+   **RPC error handling, added per review**: `bookings.ts` catches this via
+   `supabase.rpc(...)`'s returned `{ data, error }` (a `RAISE EXCEPTION`
+   doesn't throw in JS) — checks `error.code === "P0001"` and returns
+   `res.status(409).json({ error: error.message })`, surfacing exactly the
+   friendly text passed to `RAISE EXCEPTION` (already written in
+   human-readable prose for this reason) and nothing else — never the raw
+   error object, never the `P0001` code or `PL/pgSQL function ... line 55 at
+   RAISE` context visible to the client. Same "DB error message becomes a
+   clean 409" pattern `items.ts`/`customers.ts` already use for `23505`. See
+   the full description under `POST /api/bookings` in Checkpoint (a) below.
+
+   One deliberate change from the original description of this decision,
+   made while writing the actual SQL: the RPC does not just blindly insert —
+   it re-runs the same per-item conflict checks `bookings.ts`'s `POST /`
+   handler already does today (unique item availability + overlap; quantity
+   item oversell), `RAISE EXCEPTION`ing on any failure. This was necessary to
+   have anything real to demonstrate rollback against, and as a welcome side
+   effect it closes the check-then-write race window this decision originally
+   said would remain — the check and the write can no longer be split by a
+   concurrent request, since they now happen inside one transaction. The
+   application layer's own pre-write conflict check still runs first as a
+   fast-fail; the RPC's internal check is a second, transaction-safe layer,
+   not a replacement.
+2. **Reports' `rental_count`/`sale_count` stay item-grain** (count of
+   `booking_items` rows by `type` in the date range), NOT family-grain — decision
+   C only specified `total_bookings`/`bookings_this_week`/`repeat_customers` as
+   family-grain. Consequence: `rental_count + sale_count` can no longer be
+   assumed to equal `total_bookings` once a family booking mixes a rental and a
+   sale item — that identity held before this migration and won't after.
+   **REVISED per review**: `ReportsPage.tsx` gets a small visible note wherever
+   `rental_count`/`sale_count` sit near `total_bookings` (the "Bookings This
+   Period" stat row), clarifying they're counted per item, not per transaction —
+   so the mismatch reads as intentional design, not a bug, to whoever's looking
+   at the page. (First draft of this plan left this as an unlabeled shape change
+   with no UI fix forced; review upgraded it to a required copy addition.)
+3. **Dashboard's `items_out` stat gets bundled-in-fixed.** Currently `count(items
+   where status = 'rented_out')` — but per this doc's own standing note, a
+   `unique` item's `status` is deliberately never flipped to `rented_out` on
+   rental creation, so this stat has always silently read 0. Same class of bug as
+   the overdue-detection fix already shipped in the `_v2` views. Since
+   `dashboard.ts` is already being rewritten for this migration, recomputing
+   `items_out` as `count(distinct item_id)` over `booking_items` where
+   `type='rental' and status in ('booked','out')` is bundled in rather than left
+   broken a second time. Flagged explicitly rather than silently changed.
+4. **Edit Booking scope — REVISED, EXPANDED per review.** Editing an existing
+   line item's `pickup_date`/`return_date`/`price_charged`/`quantity_booked`/
+   `deposit_amount`/`deposit_collected`/`custom_addons` (re-running the same
+   conflict check as creation whenever dates/item/quantity change), plus
+   parent-level `customer_id`/GST fields — unchanged from the first draft.
+   **Now also in scope, where the first draft explicitly excluded it:**
+   - **Adding a new item to an existing booking** — same per-item
+     conflict-detection as normal booking creation, just for that one item
+     against the existing `booking_id`. A single-row insert, not multi-row, so
+     it does NOT need decision 1's transactional RPC — a plain
+     conflict-checked insert is already atomic on its own.
+   - **Removing an existing item** — governed by three explicit rules, none
+     optional:
+     1. **Never a hard delete.** Always a status change to `'cancelled'` on
+        that specific `booking_items` row — same "never destroy booking
+        history" principle used everywhere else in this schema (matches how
+        a whole booking's cancellation, when that exists, would also never
+        delete rows).
+     2. **Blocked if it would push `balance_due` negative.** Before allowing
+        removal, compute what the booking's total `price_charged` would be
+        *after* removing this item (sum of remaining non-cancelled items) and
+        compare against `total_paid` (from `booking_financials_v2`, unaffected
+        by this specific removal since payments aren't touched). If
+        `total_paid` would exceed the new reduced total, block with a clear
+        message — e.g. *"Removing this item would mean refunding ₹X, which
+        isn't supported yet"* — rather than allowing an unrepresentable
+        negative balance. This is a real reason cancel-with-refund (decision 6)
+        is out of scope for this pass: removal only works when the money
+        already collected still fits under the reduced total.
+     3. **Only allowed while `status` is `booked`/`out`.** An already-`returned`
+        item can't be retroactively un-booked — matches the existing
+        editing-a-returned-item restriction directly above.
+   - New endpoints (both under the existing `/api/bookings/:bookingId/items/...`
+     family, matching decision D's shape): `POST
+     /api/bookings/:bookingId/items` (add) and `POST
+     /api/bookings/:bookingId/items/:itemId/cancel` (remove/cancel, rules above)
+     — kept as their own `POST .../cancel` action rather than folded into the
+     `PATCH` item-edit endpoint, mirroring how `.../return` is already its own
+     action distinct from a plain field edit.
+5. **Per-item "When Returns."** `GET /api/bookings/:id` gives each `unique`-
+   tracking-type line item its own chain panel (previous/future), keyed off
+   `booking_sequence_v2`'s `booking_item_id` — not one chain for the whole family
+   booking, since a 3-item family booking has three independent physical items,
+   each with its own neighbors.
+6. **NEW — plain Cancel Booking (whole booking, no refund) is explicitly OUT of
+   scope for this pass**, held entirely until the refund/lost-and-found
+   infrastructure exists (same dependency the already-excluded
+   cancel-booking-with-refund has). `EditBookingForm` (item 14 below) must not
+   include any "cancel whole booking" action — only the per-item add/edit/remove
+   affordances from decision 4.
+
+**Pacing — three checkpoints, not one uninterrupted pass.** Per review, this
+doesn't get built end-to-end in one go — stop and report back with real test
+results (against real backfilled data on the preview branch, same discipline as
+Stage 1) at each of the three checkpoints below before continuing to the next.
+
+---
+
+#### Checkpoint (a) — Backend — DONE 2026-08-11, all four files tested live
+
+`bookings.ts`, `dashboard.ts`, `reports.ts`, `tools/index.ts` all rewritten per
+the plan below, typechecked clean, and tested via real HTTP calls against the
+live database on a new branch (`feat/booking-items-checkpoint-a`), not just
+typechecked. `items.ts` needed no change (confirmed, not just assumed — see
+below).
+
+**How testing was actually done**: no Vercel preview deployment was set up (no
+GitHub push/Render/Vercel credentials available in this environment) — instead,
+the backend was run locally (`npm run dev` in `backend/`) pointed at the same
+real, single linked Supabase project used throughout this migration, and
+exercised with real `curl` HTTP requests carrying a genuine Supabase Auth
+bearer token. That token came from a throwaway test user created via the
+service-role admin API (`supabase.auth.admin.createUser`) with a matching
+`users` table profile row (`role: admin`), signed in via the anon key exactly
+as the real frontend does — real auth, not a bypass. Both the auth user and its
+profile row were deleted at the end.
+
+**Bug found and fixed live, not in review**: `booking_financials_v2` summed
+`price_charged` across **every** `booking_items` row regardless of status,
+including `'cancelled'` ones — inconsistent with `booking_status_v2` (which
+already correctly excludes cancelled items) and with this app's "cancelled =
+never happened" principle applied everywhere else (`reports.ts`'s revenue/
+counts). Found while testing the new remove-item endpoint: cancelling an item
+should shrink the booking's total price, and it wasn't. Fixed with `where
+status <> 'cancelled'` on the view's price subquery — applied live and
+corrected in `01_schema_additive.sql`'s source too. Re-verified after the fix:
+cancelling a ₹3200 item correctly dropped `price_charged` from 9200 to 6000.
+
+**What was tested, with real results** (all using fresh `ZZTEST`-prefixed
+fixtures, fully cleaned up after, real data confirmed untouched throughout):
+
+- `GET /api/bookings` and `GET /api/bookings/:id` against the real `RNT-0001`
+  booking — correct nested `booking_items`, correct merged `total_paid`/
+  `balance_due`/`computed_status`, correct (empty) per-item "When Returns"
+  chain.
+- `POST /api/bookings` — a real 2-item booking created end-to-end through the
+  actual HTTP route calling the actual RPC: `booking_code` correctly generated
+  as `BK-0001` (first of the new prefix), both items landed, advance payment
+  recorded (`total_paid: 1000`, `balance_due: 6000` on the 7000 total).
+- Conflict rejection, two ways: (1) a genuinely conflicting create was caught
+  by the **app-level pre-check** with a structured `item_conflicts` array,
+  409, no writes; (2) the same unique item appearing **twice in one request**
+  with overlapping dates — which the pre-check structurally can't catch, since
+  it only checks each item against already-committed data — was correctly
+  caught by the **RPC's own internal check**, surfaced as a clean `409 {
+  "error": "Item ZZTEST-CPA-02 (...) is already booked for an overlapping date
+  range" }` with no `P0001`/raw Postgres error visible, exactly as designed.
+  Confirmed directly afterward that item 2 still had exactly one
+  `booking_items` row (the earlier real one) — no partial insert leaked.
+- `POST /api/bookings/:bookingId/items` (add item) — succeeded, conflict-
+  checked the same way as creation.
+- `PATCH /api/bookings/:bookingId/items/:itemId` (edit item) — price edit
+  applied correctly.
+- `POST /api/bookings/:bookingId/items/:itemId/return` — status flipped to
+  `returned`, item's own `items.status` correctly flipped back to
+  `available`.
+- `POST /api/bookings/:bookingId/items/:itemId/cancel` (remove item, decision
+  4's three rules) — all three proven with real requests: blocked
+  removing an already-`returned` item (`"This item is already 'returned' and
+  can't be removed"`); blocked a removal that would push balance negative,
+  with the exact computed amount (`"Removing this item would mean refunding
+  ₹800.00, which isn't supported yet"`); allowed removal at the exact boundary
+  (remaining total precisely equal to amount paid) — confirming `>` not `>=`
+  is the right comparison.
+- `PATCH /api/bookings/:id` (parent GST fields) — applied correctly.
+- `GET /api/dashboard/summary` — every figure cross-checked by hand against
+  the real+test data present at the time: `outstanding_balance`, `items_out`
+  (the bundled fix — confirmed counting real distinct out items, not always
+  0), and `bookings_this_week` (confirmed the real older booking, created
+  outside this week's Monday boundary, is correctly excluded).
+- `GET /api/reports` — every figure cross-checked by hand: `total_bookings`
+  (distinct family count), `rental_count`/`sale_count` (item-grain, cancelled
+  excluded), `repeat_customers` (correctly empty — the test customer's items
+  all belong to one family transaction, not counted as a repeat visit),
+  `idle_inventory` (correctly included the item whose only booking had just
+  been cancelled — a cancelled-only item reads as idle, matching this app's
+  "cancelled never counts as activity" rule).
+- All 6 chat tools (`search_items`, `get_item_status`, `check_availability` ×2
+  — overlapping and non-overlapping dates, `get_customer_history`,
+  `get_upcoming_returns`, `get_overdue_rentals`) called directly against real
+  data — `get_item_status`'s new `items → booking_items → bookings` embed
+  path confirmed working, `check_availability` correctly returned both
+  `available: false` (with the conflicting row) and `available: true` for
+  different date ranges on the same item.
+
+Uncommitted on `feat/booking-items-checkpoint-a` — not committed or pushed,
+per this project's "only commit when explicitly asked" rule.
+
+1. **`backend/src/routes/bookings.ts`** — the core rewrite.
+   - `nextBookingCode()`: drop the `RNT`/`SALE` per-`type` branching entirely;
+     always generate `BK-000N` (filtered on the `BK-%` pattern, same
+     highest-existing-code logic `items.ts`'s `nextItemCode()` already uses for
+     custom-code safety). `booking_code` stays freely overridable at create time,
+     same 409-on-`23505` pattern as items.
+   - `POST /api/bookings`: request body becomes `{ customer_id, gst_applicable,
+     gst_invoice_number, hsn_code, tax_rate, advance_amount, advance_method,
+     items: [{ type, item_id, quantity_booked, pickup_date, return_date,
+     price_charged, deposit_amount, deposit_collected, custom_addons }, ...] }`.
+     Runs decision 1's validate-every-item-first flow, then calls the new
+     `create_booking_with_items(...)` RPC to write the parent + all line items
+     as one real transaction (replaces the earlier insert-then-compensating-
+     delete draft). The existing same-day-turnover `warning` check runs per
+     item, collected into an array (or joined into one string) rather than a
+     single flag. Advance-payment insert stays parent-level, unchanged in
+     spirit, and stays a separate non-transactional call after the RPC returns
+     (same non-blocking-`warning`-on-failure pattern as today — the booking
+     itself is already safely committed by then).
+
+     **RPC error handling (added per review)**: `supabase.rpc("create_booking_with_items",
+     {...})` returns `{ data, error }` the same shape as every other `supabase-js`
+     call in this codebase — a `RAISE EXCEPTION` inside the function does NOT
+     throw in JS, it comes back as `error` with `error.code` set to the
+     exception's SQLSTATE (`P0001`, the default for a plain `RAISE EXCEPTION`
+     with no explicit code) and `error.message` set to exactly the text passed
+     to `RAISE EXCEPTION` — already written in friendly, human-readable prose
+     for this exact reason (e.g. `"Item NGJ-0003 (Polki Bridal #1930) is
+     already booked for an overlapping date range"`). The route checks
+     `error.code === "P0001"` and returns `res.status(409).json({ error:
+     error.message })` — `error.message` alone, never the raw error object or
+     anything that would leak `P0001`/`PL/pgSQL function ... line 55 at
+     RAISE`-style context to the client — the same "surface the DB error's
+     message as a clean 409, nothing else" pattern `items.ts`/`customers.ts`
+     already use for `23505`. One asymmetry worth knowing: the app-level
+     pre-check (which runs first and catches the overwhelming majority of
+     conflicts) already returns a structured `conflicts` array alongside the
+     message, same as today's single-item behavior; the RPC's own P0001 safety
+     net — only reached in the rare case a conflict appears in the gap between
+     the pre-check and the transaction — has just the message text, no
+     structured array, since that's all `RAISE EXCEPTION` gives us. A graceful
+     degradation for an already-rare race case, not a regression from today
+     (today has no safety net at all for that gap).
+   - **New (decision 4)**: `POST /api/bookings/:bookingId/items` — add a single
+     item to an existing booking, same per-item conflict-detection as creation,
+     plain conflict-checked insert (no RPC needed, single row is already
+     atomic). `POST /api/bookings/:bookingId/items/:itemId/cancel` — remove an
+     item via the three rules in decision 4 (status→`'cancelled'` only, never
+     hard-deleted; blocked if it would push `balance_due` negative; only while
+     `booked`/`out`).
+   - `GET /api/bookings`: real relational embed now possible and preferred over
+     the old two-query-merge pattern — `booking_items.booking_id` and
+     `booking_items.item_id` are genuine FKs (unlike the computed views), so
+     `.select("*, customers(name,phone), booking_items(*, items(item_code,name,
+     item_type,tracking_type,components))")` works directly through PostgREST.
+     `total_paid`/`balance_due` (from `booking_financials_v2`) and
+     `computed_status`/`active_item_count`/`resolved_item_count` (from
+     `booking_status_v2`) still need the existing two-query-plus-merge treatment,
+     since those remain views with no real FK. `item_id`/`customer_id` query-param
+     filters now filter on a joined `booking_items.item_id` / `bookings.customer_id`
+     respectively; the old `status` param is replaced with a `computed_status`
+     param filtering on the merged `booking_status_v2` value.
+   - `GET /api/bookings/:id`: same relational embed for items; per decision 5,
+     each returned line item additionally carries its own `previous_booking_item`/
+     `future_booking_items` chain (from `booking_sequence_v2`, keyed by
+     `booking_item_id`), computed the same "full list, slice after current
+     position" way the existing single chain is built today.
+   - **New**: `POST /api/bookings/:bookingId/items/:itemId/return` replaces
+     `POST /api/bookings/:id/return` — same rejection rules (not `booked`/`out` →
+     409; not a rental → 400) and same combined components+custom_addons
+     checklist/warning logic, just scoped to the one `booking_items` row
+     identified by `(bookingId, itemId)`. Assumes an item appears at most once per
+     booking — worth a quick sanity check once multi-item creation exists, since
+     nothing currently prevents adding the same `item_id` twice to one booking
+     (arguably should be blocked at create time as a validation rule — flagging,
+     not deciding, since it wasn't asked for explicitly).
+   - **New**: `PATCH /api/bookings/:id` (parent fields) and
+     `PATCH /api/bookings/:bookingId/items/:itemId` (line-item fields, decision 4's
+     scope) — the Edit Booking capability.
+2. **`backend/src/routes/dashboard.ts`**
+   - `due_today`: query moves from `bookings` to `booking_items` (`type='rental'`,
+     `status in ('booked','out')`, `return_date = ist_today()`), joined to
+     `bookings` for `booking_code`/`customer_id` and to `items`/`customers` the
+     same merge pattern as today.
+   - `overdue`: source view becomes `overdue_rentals_v2` (already item-grain,
+     already carries `booking_code`/`customer_id` per its own definition) — same
+     merge-in-items/customers pattern, unchanged in shape.
+   - `outstanding_balance`: sum `booking_financials_v2.balance_due` over bookings
+     whose `booking_status_v2.computed_status = 'active'` — preserves today's
+     exact semantics (booked/out-equivalent only, not completed/cancelled), just
+     re-derived through the new computed-status view instead of a stored column.
+   - `items_out`: bundled fix per decision 3 above.
+   - `bookings_this_week`: **no change needed** — it already queries the parent
+     `bookings` table directly by `created_at`, which is already family-grain by
+     construction once the old per-item columns are gone; confirmed, not assumed.
+3. **`backend/src/routes/reports.ts`**
+   - `periodBookings`/`recentBookings` (idle inventory) queries move from
+     `bookings` to `booking_items`, joined to `bookings`→`customers` and `items`,
+     filtered the same way (`status <> 'cancelled'`, `pickup_date` range/cutoff).
+   - `summary.total_bookings`: becomes `new Set(periodBookings.map(b =>
+     b.booking_id)).size` (distinct family transactions) per decision C — computed
+     in JS from the same fetched rows, same fetch-then-aggregate architecture as
+     today, not a new query.
+   - `rental_count`/`sale_count`: stay row counts over the fetched `booking_items`
+     rows, per decision 2 above.
+   - `most_booked_items`: unchanged logic, item-grain, just reading from
+     `booking_items` rows instead of `bookings` rows.
+   - `repeat_customers.booking_count`: the aggregation map changes from an
+     incrementing counter to a `Set<booking_id>` per customer, `.size` at the end —
+     the only real logic change in this file, since "how many times has this
+     customer visited" now means distinct family transactions, and one visit can
+     produce several `booking_items` rows for the same customer.
+   - `idle_inventory`: unchanged logic, just sourced from `booking_items.item_id`/
+     `pickup_date` instead of `bookings`.
+4. **`backend/src/tools/index.ts`** (AI chat tools)
+   - `get_item_status`: embed changes from `items(*, bookings(*))` to `items(*,
+     booking_items(*, bookings(booking_code, customer_id)))` — `items` no longer
+     has a direct FK relationship to `bookings`.
+   - `check_availability`: query moves from `bookings` to `booking_items`, same
+     `item_id`/`status in ('booked','out')`/date-overlap filter, unchanged logic.
+   - `get_customer_history`: restructure to fetch `booking_items` joined to their
+     parent `bookings` (for `booking_code`/GST) rather than flat `bookings` rows,
+     so the tool's answer reflects real per-item detail (which item, which dates)
+     inside each family transaction.
+   - `get_upcoming_returns`/`get_overdue_rentals`: swap source view names to
+     `upcoming_returns_v2`/`overdue_rentals_v2` (permanent names post-cutover) —
+     field shape is compatible (`days_until_return`, `next_*` fields already
+     present), no other logic change.
+   - `search_items`: **no change** — never touched bookings.
+5. **`backend/src/routes/items.ts`**: **verify only, no code change expected.**
+   The delete-block's `23503`-on-FK-violation handling stays correct as-is — the
+   protecting FK just moves from `items.id ← bookings.item_id` to `items.id ←
+   booking_items.item_id`, same error code, same friendly message. Confirm live
+   once the schema's cut over, not before.
+
+---
+
+#### Checkpoint (b) — Frontend types + simpler pages
+
+`lib/bookings.ts`, `lib/dashboard.ts`, `lib/reports.ts`, `lib/statusPill.ts`,
+`DashboardPage.tsx`, `ReportsPage.tsx` (pulled forward from their original
+later slots — item numbers below are stable file IDs, not build-order
+sequence numbers, so cross-references like "item 7's type updates" still
+resolve correctly regardless of physical position in this list). Stop and
+report real test results once this group is done, before touching the
+booking-specific component cluster.
+
+6. **`frontend/src/lib/bookings.ts`** — full type rewrite, the foundation
+   everything else below depends on. `Booking` (parent) gains `items:
+   BookingItem[]`, drops every field that moved to the child; new `BookingItem`
+   interface carries what `Booking` used to plus its own item summary embed and
+   (on the detail response) its own chain fields. `BookingItemStatus` becomes
+   `"booked" | "out" | "returned" | "cancelled"` (drops `"completed"` — that word
+   now only exists as the family-level `computed_status`). New
+   `BookingComputedStatus = "active" | "completed" | "cancelled"`. `NewBooking`
+   restructures to the parent-fields-plus-`items[]` shape from backend item 1.
+   `createBooking()`'s conflict handling updates for the per-item-indexed 409
+   shape. `processReturn(bookingId, itemId, payload)` signature change. New
+   `updateBooking()`/`updateBookingItem()` for the Edit capability.
+7. **`frontend/src/lib/dashboard.ts`** — `DueTodayBooking`/`OverdueBooking` change
+   from extending `Booking` to representing a single `BookingItem` plus its parent
+   `booking_id`/`booking_code` — otherwise structurally similar to today.
+8. **`frontend/src/lib/reports.ts`** — no interface shape changes forced (same
+   field names, `booking_count`/`total_bookings` just mean something more correct
+   now); double-check `MostBookedItem`/`RepeatCustomer` types still line up.
+9. **`frontend/src/lib/statusPill.ts`** — `bookingStatusPill` splits in two:
+   `bookingItemStatusPill(status: BookingItemStatus)` (booked/out/returned/
+   cancelled, same colors as today minus the `completed` case) for a line item's
+   own pill, and a new `bookingComputedStatusPill(status: BookingComputedStatus,
+   resolved: number, active: number)` returning both a pill (`pill-active` for
+   Active, `pill-good` for Completed, `pill-neutral` for Cancelled) and the
+   formatted "2 of 3 items returned" fraction text — this is where decision B's
+   raw counts become the actual display string, kept out of the SQL view on
+   purpose (compute the numbers, format at the edge — same rule as every other
+   view in this migration).
+16. **`frontend/src/pages/DashboardPage.tsx`** — minimal changes; it already
+    treats each due-today/overdue row as one item-level entry, so mostly just
+    needs to follow item 7's type updates (e.g. reading `booking_id` instead of
+    `id` for the `/bookings?booking=` deep link, if the field name changes).
+17. **`frontend/src/pages/ReportsPage.tsx`** — no structural changes forced by
+    item 8's stable interface, but per decision 2 (revised) DOES need the new
+    visible note near `rental_count`/`sale_count`/`total_bookings` in the
+    "Bookings This Period" stat row, clarifying the per-item-vs-per-transaction
+    counting difference — this is now a required change, not an optional
+    copy tweak.
+
+---
+
+#### Checkpoint (c) — Booking-specific component cluster
+
+`BookingForm.tsx`, `BookingsList.tsx`, `BookingDetail.tsx`, `ReturnForm.tsx`,
+`EditBookingForm.tsx`, `BookingsPage.tsx`, `shared.css`. The largest and most
+novel piece given the expanded edit scope (decision 4) — gets its own
+dedicated checkpoint rather than being bundled with (b). Stop and report real
+test results once this group is done; this is the final checkpoint before
+Stage 2 cutover can be scheduled.
+
+10. **`frontend/src/components/bookings/BookingForm.tsx`** — the biggest UI
+    rewrite. One shared section (customer picker, GST fields, advance payment,
+    single `booking_code` generated once) plus a **repeatable line-item block**:
+    each row gets its own type/item/quantity/dates/price/deposit/custom-addons
+    fields (today's single-item field set, just repeated), with "+ Add Another
+    Item" / per-row remove controls. The existing auto-price-on-item-change
+    effect, quantity-reset-on-item-change effect, and error/conflict-clearing
+    effect all move from whole-form state to per-row state (an array of row
+    objects with their own local derived state, or one `useState` array plus a
+    row-indexed update helper). Submission conflict errors, per decision 1's
+    per-item-indexed shape, highlight the specific row(s) that failed rather than
+    a single form-wide error.
+11. **`frontend/src/components/bookings/BookingsList.tsx`** — replaces the flat
+    `.data-table` entirely with a **card-per-booking layout**: one card per family
+    transaction showing `booking_code`, customer, the computed-status pill +
+    fraction (from item 9's new helper), `total_paid`/`balance_due`, and — nested
+    inside the same card — each line item as its own row (item name/code, type,
+    dates, its own status pill, a "Process Return" button when eligible, an "Edit"
+    affordance). This is the one list in the app that moves off the shared
+    `.data-table`/`data-label` responsive pattern, since it's now inherently
+    hierarchical (a table row can't naturally hold a nested list) — Items and
+    Customers keep their existing table pattern unchanged. New CSS needed:
+    `.booking-card`/`.booking-card-item` (or similar) in `shared.css`, built from
+    the same design tokens (wine/gold palette, existing `.pill` vocabulary, same
+    `:focus-visible` rule) rather than a new visual language.
+12. **`frontend/src/components/bookings/BookingDetail.tsx`** — parent info
+    (code, customer, GST, `total_paid`/`balance_due`, computed-status pill +
+    fraction) plus each line item rendered as its own sub-section: its own
+    status/dates/price/deposit, its own "When Returns →" panel (per decision 5,
+    only for `unique`-tracking items, using that item's own
+    `previous_booking_item`/`future_booking_items`), and its own "Process
+    Return"/"Edit Item" actions — the single "When Returns" panel this component
+    has today becomes N independent panels, one per eligible item.
+13. **`frontend/src/components/bookings/ReturnForm.tsx`** — rescoped from a
+    whole `BookingWithDetails` to a single `BookingItem` (plus enough context —
+    `booking_code`, customer name, item name — passed down or included in the
+    item's own embed). `onSubmit` calls `processReturn(bookingId, itemId,
+    payload)`. Checklist logic (components + `custom_addons` combined) is
+    otherwise unchanged, just reading off the one line item's own fields.
+14. **New: `frontend/src/components/bookings/EditBookingForm.tsx`** (or an edit
+    mode on `BookingForm`, mirroring how `ItemEditForm` mirrors `AddItemWizard`
+    rather than reusing one component in two modes) — the Edit Booking
+    capability, scoped per decision 4 (revised, expanded): parent fields,
+    per-line-item field edits, **plus** an "Add Item" row (reusing the same
+    single-item fields/conflict-handling `BookingForm`'s repeatable rows use)
+    and a "Remove" action per still-active (`booked`/`out`) line item — which
+    surfaces the backend's negative-balance block as a plain error message
+    when it fires, not a silent failure. Per decision 6: **no "cancel whole
+    booking" action anywhere in this component** — only the per-item
+    add/edit/remove affordances above.
+15. **`frontend/src/pages/BookingsPage.tsx`** — gains `editingBookingId` state
+    the same way `ItemsPage`/`CustomersPage` already hold `editingItem`/
+    `editingCustomer` (existing, proven pattern — short-circuits the tab view,
+    tab active-highlight logic matches). `ReturnForm` invocation updates to pass
+    `(bookingId, itemId)` instead of a whole booking row — `onProcessReturn`'s
+    signature changes accordingly, now taking the specific line item being
+    returned (plus its parent booking) rather than a flat `BookingWithDetails`.
+    The existing `?booking=<id>` deep-link handling is unaffected (still points
+    at a parent booking id).
+18. **`frontend/src/styles/shared.css`** — new booking-card rules (item 11),
+    reusing existing design tokens.
+
+**Testing approach at every checkpoint**: preview branch, built and tested
+against `booking_items` and the `_v2` views end-to-end (never the old columns/
+views), using the real backfilled data (`RNT-0001` / `NGJ-0003`) plus fresh
+throwaway `ZZTEST`-prefixed scenarios for the new multi-item/edit/chain/add/
+remove paths — same verification discipline as Stage 1, real results pasted
+back at each of the three checkpoints above, not just "passed." Stage 2
+(`03_schema_cutover.sql`) and this application code deploy together, only once
+checkpoint (c) is fully built and verified on the preview branch, per the
+standing two-stage design.
+
+### Full blast radius
+See the design conversation for the complete list of affected views, routes, and
+frontend components (SQL views `booking_financials`/`overdue_rentals`/
+`upcoming_returns`/`booking_sequence`/`booking_status`; backend routes
+`bookings.ts`, `dashboard.ts`, `reports.ts`, `items.ts`'s delete-block,
+`tools/index.ts`'s chat tools; frontend `lib/bookings.ts`, `BookingForm.tsx`,
+`BookingsList.tsx`, `BookingDetail.tsx`, `ReturnForm.tsx`, `lib/dashboard.ts`,
+`DashboardPage.tsx`, `lib/reports.ts`, `ReportsPage.tsx`) — not reproduced here
+since it's a snapshot of the pre-migration codebase, not a durable design
+decision. Now superseded by the file-by-file application-code migration plan
+immediately above, which was scoped against the real current code.
