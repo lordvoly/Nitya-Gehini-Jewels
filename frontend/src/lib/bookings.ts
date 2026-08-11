@@ -106,6 +106,14 @@ export interface NewBooking {
   advance_amount?: number;
   advance_method?: PaymentMethod | null;
   items: NewBookingItem[];
+  // Defaults to server-generated (BK-000N) when omitted/empty — an
+  // explicit non-empty value is validated for uniqueness instead, same
+  // editable-override pattern as items.ts's item_code.
+  booking_code?: string | null;
+}
+
+export function fetchNextBookingCode() {
+  return apiFetch<{ booking_code: string }>("/api/bookings/next-code");
 }
 
 export interface ItemConflict {
@@ -331,6 +339,7 @@ export interface NewLegacyBooking {
   advance_amount: number;
   advance_method: PaymentMethod | null;
   custom_addons: string[];
+  booking_code?: string | null;
 }
 
 export async function createLegacyBooking(input: NewLegacyBooking): Promise<LegacyCreateBookingResult> {
@@ -342,6 +351,7 @@ export async function createLegacyBooking(input: NewLegacyBooking): Promise<Lega
     tax_rate: input.tax_rate,
     advance_amount: input.advance_amount,
     advance_method: input.advance_method,
+    booking_code: input.booking_code,
     items: [
       {
         type: input.type,

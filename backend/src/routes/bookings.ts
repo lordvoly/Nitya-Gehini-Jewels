@@ -89,6 +89,20 @@ bookingsRouter.get("/upcoming-returns", async (_req, res) => {
   res.json(data);
 });
 
+// GET /api/bookings/next-code — the suggested next auto-generated BK-000N,
+// to pre-fill the (editable) booking_code field in BookingForm — same
+// pattern as items.ts's next-code. Read-only preview, reserves nothing;
+// POST / still retries on a real collision if the suggestion goes stale
+// before submit. Registered before GET /:id so "next-code" isn't swallowed
+// as an :id value (same reasoning as /overdue and /upcoming-returns above).
+bookingsRouter.get("/next-code", async (_req, res) => {
+  try {
+    res.json({ booking_code: await nextBookingCode() });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : "Failed to compute next booking code" });
+  }
+});
+
 // GET /api/bookings/:id — parent + nested line items, each carrying its own
 // "When Returns" chain (previous_booking_item / future_booking_items),
 // computed from booking_sequence_v2 keyed by booking_item_id — a 3-item
@@ -325,7 +339,15 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
     advance_amount,
     advance_method,
     items,
+    booking_code: requestedBookingCode,
   } = req.body ?? {};
+  // booking_code defaults to server-generated (fast entry, retries on a rare
+  // collision) but BookingForm pre-fills that suggestion into an editable
+  // field — same override pattern as items.ts's item_code. A non-empty
+  // client-supplied value (whether left as the suggestion or typed over) is
+  // an explicit choice: validated for uniqueness, one attempt, friendly 409
+  // on collision rather than silently retried with a different code.
+  const customBookingCode = typeof requestedBookingCode === "string" ? requestedBookingCode.trim() : "";
 
   if (!customer_id) return res.status(400).json({ error: "customer_id is required" });
   if (!Array.isArray(items) || items.length === 0) {
@@ -384,8 +406,9 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
     custom_addons: it.custom_addons ?? [],
   }));
 
-  for (let attempt = 0; attempt < 3; attempt++) {
-    const booking_code = await nextBookingCode();
+  const maxAttempts = customBookingCode ? 1 : 3;
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const booking_code = customBookingCode || (await nextBookingCode());
     const { data, error } = await supabase.rpc("create_booking_with_items", {
       p_booking_code: booking_code,
       p_customer_id: customer_id,
@@ -431,9 +454,18 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
     if (error.code === "P0001") {
       return res.status(409).json({ error: error.message });
     }
-    // 23505 = booking_code collision — retry with a freshly generated code,
-    // same pattern as items.ts's item_code generation.
-    if (error.code !== "23505") return res.status(400).json({ error: error.message });
+    // 23505 = booking_code collision. A custom code gets exactly one
+    // attempt and a friendly message — same wording pattern as items.ts's
+    // item_code collision — rather than being silently retried with a
+    // different value out from under the operator's explicit choice. An
+    // auto-generated code retries with a freshly generated one instead.
+    if (error.code === "23505") {
+      if (customBookingCode) {
+        return res.status(409).json({ error: "This booking code is already in use — choose a different one." });
+      }
+      continue;
+    }
+    return res.status(400).json({ error: error.message });
   }
   res.status(500).json({ error: "Could not generate a unique booking code, please retry" });
 });

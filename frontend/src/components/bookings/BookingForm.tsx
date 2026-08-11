@@ -3,6 +3,7 @@ import { fetchItems, type Item } from "../../lib/items";
 import type { Customer } from "../../lib/customers";
 import {
   createLegacyBooking,
+  fetchNextBookingCode,
   type LegacyFlatBooking,
   type BookingType,
   type ConflictingBooking,
@@ -13,6 +14,7 @@ import { CustomerPicker } from "./CustomerPicker";
 
 export function BookingForm() {
   const [items, setItems] = useState<Item[]>([]);
+  const [bookingCode, setBookingCode] = useState("");
   const [type, setType] = useState<BookingType>("rental");
   const [itemId, setItemId] = useState("");
   const [quantityBooked, setQuantityBooked] = useState("1");
@@ -37,6 +39,16 @@ export function BookingForm() {
 
   useEffect(() => {
     fetchItems({ activeOnly: true }).then(setItems);
+  }, []);
+
+  // Pre-fill the (editable) booking code with the server's suggested next
+  // BK-000N — a default to speed up the common case, not a lock-in; the
+  // operator can type over it before saving. startAnother() re-fetches
+  // explicitly after reset.
+  useEffect(() => {
+    fetchNextBookingCode()
+      .then(({ booking_code }) => setBookingCode(booking_code))
+      .catch(() => {});
   }, []);
 
   // Unique items only show while status = available (a coarse manual gate);
@@ -98,6 +110,7 @@ export function BookingForm() {
     setSaving(true);
     try {
       const result = await createLegacyBooking({
+        booking_code: bookingCode.trim() || null,
         type,
         item_id: itemId,
         quantity_booked: selectedItem.tracking_type === "quantity" ? toIntOrNull(quantityBooked) ?? 1 : 1,
@@ -129,6 +142,10 @@ export function BookingForm() {
   }
 
   function startAnother() {
+    setBookingCode("");
+    fetchNextBookingCode()
+      .then(({ booking_code }) => setBookingCode(booking_code))
+      .catch(() => {});
     setType("rental");
     setItemId("");
     setQuantityBooked("1");
@@ -180,6 +197,17 @@ export function BookingForm() {
     <form className="wizard-card" onSubmit={handleSubmit}>
       <div className="wizard-step">
         <h2>New Booking</h2>
+
+        <label className="field-label">
+          Booking Code
+          <input
+            type="text"
+            value={bookingCode}
+            onChange={(e) => setBookingCode(e.target.value)}
+            placeholder="Auto-generated"
+          />
+        </label>
+        <p className="wizard-hint">Suggested automatically — edit it if you'd rather use your own code.</p>
 
         <div className="toggle-group">
           <button
