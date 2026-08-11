@@ -1,5 +1,5 @@
 import type { ItemStatus } from "./items";
-import type { BookingComputedStatus, BookingItemStatus, LegacyBookingItemStatus } from "./bookings";
+import type { BookingComputedStatus, BookingItemStatus } from "./bookings";
 
 export interface PillInfo {
   className: string;
@@ -57,25 +57,5 @@ export function bookingComputedStatusPill(
       return { className: "pill-good", label: "Completed", fraction: null };
     case "cancelled":
       return { className: "pill-neutral", label: "Cancelled", fraction: null };
-  }
-}
-
-// LEGACY BRIDGE — Checkpoint (b) only, DELETE IN CHECKPOINT (c) alongside
-// lib/bookings.ts's legacy exports. BookingsList.tsx and BookingDetail.tsx
-// still call this exact function, unmodified, against the pre-migration
-// status vocabulary (which allowed 'completed' as a per-item status, even
-// though nothing ever actually produced it).
-export function bookingStatusPill(status: LegacyBookingItemStatus): PillInfo {
-  switch (status) {
-    case "booked":
-      return { className: "pill-active", label: "Booked" };
-    case "out":
-      return { className: "pill-active", label: "Out" };
-    case "returned":
-      return { className: "pill-good", label: "Returned" };
-    case "completed":
-      return { className: "pill-good", label: "Completed" };
-    case "cancelled":
-      return { className: "pill-neutral", label: "Cancelled" };
   }
 }

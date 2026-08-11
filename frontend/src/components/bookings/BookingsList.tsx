@@ -1,21 +1,27 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchLegacyBookings, type LegacyFlatBookingWithDetails } from "../../lib/bookings";
-import { bookingStatusPill } from "../../lib/statusPill";
+import { fetchBookings, type Booking, type BookingItem } from "../../lib/bookings";
+import { bookingItemStatusPill, bookingComputedStatusPill } from "../../lib/statusPill";
 
+// One card per family transaction — a flat table row can't express "one
+// booking, several items on independent schedules," which is the whole
+// point of this schema (§8). Items and Customers keep the shared
+// .data-table pattern; this is the one list that doesn't.
 export function BookingsList({
   onProcessReturn,
   onViewDetail,
+  onEditBooking,
 }: {
-  onProcessReturn: (booking: LegacyFlatBookingWithDetails) => void;
+  onProcessReturn: (booking: Booking, item: BookingItem) => void;
   onViewDetail: (bookingId: string) => void;
+  onEditBooking: (bookingId: string) => void;
 }) {
-  const [bookings, setBookings] = useState<LegacyFlatBookingWithDetails[]>([]);
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setBookings(await fetchLegacyBookings());
+      setBookings(await fetchBookings());
     } finally {
       setLoading(false);
     }
@@ -41,57 +47,69 @@ export function BookingsList({
         </div>
       )}
 
-      {bookings.length > 0 && (
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Code</th>
-                <th>Type</th>
-                <th>Item</th>
-                <th>Customer</th>
-                <th>Dates</th>
-                <th>Status</th>
-                <th>Paid</th>
-                <th>Balance Due</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {bookings.map((b) => {
-                const pill = bookingStatusPill(b.status);
+      {bookings.map((b) => {
+        const statusPill = bookingComputedStatusPill(b.computed_status, b.resolved_item_count, b.active_item_count);
+        return (
+          <div className="booking-card" key={b.id}>
+            <div className="booking-card-header">
+              <div>
+                <p className="booking-card-title">{b.booking_code}</p>
+                <p className="booking-card-customer">{b.customers?.name ?? "—"}</p>
+              </div>
+              <div className="booking-card-status">
+                <span className={`pill ${statusPill.className}`}>{statusPill.label}</span>
+                {statusPill.fraction && <span className="status-fraction">{statusPill.fraction}</span>}
+              </div>
+            </div>
+
+            <div className="booking-card-financials">
+              <span>
+                Paid: <strong>₹{b.total_paid}</strong>
+              </span>
+              <span>
+                Balance: <strong>₹{b.balance_due}</strong>
+              </span>
+            </div>
+
+            <div className="booking-card-items">
+              {b.booking_items.map((bi) => {
+                const itemPill = bookingItemStatusPill(bi.status);
+                const canReturn = bi.type === "rental" && (bi.status === "booked" || bi.status === "out");
                 return (
-                  <tr key={b.id}>
-                    <td data-label="Code">{b.booking_code}</td>
-                    <td data-label="Type">{b.type === "rental" ? "Rental" : "Sale"}</td>
-                    <td data-label="Item">{b.items ? `${b.items.item_code} — ${b.items.name}` : "—"}</td>
-                    <td data-label="Customer">{b.customers?.name ?? "—"}</td>
-                    <td data-label="Dates">
-                      {b.pickup_date}
-                      {b.return_date ? ` → ${b.return_date}` : ""}
-                    </td>
-                    <td data-label="Status">
-                      <span className={`pill ${pill.className}`}>{pill.label}</span>
-                    </td>
-                    <td data-label="Paid">₹{b.total_paid}</td>
-                    <td data-label="Balance Due">₹{b.balance_due}</td>
-                    <td className="row-actions">
-                      <button className="btn-secondary" onClick={() => onViewDetail(b.id)}>
-                        View
-                      </button>
-                      {b.type === "rental" && (b.status === "booked" || b.status === "out") && (
-                        <button className="btn-secondary" onClick={() => onProcessReturn(b)}>
+                  <div className="booking-card-item" key={bi.id}>
+                    <div className="booking-card-item-info">
+                      <strong>
+                        {bi.items?.item_code} — {bi.items?.name}
+                      </strong>
+                      <span>
+                        {bi.type === "rental" ? "Rental" : "Sale"} · {bi.pickup_date}
+                        {bi.return_date ? ` → ${bi.return_date}` : ""}
+                      </span>
+                    </div>
+                    <div className="booking-card-item-actions">
+                      <span className={`pill ${itemPill.className}`}>{itemPill.label}</span>
+                      {canReturn && (
+                        <button className="btn-secondary" onClick={() => onProcessReturn(b, bi)}>
                           Process Return
                         </button>
                       )}
-                    </td>
-                  </tr>
+                    </div>
+                  </div>
                 );
               })}
-            </tbody>
-          </table>
-        </div>
-      )}
+            </div>
+
+            <div className="booking-card-actions">
+              <button className="btn-secondary" onClick={() => onViewDetail(b.id)}>
+                View
+              </button>
+              <button className="btn-secondary" onClick={() => onEditBooking(b.id)}>
+                Edit
+              </button>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }

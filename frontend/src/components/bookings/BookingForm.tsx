@@ -1,41 +1,62 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { fetchItems, type Item } from "../../lib/items";
 import type { Customer } from "../../lib/customers";
 import {
-  createLegacyBooking,
+  createBooking,
   fetchNextBookingCode,
-  type LegacyFlatBooking,
-  type BookingType,
-  type ConflictingBooking,
+  type Booking,
+  type BookingItemType,
+  type ItemConflict,
 } from "../../lib/bookings";
 import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/payments";
 import { CustomerPicker } from "./CustomerPicker";
 
+interface LineItemDraft {
+  key: string;
+  type: BookingItemType;
+  itemId: string;
+  quantityBooked: string;
+  pickupDate: string;
+  returnDate: string;
+  price: string;
+  depositAmount: string;
+  depositCollected: boolean;
+  customAddons: string[];
+  newAddon: string;
+}
+
+function emptyLineItem(): LineItemDraft {
+  return {
+    key: crypto.randomUUID(),
+    type: "rental",
+    itemId: "",
+    quantityBooked: "1",
+    pickupDate: "",
+    returnDate: "",
+    price: "",
+    depositAmount: "",
+    depositCollected: false,
+    customAddons: [],
+    newAddon: "",
+  };
+}
+
 export function BookingForm() {
   const [items, setItems] = useState<Item[]>([]);
   const [bookingCode, setBookingCode] = useState("");
-  const [type, setType] = useState<BookingType>("rental");
-  const [itemId, setItemId] = useState("");
-  const [quantityBooked, setQuantityBooked] = useState("1");
   const [customer, setCustomer] = useState<Customer | null>(null);
-  const [pickupDate, setPickupDate] = useState("");
-  const [returnDate, setReturnDate] = useState("");
-  const [price, setPrice] = useState("");
-  const [depositAmount, setDepositAmount] = useState("");
-  const [depositCollected, setDepositCollected] = useState(false);
+  const [lineItems, setLineItems] = useState<LineItemDraft[]>([emptyLineItem()]);
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [advanceMethod, setAdvanceMethod] = useState<PaymentMethod>("cash");
-  const [customAddons, setCustomAddons] = useState<string[]>([]);
-  const [newAddon, setNewAddon] = useState("");
   const [gstApplicable, setGstApplicable] = useState(false);
   const [gstInvoiceNumber, setGstInvoiceNumber] = useState("");
   const [hsnCode, setHsnCode] = useState("");
   const [taxRate, setTaxRate] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [conflicts, setConflicts] = useState<ConflictingBooking[] | null>(null);
-  const [saved, setSaved] = useState<LegacyFlatBooking | null>(null);
+  const [itemConflicts, setItemConflicts] = useState<ItemConflict[]>([]);
+  const [saved, setSaved] = useState<Booking | null>(null);
 
   useEffect(() => {
     fetchItems({ activeOnly: true }).then(setItems);
@@ -51,88 +72,90 @@ export function BookingForm() {
       .catch(() => {});
   }, []);
 
-  // Unique items only show while status = available (a coarse manual gate);
-  // quantity items always show — how much is actually left for a given date
-  // range is checked server-side at submit time.
-  const eligibleItems = useMemo(
-    () => items.filter((i) => i.tracking_type === "quantity" || i.status === "available"),
-    [items],
-  );
-  const selectedItem = items.find((i) => i.id === itemId) ?? null;
-
-  function addCustomAddon() {
-    const name = newAddon.trim();
-    if (!name || customAddons.includes(name)) return;
-    setCustomAddons((a) => [...a, name]);
-    setNewAddon("");
+  function updateLineItem(key: string, patch: Partial<LineItemDraft>) {
+    setLineItems((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   }
 
-  function removeCustomAddon(name: string) {
-    setCustomAddons((a) => a.filter((n) => n !== name));
+  function addLineItem() {
+    setLineItems((rows) => [...rows, emptyLineItem()]);
   }
 
-  // Re-derive the suggested price whenever the item or booking type changes
-  // — but only then, so a manually typed value (a negotiated discount)
-  // isn't clobbered by unrelated re-renders.
-  useEffect(() => {
-    const autoPrice = selectedItem ? (type === "rental" ? selectedItem.rental_price : selectedItem.sale_price) : null;
-    setPrice(autoPrice != null ? String(autoPrice) : "");
-    // Deliberately keyed on [itemId, type] only, not selectedItem/items — a
-    // manually edited price must survive re-renders that don't change which
-    // item or booking type is selected.
-  }, [itemId, type]);
+  function removeLineItem(key: string) {
+    setLineItems((rows) => (rows.length > 1 ? rows.filter((r) => r.key !== key) : rows));
+  }
 
-  useEffect(() => {
-    setQuantityBooked("1");
-  }, [itemId]);
+  function selectedItemFor(row: LineItemDraft): Item | null {
+    return items.find((i) => i.id === row.itemId) ?? null;
+  }
 
-  // A conflict/error from a previous submission attempt refers to whatever
-  // item/type/dates were selected at the time — leaving it on screen after
-  // switching to a different item or type would misleadingly imply it still
-  // applies.
-  useEffect(() => {
-    setError(null);
-    setConflicts(null);
-  }, [itemId, type]);
+  // Item or type changed for this row — re-derive the suggested price, same
+  // "auto-fill but don't clobber a manual edit on unrelated re-renders"
+  // reasoning as before, just scoped to the one row that actually changed.
+  function handleItemChange(row: LineItemDraft, itemId: string) {
+    const selected = items.find((i) => i.id === itemId) ?? null;
+    const autoPrice = selected ? (row.type === "rental" ? selected.rental_price : selected.sale_price) : null;
+    updateLineItem(row.key, { itemId, quantityBooked: "1", price: autoPrice != null ? String(autoPrice) : "" });
+  }
+
+  function handleTypeChange(row: LineItemDraft, type: BookingItemType) {
+    const selected = selectedItemFor(row);
+    const autoPrice = selected ? (type === "rental" ? selected.rental_price : selected.sale_price) : null;
+    updateLineItem(row.key, { type, price: autoPrice != null ? String(autoPrice) : "" });
+  }
+
+  function addCustomAddon(row: LineItemDraft) {
+    const name = row.newAddon.trim();
+    if (!name || row.customAddons.includes(name)) return;
+    updateLineItem(row.key, { customAddons: [...row.customAddons, name], newAddon: "" });
+  }
+
+  function removeCustomAddon(row: LineItemDraft, name: string) {
+    updateLineItem(row.key, { customAddons: row.customAddons.filter((n) => n !== name) });
+  }
 
   const canSubmit =
-    !!itemId &&
     !!customer &&
-    !!pickupDate &&
-    (type === "sale" || !!returnDate) &&
-    price.trim().length > 0;
+    lineItems.length > 0 &&
+    lineItems.every(
+      (r) => !!r.itemId && !!r.pickupDate && (r.type === "sale" || !!r.returnDate) && r.price.trim().length > 0,
+    );
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
-    if (!canSubmit || !selectedItem || !customer) return;
+    if (!canSubmit || !customer) return;
     setError(null);
-    setConflicts(null);
+    setItemConflicts([]);
     setSaving(true);
     try {
-      const result = await createLegacyBooking({
+      const result = await createBooking({
         booking_code: bookingCode.trim() || null,
-        type,
-        item_id: itemId,
-        quantity_booked: selectedItem.tracking_type === "quantity" ? toIntOrNull(quantityBooked) ?? 1 : 1,
         customer_id: customer.id,
-        pickup_date: pickupDate,
-        return_date: type === "rental" ? returnDate : null,
-        price_charged: toNumberOrNull(price) ?? 0,
-        deposit_amount: type === "rental" ? toNumberOrNull(depositAmount) ?? 0 : 0,
-        deposit_collected: type === "rental" ? depositCollected : false,
         gst_applicable: gstApplicable,
         gst_invoice_number: gstApplicable ? gstInvoiceNumber.trim() || null : null,
         hsn_code: gstApplicable ? hsnCode.trim() || null : null,
         tax_rate: gstApplicable ? toNumberOrNull(taxRate) : null,
         advance_amount: toNumberOrNull(advanceAmount) ?? 0,
         advance_method: (toNumberOrNull(advanceAmount) ?? 0) > 0 ? advanceMethod : null,
-        custom_addons: customAddons,
+        items: lineItems.map((r) => {
+          const selected = selectedItemFor(r);
+          return {
+            type: r.type,
+            item_id: r.itemId,
+            quantity_booked: selected?.tracking_type === "quantity" ? toIntOrNull(r.quantityBooked) ?? 1 : 1,
+            pickup_date: r.pickupDate,
+            return_date: r.type === "rental" ? r.returnDate : null,
+            price_charged: toNumberOrNull(r.price) ?? 0,
+            deposit_amount: r.type === "rental" ? toNumberOrNull(r.depositAmount) ?? 0 : 0,
+            deposit_collected: r.type === "rental" ? r.depositCollected : false,
+            custom_addons: r.customAddons,
+          };
+        }),
       });
       if (result.type === "created") {
         setSaved(result.booking);
       } else {
         setError(result.message);
-        setConflicts(result.conflicts);
+        setItemConflicts(result.item_conflicts);
       }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to create booking");
@@ -146,25 +169,16 @@ export function BookingForm() {
     fetchNextBookingCode()
       .then(({ booking_code }) => setBookingCode(booking_code))
       .catch(() => {});
-    setType("rental");
-    setItemId("");
-    setQuantityBooked("1");
     setCustomer(null);
-    setPickupDate("");
-    setReturnDate("");
-    setPrice("");
-    setDepositAmount("");
-    setDepositCollected(false);
+    setLineItems([emptyLineItem()]);
     setAdvanceAmount("");
     setAdvanceMethod("cash");
-    setCustomAddons([]);
-    setNewAddon("");
     setGstApplicable(false);
     setGstInvoiceNumber("");
     setHsnCode("");
     setTaxRate("");
     setError(null);
-    setConflicts(null);
+    setItemConflicts([]);
     setSaved(null);
   }
 
@@ -174,6 +188,9 @@ export function BookingForm() {
         <p className="success-check">✓ Booking Created</p>
         <p className="success-code">{saved.booking_code}</p>
         <p>{customer?.name}</p>
+        <p className="wizard-hint">
+          {saved.booking_items.length} item{saved.booking_items.length === 1 ? "" : "s"} · ₹{saved.price_charged}
+        </p>
         {(toNumberOrNull(advanceAmount) ?? 0) > 0 && (
           <p className="wizard-hint">
             Advance of ₹{advanceAmount} ({PAYMENT_METHOD_LABELS[advanceMethod]}) recorded.
@@ -209,101 +226,174 @@ export function BookingForm() {
         </label>
         <p className="wizard-hint">Suggested automatically — edit it if you'd rather use your own code.</p>
 
-        <div className="toggle-group">
-          <button
-            type="button"
-            className={type === "rental" ? "toggle-btn active" : "toggle-btn"}
-            onClick={() => setType("rental")}
-          >
-            Rental
-          </button>
-          <button
-            type="button"
-            className={type === "sale" ? "toggle-btn active" : "toggle-btn"}
-            onClick={() => setType("sale")}
-          >
-            Sale
-          </button>
-        </div>
-
-        <label className="field-label">
-          Item
-          <select value={itemId} onChange={(e) => setItemId(e.target.value)}>
-            <option value="">Select an item…</option>
-            {eligibleItems.map((i) => (
-              <option key={i.id} value={i.id}>
-                {i.item_code} — {i.name}
-                {i.tracking_type === "quantity" ? ` (${i.quantity_on_hand ?? 0} on hand)` : ""}
-              </option>
-            ))}
-          </select>
-        </label>
-
-        {selectedItem?.tracking_type === "quantity" && (
-          <label className="field-label">
-            Quantity
-            <input
-              type="number"
-              min={1}
-              value={quantityBooked}
-              onChange={(e) => setQuantityBooked(e.target.value)}
-            />
-          </label>
-        )}
-
-        <p className="field-label">Additional Items</p>
-        <p className="wizard-hint">
-          Extra items for this booking only — doesn't change the item's own components.
-        </p>
-        <div className="add-custom-row">
-          <input
-            type="text"
-            placeholder="e.g. borrowed pouch"
-            value={newAddon}
-            onChange={(e) => setNewAddon(e.target.value)}
-            onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomAddon())}
-          />
-          <button type="button" className="btn-secondary" onClick={addCustomAddon}>
-            Add
-          </button>
-        </div>
-        {customAddons.length > 0 && (
-          <div className="chip-list">
-            {customAddons.map((name) => (
-              <span className="chip" key={name}>
-                {name}
-                <button type="button" onClick={() => removeCustomAddon(name)} aria-label={`Remove ${name}`}>
-                  ×
-                </button>
-              </span>
-            ))}
-          </div>
-        )}
-
         <p className="field-label">Customer</p>
         <CustomerPicker selected={customer} onSelect={setCustomer} />
 
-        <label className="field-label">
-          {type === "rental" ? "Pickup Date" : "Sale Date"}
-          <input type="date" value={pickupDate} onChange={(e) => setPickupDate(e.target.value)} />
-        </label>
+        {lineItems.map((row, index) => {
+          const selected = selectedItemFor(row);
+          const eligibleItems = items.filter((i) => i.tracking_type === "quantity" || i.status === "available");
+          const conflict = itemConflicts.find((c) => c.index === index);
+          return (
+            <div className="line-item-card" key={row.key}>
+              <div className="line-item-card-header">
+                <h3>Item {index + 1}</h3>
+                {lineItems.length > 1 && (
+                  <button type="button" className="btn-secondary" onClick={() => removeLineItem(row.key)}>
+                    Remove
+                  </button>
+                )}
+              </div>
 
-        {type === "rental" && (
-          <label className="field-label">
-            Return Date
-            <input
-              type="date"
-              min={pickupDate || undefined}
-              value={returnDate}
-              onChange={(e) => setReturnDate(e.target.value)}
-            />
-          </label>
-        )}
+              <div className="toggle-group">
+                <button
+                  type="button"
+                  className={row.type === "rental" ? "toggle-btn active" : "toggle-btn"}
+                  onClick={() => handleTypeChange(row, "rental")}
+                >
+                  Rental
+                </button>
+                <button
+                  type="button"
+                  className={row.type === "sale" ? "toggle-btn active" : "toggle-btn"}
+                  onClick={() => handleTypeChange(row, "sale")}
+                >
+                  Sale
+                </button>
+              </div>
 
-        <label className="field-label">
-          Price Charged (₹)
-          <input type="number" min={0} value={price} onChange={(e) => setPrice(e.target.value)} />
-        </label>
+              <label className="field-label">
+                Item
+                <select value={row.itemId} onChange={(e) => handleItemChange(row, e.target.value)}>
+                  <option value="">Select an item…</option>
+                  {eligibleItems.map((i) => (
+                    <option key={i.id} value={i.id}>
+                      {i.item_code} — {i.name}
+                      {i.tracking_type === "quantity" ? ` (${i.quantity_on_hand ?? 0} on hand)` : ""}
+                    </option>
+                  ))}
+                </select>
+              </label>
+
+              {selected?.tracking_type === "quantity" && (
+                <label className="field-label">
+                  Quantity
+                  <input
+                    type="number"
+                    min={1}
+                    value={row.quantityBooked}
+                    onChange={(e) => updateLineItem(row.key, { quantityBooked: e.target.value })}
+                  />
+                </label>
+              )}
+
+              <p className="field-label">Additional Items</p>
+              <p className="wizard-hint">
+                Extra items for this line only — doesn't change the item's own components.
+              </p>
+              <div className="add-custom-row">
+                <input
+                  type="text"
+                  placeholder="e.g. borrowed pouch"
+                  value={row.newAddon}
+                  onChange={(e) => updateLineItem(row.key, { newAddon: e.target.value })}
+                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addCustomAddon(row))}
+                />
+                <button type="button" className="btn-secondary" onClick={() => addCustomAddon(row)}>
+                  Add
+                </button>
+              </div>
+              {row.customAddons.length > 0 && (
+                <div className="chip-list">
+                  {row.customAddons.map((name) => (
+                    <span className="chip" key={name}>
+                      {name}
+                      <button type="button" onClick={() => removeCustomAddon(row, name)} aria-label={`Remove ${name}`}>
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+              )}
+
+              <label className="field-label">
+                {row.type === "rental" ? "Pickup Date" : "Sale Date"}
+                <input
+                  type="date"
+                  value={row.pickupDate}
+                  onChange={(e) => updateLineItem(row.key, { pickupDate: e.target.value })}
+                />
+              </label>
+
+              {row.type === "rental" && (
+                <label className="field-label">
+                  Return Date
+                  <input
+                    type="date"
+                    min={row.pickupDate || undefined}
+                    value={row.returnDate}
+                    onChange={(e) => updateLineItem(row.key, { returnDate: e.target.value })}
+                  />
+                </label>
+              )}
+
+              <label className="field-label">
+                Price Charged (₹)
+                <input
+                  type="number"
+                  min={0}
+                  value={row.price}
+                  onChange={(e) => updateLineItem(row.key, { price: e.target.value })}
+                />
+              </label>
+
+              {row.type === "rental" && (
+                <>
+                  <label className="field-label">
+                    Security Deposit (₹)
+                    <input
+                      type="number"
+                      min={0}
+                      value={row.depositAmount}
+                      onChange={(e) => updateLineItem(row.key, { depositAmount: e.target.value })}
+                      placeholder="Optional"
+                    />
+                  </label>
+                  <label className="field-label">
+                    <input
+                      type="checkbox"
+                      checked={row.depositCollected}
+                      onChange={(e) => updateLineItem(row.key, { depositCollected: e.target.checked })}
+                    />{" "}
+                    Deposit collected
+                  </label>
+                </>
+              )}
+
+              {conflict && (
+                <div className="line-item-error">
+                  <p>{conflict.error}</p>
+                  {conflict.conflicts && conflict.conflicts.length > 0 && (
+                    <ul className="conflict-list">
+                      {(conflict.conflicts as { id: string; booking_code?: string; pickup_date: string; return_date: string | null }[]).map(
+                        (c) => (
+                          <li key={c.id}>
+                            {c.pickup_date} → {c.return_date}
+                          </li>
+                        ),
+                      )}
+                    </ul>
+                  )}
+                </div>
+              )}
+            </div>
+          );
+        })}
+
+        <div className="add-item-row">
+          <button type="button" className="btn-secondary" onClick={addLineItem}>
+            + Add Another Item
+          </button>
+        </div>
 
         <label className="field-label">
           Advance Received (₹)
@@ -326,29 +416,6 @@ export function BookingForm() {
               ))}
             </select>
           </label>
-        )}
-
-        {type === "rental" && (
-          <>
-            <label className="field-label">
-              Security Deposit (₹)
-              <input
-                type="number"
-                min={0}
-                value={depositAmount}
-                onChange={(e) => setDepositAmount(e.target.value)}
-                placeholder="Optional"
-              />
-            </label>
-            <label className="field-label">
-              <input
-                type="checkbox"
-                checked={depositCollected}
-                onChange={(e) => setDepositCollected(e.target.checked)}
-              />{" "}
-              Deposit collected
-            </label>
-          </>
         )}
 
         <label className="field-label">
@@ -377,20 +444,7 @@ export function BookingForm() {
           </>
         )}
 
-        {error && (
-          <div className="wizard-error">
-            <p>{error}</p>
-            {conflicts && conflicts.length > 0 && (
-              <ul className="conflict-list">
-                {conflicts.map((c) => (
-                  <li key={c.id}>
-                    {c.booking_code} — {c.customers?.name ?? "unknown customer"} ({c.pickup_date} → {c.return_date})
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-        )}
+        {error && <p className="wizard-error">{error}</p>}
       </div>
 
       <div className="wizard-nav">

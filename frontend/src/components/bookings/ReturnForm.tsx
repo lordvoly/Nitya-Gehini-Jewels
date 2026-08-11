@@ -1,15 +1,25 @@
 import { useState, type FormEvent } from "react";
-import { processLegacyReturn, type LegacyFlatBooking, type LegacyFlatBookingWithDetails } from "../../lib/bookings";
+import { processReturn, type Booking, type BookingItem } from "../../lib/bookings";
 
-export function ReturnForm({ booking, onCancel }: { booking: LegacyFlatBookingWithDetails; onCancel: () => void }) {
+// Scoped to a single line item (§8 decision D) — booking is passed only for
+// display context (booking_code, customer name) and to build the request
+// URL; the return itself only ever affects this one booking_items row.
+export function ReturnForm({
+  booking,
+  item,
+  onCancel,
+}: {
+  booking: Booking;
+  item: BookingItem;
+  onCancel: () => void;
+}) {
   // Combined from two sources: the item's own components template (only
   // for set items — items.components itself is never touched here) and
-  // this booking's own custom_addons (free-text extras added at booking
+  // this line item's own custom_addons (free-text extras added at booking
   // time, regardless of item type). Either alone, both together, or
-  // neither all produce a sensible checklist — a single item with
-  // custom_addons now gets one too, where normally it wouldn't.
-  const componentNames = booking.items?.item_type === "set" ? booking.items.components ?? [] : [];
-  const addonNames = booking.custom_addons ?? [];
+  // neither all produce a sensible checklist.
+  const componentNames = item.items?.item_type === "set" ? item.items.components ?? [] : [];
+  const addonNames = item.custom_addons ?? [];
   const checklistNames = [...componentNames, ...addonNames];
   const [checklist, setChecklist] = useState<Record<string, boolean>>(
     Object.fromEntries(checklistNames.map((name) => [name, false])),
@@ -23,7 +33,7 @@ export function ReturnForm({ booking, onCancel }: { booking: LegacyFlatBookingWi
   const [depositRefundDate, setDepositRefundDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<LegacyFlatBooking | null>(null);
+  const [result, setResult] = useState<BookingItem | null>(null);
 
   function toggleComponent(name: string) {
     setChecklist((c) => ({ ...c, [name]: !c[name] }));
@@ -34,12 +44,12 @@ export function ReturnForm({ booking, onCancel }: { booking: LegacyFlatBookingWi
     setError(null);
     setSaving(true);
     try {
-      const updated = await processLegacyReturn(booking, {
+      const updated = await processReturn(booking.id, item.item_id, {
         return_checklist: checklistNames.length > 0 ? checklist : null,
         return_notes: returnNotes.trim() || null,
         actual_return_date: actualReturnDate || null,
-        deposit_refunded: booking.deposit_collected ? depositRefunded : null,
-        deposit_refund_date: booking.deposit_collected && depositRefunded ? depositRefundDate || null : null,
+        deposit_refunded: item.deposit_collected ? depositRefunded : null,
+        deposit_refund_date: item.deposit_collected && depositRefunded ? depositRefundDate || null : null,
       });
       setResult(updated);
     } catch (err) {
@@ -53,7 +63,8 @@ export function ReturnForm({ booking, onCancel }: { booking: LegacyFlatBookingWi
     return (
       <div className="wizard-card wizard-success">
         <p className="success-check">✓ Marked Returned</p>
-        <p className="success-code">{result.booking_code}</p>
+        <p className="success-code">{booking.booking_code}</p>
+        <p>{item.items?.item_code} — {item.items?.name}</p>
         {result.warning && (
           <div className="found-panel">
             <p>{result.warning}</p>
@@ -73,7 +84,7 @@ export function ReturnForm({ booking, onCancel }: { booking: LegacyFlatBookingWi
       <div className="wizard-step">
         <h2>Process Return — {booking.booking_code}</h2>
         <p className="wizard-hint">
-          {booking.items?.item_code} — {booking.items?.name} · {booking.customers?.name}
+          {item.items?.item_code} — {item.items?.name} · {booking.customers?.name}
         </p>
 
         {checklistNames.length > 0 && (
@@ -110,7 +121,7 @@ export function ReturnForm({ booking, onCancel }: { booking: LegacyFlatBookingWi
           />
         </label>
 
-        {booking.deposit_collected && (
+        {item.deposit_collected && (
           <>
             <label className="field-label">
               <input

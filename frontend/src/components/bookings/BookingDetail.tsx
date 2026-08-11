@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { fetchLegacyBooking, type LegacyFlatBookingDetail as BookingDetailData } from "../../lib/bookings";
+import { fetchBooking, type Booking, type BookingItem } from "../../lib/bookings";
 import {
   fetchPayments,
   recordPayment,
@@ -9,10 +9,20 @@ import {
   type PaymentMethod,
 } from "../../lib/payments";
 import { toNumberOrNull } from "../../lib/numbers";
-import { bookingStatusPill } from "../../lib/statusPill";
+import { bookingItemStatusPill, bookingComputedStatusPill } from "../../lib/statusPill";
 
-export function BookingDetail({ bookingId, onBack }: { bookingId: string; onBack: () => void }) {
-  const [booking, setBooking] = useState<BookingDetailData | null>(null);
+export function BookingDetail({
+  bookingId,
+  onBack,
+  onEdit,
+  onProcessReturn,
+}: {
+  bookingId: string;
+  onBack: () => void;
+  onEdit: () => void;
+  onProcessReturn: (booking: Booking, item: BookingItem) => void;
+}) {
+  const [booking, setBooking] = useState<Booking | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -30,7 +40,7 @@ export function BookingDetail({ bookingId, onBack }: { bookingId: string; onBack
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    return Promise.all([fetchLegacyBooking(bookingId), fetchPayments(bookingId)])
+    return Promise.all([fetchBooking(bookingId), fetchPayments(bookingId)])
       .then(([b, p]) => {
         setBooking(b);
         setPayments(p);
@@ -68,25 +78,28 @@ export function BookingDetail({ bookingId, onBack }: { bookingId: string; onBack
     }
   }
 
+  const statusPill = booking
+    ? bookingComputedStatusPill(booking.computed_status, booking.resolved_item_count, booking.active_item_count)
+    : null;
+
   return (
     <div className="wizard-card">
       <div className="wizard-step">
         <h2>{loading ? "Loading…" : booking?.booking_code}</h2>
         {error && <p className="wizard-error">{error}</p>}
-        {booking && (
+        {booking && statusPill && (
           <>
-            <p className="wizard-hint">
-              {booking.items?.item_code} — {booking.items?.name} · {booking.customers?.name}
-            </p>
+            <p className="wizard-hint">{booking.customers?.name}</p>
             <ul className="review-list">
-              <li>Type: {booking.type === "rental" ? "Rental" : "Sale"}</li>
               <li>
-                Status: <span className={`pill ${bookingStatusPill(booking.status).className}`}>{bookingStatusPill(booking.status).label}</span>
+                Status: <span className={`pill ${statusPill.className}`}>{statusPill.label}</span>
+                {statusPill.fraction && ` — ${statusPill.fraction}`}
               </li>
-              <li>
-                Dates: {booking.pickup_date}
-                {booking.return_date ? ` → ${booking.return_date}` : ""}
-              </li>
+              {booking.gst_applicable && (
+                <li>
+                  GST: {booking.gst_invoice_number ?? "—"} · HSN {booking.hsn_code ?? "—"} · {booking.tax_rate ?? 0}%
+                </li>
+              )}
               <li>Price charged: ₹{booking.price_charged}</li>
               <li>Total paid: ₹{booking.total_paid}</li>
               <li>
@@ -94,28 +107,68 @@ export function BookingDetail({ bookingId, onBack }: { bookingId: string; onBack
               </li>
             </ul>
 
-            {/* Only meaningful for a unique item — there's a real physical
-                hand-off between consecutive bookings. A quantity item can
-                have many bookings active at once, so "next in line" isn't a
-                single well-defined thing there. */}
-            {booking.items?.tracking_type === "unique" && (
-              <div className="found-panel">
-                <p>
-                  <strong>When Returns →</strong>
-                </p>
-                {booking.future_bookings.length === 0 ? (
-                  <p className="wizard-hint">No bookings ahead.</p>
-                ) : (
+            <h2>Items ({booking.booking_items.length})</h2>
+            {booking.booking_items.map((bi) => {
+              const itemPill = bookingItemStatusPill(bi.status);
+              const canReturn = bi.type === "rental" && (bi.status === "booked" || bi.status === "out");
+              return (
+                <div className="line-item-card" key={bi.id}>
+                  <div className="line-item-card-header">
+                    <h3>
+                      {bi.items?.item_code} — {bi.items?.name}
+                    </h3>
+                    <span className={`pill ${itemPill.className}`}>{itemPill.label}</span>
+                  </div>
                   <ul className="review-list">
-                    {booking.future_bookings.map((fb) => (
-                      <li key={fb.id}>
-                        {fb.booking_code} — {fb.customer_name} ({fb.pickup_date})
+                    <li>Type: {bi.type === "rental" ? "Rental" : "Sale"}</li>
+                    <li>
+                      Dates: {bi.pickup_date}
+                      {bi.return_date ? ` → ${bi.return_date}` : ""}
+                      {bi.actual_return_date ? ` (returned ${bi.actual_return_date})` : ""}
+                    </li>
+                    <li>Price charged: ₹{bi.price_charged}</li>
+                    {bi.type === "rental" && bi.deposit_amount > 0 && (
+                      <li>
+                        Deposit: ₹{bi.deposit_amount}
+                        {bi.deposit_collected ? (bi.deposit_refunded ? " (refunded)" : " (collected)") : " (not collected)"}
                       </li>
-                    ))}
+                    )}
+                    {bi.custom_addons.length > 0 && <li>Additional items: {bi.custom_addons.join(", ")}</li>}
                   </ul>
-                )}
-              </div>
-            )}
+
+                  {/* Only meaningful for a unique item — there's a real physical
+                      hand-off between consecutive bookings. A quantity item can
+                      have many bookings active at once, so "next in line" isn't
+                      a single well-defined thing there. */}
+                  {bi.items?.tracking_type === "unique" && (
+                    <div className="found-panel">
+                      <p>
+                        <strong>When Returns →</strong>
+                      </p>
+                      {!bi.future_booking_items || bi.future_booking_items.length === 0 ? (
+                        <p className="wizard-hint">No bookings ahead.</p>
+                      ) : (
+                        <ul className="review-list">
+                          {bi.future_booking_items.map((fb) => (
+                            <li key={fb.id}>
+                              {fb.booking_code} — {fb.customer_name} ({fb.pickup_date})
+                            </li>
+                          ))}
+                        </ul>
+                      )}
+                    </div>
+                  )}
+
+                  {canReturn && (
+                    <div className="wizard-actions">
+                      <button className="btn-secondary" onClick={() => onProcessReturn(booking, bi)}>
+                        Process Return
+                      </button>
+                    </div>
+                  )}
+                </div>
+              );
+            })}
 
             <h2>Payments</h2>
             {payments.length === 0 ? (
@@ -161,7 +214,7 @@ export function BookingDetail({ bookingId, onBack }: { bookingId: string; onBack
                   <button type="button" className="btn-secondary" onClick={() => setShowPaymentForm(false)}>
                     Cancel
                   </button>
-                  <button type="submit" className="btn-primary" disabled={saving || !(toNumberOrNull(amount) ?? 0) }>
+                  <button type="submit" className="btn-primary" disabled={saving || !(toNumberOrNull(amount) ?? 0)}>
                     {saving ? "Saving…" : "Save Payment"}
                   </button>
                 </div>
@@ -180,6 +233,11 @@ export function BookingDetail({ bookingId, onBack }: { bookingId: string; onBack
         <button className="btn-secondary" onClick={onBack}>
           Back
         </button>
+        {booking && (
+          <button className="btn-primary" onClick={onEdit}>
+            Edit Booking
+          </button>
+        )}
       </div>
     </div>
   );
