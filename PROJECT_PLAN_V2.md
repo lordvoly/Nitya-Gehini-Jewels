@@ -215,7 +215,127 @@ This document is meant to be handed to Claude Code as the spec to scaffold from.
 
 ---
 
-## 8. Multi-Item Bookings Restructuring (Stage 1 fully applied AND acceptance-tested 2026-08-11 — Stage 2 not yet executed)
+## 8. Multi-Item Bookings Restructuring (Checkpoint (b) DONE 2026-08-11 — Stage 2 not yet executed)
+
+**Checkpoint (b) — Frontend types + simpler pages — DONE 2026-08-11, tested
+against the real Vercel preview + `ngj-backend-checkpoint-a`, real bug found
+and fixed live.**
+
+`lib/bookings.ts`, `lib/dashboard.ts`, `lib/statusPill.ts`, `DashboardPage.tsx`,
+`ReportsPage.tsx` rewritten/updated per the plan; `lib/reports.ts` confirmed
+needing no changes (shape already matched). One design addition beyond the
+original plan: since `BookingForm.tsx`/`BookingsList.tsx`/`BookingDetail.tsx`/
+`ReturnForm.tsx`/`BookingsPage.tsx` are explicitly Checkpoint (c)'s job (not
+this one) but the app has to actually build and deploy at every checkpoint,
+`lib/bookings.ts` and `lib/statusPill.ts` each grew a clearly-labeled **legacy
+bridge** section (`LegacyFlatBooking`/`createLegacyBooking`/
+`fetchLegacyBookings`/`fetchLegacyBooking`/`processLegacyReturn`, and the
+unchanged old `bookingStatusPill`) — flattens the new nested API back onto the
+old one-item-per-booking shape those five files still assume, single-item
+bookings only. The five files themselves got **only mechanical import/call-
+site renames**, zero UI or logic changes — the bridge is explicitly marked
+for deletion once Checkpoint (c) does the real rewrite (repeatable line
+items, card-per-booking list, per-item actions).
+
+**Bug found live, not in review**: `processLegacyReturn` passed
+`booking.booking_item_id` (the `booking_items` row's own id) as the route's
+`:itemId` — but `POST /api/bookings/:bookingId/items/:itemId/return` matches
+on `items.id` (the physical item, per §8 decision D), not `booking_items.id`.
+Every return attempt 404'd with "Booking item not found" until this was
+caught by actually clicking "Mark Returned" through the real preview (not
+just reading the code) and fixed to use the already-present, previously-
+unused `booking.item_id` field instead. Confirmed via a second real attempt
+through the UI, then verified directly against the database: `booking_item
+status = 'returned'`, the underlying item's own `status` correctly flipped
+back to `'available'`.
+
+**What was tested, with real results**, all through the actual deployed
+Vercel preview + `ngj-backend-checkpoint-a` (never local reasoning), using a
+fresh throwaway auth user and `ZZTEST`-prefixed fixtures, fully cleaned up
+after:
+- Dashboard: real stats rendered correctly on load (unchanged from
+  Checkpoint (a)'s verification, confirming the rewritten `lib/dashboard.ts`
+  types still matched).
+- Reports: the new required note ("Total bookings counts family
+  transactions... Rentals/Sales counts individual items...") renders
+  correctly under "Bookings This Period".
+- **A real booking created through the actual `BookingForm` UI** (not just
+  via API) — confirms `createLegacyBooking` correctly calls through to the
+  Checkpoint (a) RPC-backed endpoint end-to-end. (One self-inflicted
+  detour here, not a code bug: typed `08/09/2026` into the native date
+  input intending August 9th, but this environment's date input parses
+  typed digits as DD/MM, landing on September 8th — caught by checking the
+  stored row directly rather than trusting the form, fixed by re-entering
+  with the date-then-month order.)
+- **"Today's Returns Due" row rendering** — deliberately re-dated the test
+  booking to land on today specifically to exercise this row (it was empty,
+  and therefore untested, in Checkpoint (a)'s verification): the nested
+  `b.bookings?.booking_code` field renders correctly, and the deep link
+  correctly uses the new `b.booking_id` (parent) rather than `b.id` (item).
+- Clicking through that deep link into `BookingDetail` (via
+  `fetchLegacyBooking`) rendered every field correctly, including a correctly-
+  empty "When Returns →" panel.
+- `BookingsList` (via `fetchLegacyBookings`) correctly showed both the new
+  test booking and the real legacy `RNT-0001`, flattened identically.
+- The return flow (bug above, then the fix) — confirmed via the database
+  directly, not just the success screen.
+
+All fixtures and the throwaway auth user deleted after; confirmed
+`bookings_count`/`booking_items_count` back to `1`/`1` (just the real
+`RNT-0001`), zero leftover `ZZTEST` rows anywhere.
+
+**⚠ TEMPORARY INFRASTRUCTURE — REMINDER TO DELETE**: a second Render web
+service (free tier, name like `ngj-backend-checkpoint-a`) was created
+2026-08-11, deployed from `feat/booking-items-checkpoint-a`, pointed at the
+same real Supabase project as production, so the Vercel Preview deployment
+for this branch has a real backend to call during Checkpoints (b)/(c)
+(Vercel hosts only the frontend; Render has no built-in preview-environment
+support here). Vercel's Preview `VITE_API_URL` and this Render service's
+`CORS_ORIGIN` were cross-wired to each other for this purpose. **Once
+Checkpoint (c) is done and `feat/booking-items-checkpoint-a` merges to
+`master`, delete this Render service** — it's throwaway scaffolding for this
+migration's testing, not a permanent second backend.
+
+**Preview-deployment wiring — gotchas hit getting this working (2026-08-11),
+worth knowing before Checkpoints (b)/(c) touch this again:**
+- Two `VITE_API_URL` Vercel env vars must coexist without overlapping scope:
+  the original one (Production + Preview, all branches, real prod backend)
+  had to be narrowed to **Production only**, leaving a second one scoped to
+  **Preview + this specific branch** pointing at `ngj-backend-checkpoint-a`.
+  Vercel let both exist with overlapping scope without error, but the
+  broader one silently won — the override only actually took effect once the
+  overlap was removed.
+- **Vite bakes env vars in at build time.** An env var change never applies
+  to an already-built deployment — a genuinely new build is required.
+- **This project has a Vercel "Ignored Build Step"** that skips building when
+  a push has no meaningful diff — a `git commit --allow-empty` push to force
+  a rebuild does **not** work here (confirmed: produced no deployment at
+  all). A real, if trivial and inert, file change is needed instead (used a
+  one-line HTML comment in `frontend/index.html`).
+- Vercel's dashboard "Redeploy" dialog (the button, not a git push) only
+  offers past deployments to pick from and its branch list can be
+  misleading/incomplete — the reliable way to get a fresh build of a specific
+  branch is a real `git push` to that branch, not the dashboard button.
+- **Preview deployments sit behind Vercel's own SSO/deployment-protection
+  wall** — `curl` gets redirected to `vercel.com/sso-api` and can't be used
+  to poll/verify preview URLs. A real logged-in browser session is required;
+  this is part of why Checkpoints (b)/(c) verification goes through
+  `claude-in-chrome`, not `curl`, for anything preview-URL-facing (`curl` was
+  still used freely for the direct Render backend URL, which has no such
+  protection).
+- To confirm which backend a loaded preview page is actually calling (rather
+  than trusting the env var config alone), run
+  `performance.getEntriesByType('resource').filter(r =>
+  r.name.includes('onrender')).map(r => r.name)` in the browser console —
+  this is what caught the wiring pointing at the wrong backend twice before
+  it was actually fixed.
+
+**Verified working 2026-08-11**: logged into the `feat/booking-items-checkpoint-a`
+Vercel preview through a real browser (throwaway auth user, cleaned up after)
+and confirmed the Dashboard renders real data end-to-end through the full new
+chain (browser → Vercel preview → `ngj-backend-checkpoint-a` on Render →
+real database) — `₹3500` outstanding balance and `Items out: 1` both matched
+the real `RNT-0001` booking exactly.
 
 **Acceptance-test scenarios (`verification_scenarios.sql`) run 2026-08-11 —
 both green-lit. Real output pasted, not just pass/fail. Run against
