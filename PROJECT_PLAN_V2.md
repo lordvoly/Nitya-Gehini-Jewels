@@ -276,8 +276,9 @@ full-row fetch plus both views) before responding. Re-verified live: the
 same test booking above now shows `price_charged: 1500`/`2500` correctly
 in both the raw API response and the rendered panel.
 
-**Bug 2 — found live: `EditBookingForm`'s save handlers trusted the PATCH
-response's declared TypeScript type over its real (narrower) payload.**
+**Bug 2 — found in code review, before ever exercising the vulnerable path
+live: `EditBookingForm`'s save handlers trusted the PATCH response's
+declared TypeScript type over its real (narrower) payload.**
 `PATCH /:id` returns only the updated `bookings` row's own columns (no
 `customers`/`booking_items` embed); `PATCH .../items/:itemId` returns only
 the raw `booking_items` row (no nested `items(item_code, name, ...)`
@@ -287,12 +288,15 @@ spliced the response directly into `booking.booking_items`. Saving the
 parent GST fields would have wiped `booking.booking_items` to `undefined`
 and crashed the item list on the next render; saving a line item's fields
 would have permanently blanked that row's item name/code in its header.
-Caught by actually clicking Save and watching the item list stay intact,
-not by reading the type annotations. Fixed by re-fetching the full booking
-via the existing `load()` after both mutations instead of trusting either
-response's shape. Re-verified live: toggled GST on and saved, then edited
-a line item's price and saved — the item names/codes stayed correct after
-both, confirmed by screenshot, not just "no console error."
+Caught by tracing the actual write path — comparing what each PATCH route
+really returns against what the frontend assumed it returns — and fixed
+before either handler was ever run against real data, not caught by
+clicking Save and observing the crash. Fixed by re-fetching the full
+booking via the existing `load()` after both mutations instead of trusting
+either response's shape. Verified live only after the fix was already in
+place: toggled GST on and saved, then edited a line item's price and
+saved — the item names/codes stayed correct after both, confirmed by
+screenshot, not just "no console error."
 
 **Bug 3 — found live: nothing prevented the same physical item from
 appearing twice in one family booking, and when it did, every per-item
