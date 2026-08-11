@@ -217,6 +217,56 @@ This document is meant to be handed to Claude Code as the spec to scaffold from.
 
 ## 8. Multi-Item Bookings Restructuring (Checkpoint (b) DONE 2026-08-11 — Stage 2 not yet executed)
 
+**Date-input investigation, resolved 2026-08-11 before starting Checkpoint (c)
+— not an application bug.** Checkpoint (b)'s testing notes flagged an
+apparent "date parsing ambiguity"; investigated properly rather than left as
+a footnote, since Checkpoint (c) adds several more date fields.
+
+1. **What the fields actually are**: grepped every `type="date"` in
+   `frontend/src` (7 matches across `BookingForm.tsx`, `BookingDetail.tsx`,
+   `ReturnForm.tsx`, `ReportsPage.tsx`) — all seven are plain native
+   `<input type="date">`, and every one of their `onChange` handlers reads
+   `e.target.value` directly with zero transformation. Separately grepped
+   for `date-fns`/`dayjs`/`moment`/`parseDate`/`formatDate` anywhere in the
+   frontend — zero matches. There is no custom date parsing anywhere in this
+   codebase.
+2. **What was actually wrong**: nothing in the code. A native date input's
+   `.value` is always canonical ISO `YYYY-MM-DD` internally, completely
+   independent of how it's displayed or typed into — that part of the user's
+   own framing was exactly right. The Checkpoint (b) mix-up was 100% a
+   testing-methodology artifact: browser automation typed `"08/09/2026"`
+   assuming MM/DD/YYYY entry order, but this Chrome instance's native
+   date-control locale (governed by the browser's own ICU/form-control
+   locale, confirmed to be a genuinely different setting from the
+   page-visible `navigator.language`, which reports `en-US`) fills segments
+   in DD/MM/YYYY order — visibly confirmed by the field's own `dd/mm/yyyy`
+   placeholder text once actually looked at. "The fix" was never a code
+   change; it was typing dates in the order the field itself already
+   states.
+3. **Proven, not just explained**, live against the real preview +
+   `ngj-backend-checkpoint-a`: typed a fresh unambiguous case (day and month
+   both ≤12) into `BookingForm`'s Pickup Date field using the confirmed
+   `dd/mm/yyyy` order, intending August 5th, 2026. Read
+   `document.querySelectorAll('input[type=date]')[0].value` directly via the
+   browser console **before** any submission: `2026-08-05`. Submitted the
+   booking (Return Date `2026-08-07`, same method) and queried Supabase
+   directly afterward: `pickup_date: "2026-08-05"`, `return_date:
+   "2026-08-07"` — exact match, zero transformation anywhere between the
+   widget and the stored row.
+4. **Confirmed to apply everywhere, empirically, not just by code
+   inspection**: repeated the same live test on `ReportsPage`'s "From" date
+   field — a separate component, separate page, no shared code with
+   `BookingForm` beyond both being native `<input type="date">`. Typed
+   `03/08/2026` (DD/MM order), read `.value` directly: `2026-08-03` — same
+   correct behavior. Combined with finding #1 (all seven date fields in the
+   app are the identical native element with the identical
+   zero-transformation `onChange`), there's no mechanism by which any of the
+   other five could behave differently — they're the same HTML element type,
+   not five different implementations that happened to agree twice.
+
+All test fixtures and the throwaway auth user used for this cleaned up
+after; confirmed database back to just the one real `RNT-0001` booking.
+
 **Checkpoint (b) — Frontend types + simpler pages — DONE 2026-08-11, tested
 against the real Vercel preview + `ngj-backend-checkpoint-a`, real bug found
 and fixed live.**
