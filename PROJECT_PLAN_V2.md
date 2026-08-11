@@ -328,6 +328,47 @@ that already had it returned the friendly 409, no 500; a fresh
 create-request with the same `item_id` twice returned the per-row
 `item_conflicts` 409 instead of silently succeeding.
 
+**Bug 3, follow-up — the app-layer duplicate check above left the RPC
+itself exploitable, caught on review.** The `POST /` fix (above) only
+guards the Express route: it de-dupes the submitted `items[]` array
+*before* calling `create_booking_with_items`, so the RPC never sees a
+duplicate through that one path. But the RPC is independently callable
+(direct `rpc/create_booking_with_items`, any future internal caller,
+`tools/index.ts` if it's ever wired up) and, read on its own, has no
+uniqueness check — only the per-item date-overlap (`unique` items) and
+oversell (`quantity` items) checks, which a *non-overlapping* duplicate or
+two same-item sale lines pass cleanly. Proven live, not just read: called
+the RPC directly via `POST /rest/v1/rpc/create_booking_with_items` (service
+role key, bypassing Express entirely) with two rental lines on one throwaway
+`unique` item, deliberately non-overlapping dates (5–8 Aug, 20–25 Aug) — the
+exact case the overlap check can't catch. It returned **HTTP 200** and a
+real booking; a direct `booking_items` query confirmed **two rows, same
+`item_id`, both `status: 'booked'`** — the identical class of bug Bug 3
+above was meant to close, just reachable one layer deeper.
+
+Fixed in `01c_create_booking_with_items_rpc.sql`: an explicit check at the
+very top of the function, before the parent `bookings` insert or any line
+item is touched — `select ... from jsonb_array_elements(p_items) group by
+item_id having count(*) > 1`, `raise exception` if any group has more than
+one member. Same "second, transaction-safe layer, not a replacement for the
+app check" reasoning the RPC's own header comment already uses for every
+other check in this function. Applied to the live linked project via
+`npx supabase db query --linked -f
+supabase/proposed/20260811_booking_items_restructure/01c_create_booking_with_items_rpc.sql`
+(the CLI was already linked/authenticated from Stage 1 — no interactive
+login needed).
+
+Re-proved the identical repro against the now-fixed RPC, called directly
+the same way: **HTTP 400, `code: "P0001"`,
+`"Item <uuid> appears more than once in this booking"`** — and confirmed
+via a follow-up query that **no `bookings` row exists at all** for that
+attempt (the whole transaction rolled back, not just the second insert
+skipped). A sanity check alongside it — a normal single-item booking
+through the same direct-RPC path — still succeeded, confirming the new
+check isn't over-broad. All three throwaway fixtures (item, customer,
+proof bookings) deleted after; `bookings_count`/`booking_items_count`
+reconfirmed at `1`/`1` (just `RNT-0001`) directly against Supabase.
+
 **What else was verified live, with real results, not just "should work,"**
 using a fresh throwaway auth user and `ZZTEST`-prefixed fixtures, all
 cleaned up after:

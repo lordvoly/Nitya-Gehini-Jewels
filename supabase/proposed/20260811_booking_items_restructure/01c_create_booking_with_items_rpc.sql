@@ -53,7 +53,29 @@ declare
   v_already_reserved integer;
   v_available integer;
   v_conflict_count integer;
+  v_dup_item_id uuid;
 begin
+  -- Explicit uniqueness check, independent of the per-item date-overlap/
+  -- oversell logic below: two lines for the same item_id with NON-
+  -- overlapping dates (or two sale-type lines) pass that logic cleanly and
+  -- would otherwise insert as a real duplicate — every downstream per-item
+  -- route (edit/cancel/return) looks a line up by (booking_id, item_id) via
+  -- .single() and breaks the instant two rows share one. The application
+  -- layer (POST /api/bookings) already rejects this before ever calling
+  -- this function, but this function is independently callable (direct RPC,
+  -- any future internal caller) and must not depend on that pre-check
+  -- having run — same "second, transaction-safe layer, not a replacement"
+  -- reasoning as every other check in this function. Runs first, before any
+  -- writes, so a rejection here leaves nothing to roll back.
+  select (elem->>'item_id')::uuid into v_dup_item_id
+  from jsonb_array_elements(p_items) as elem
+  group by elem->>'item_id'
+  having count(*) > 1
+  limit 1;
+  if v_dup_item_id is not null then
+    raise exception 'Item % appears more than once in this booking', v_dup_item_id;
+  end if;
+
   insert into bookings (
     booking_code, customer_id, gst_applicable, gst_invoice_number, hsn_code, tax_rate, created_by
   ) values (
