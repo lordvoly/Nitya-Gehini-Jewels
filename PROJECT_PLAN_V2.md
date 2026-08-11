@@ -217,6 +217,37 @@ This document is meant to be handed to Claude Code as the spec to scaffold from.
 
 ## 8. Multi-Item Bookings Restructuring (Checkpoint (b) DONE 2026-08-11 — Stage 2 not yet executed)
 
+**Editable `booking_code`, added 2026-08-11 before starting Checkpoint (c)
+proper — a real gap, not previously built.** Confirmed against the actual
+code (not assumed) that `BookingForm.tsx` had no `booking_code` field at
+all, and `POST /api/bookings` always server-generated it with zero client
+override — unlike `items.ts`'s `item_code`, which already has exactly this
+editable-suggestion pattern. Brought bookings up to parity:
+- **New `GET /api/bookings/next-code`** (registered before `GET /:id`, same
+  reasoning as `/overdue`/`/upcoming-returns`) — read-only preview of the
+  next `BK-000N`, reserves nothing.
+- **`POST /api/bookings`** now accepts an optional `booking_code`; non-empty
+  gets exactly one insert attempt with a friendly `"This booking code is
+  already in use — choose a different one."` 409 on collision (same wording
+  pattern as `item_code`'s), rather than being silently retried with a
+  different value out from under an explicit choice. Empty/omitted still
+  falls through to the existing auto-generate + retry-on-`23505` loop,
+  unchanged. No RPC/SQL change needed — `create_booking_with_items` already
+  took `p_booking_code` as a parameter.
+- **`BookingForm.tsx`** pre-fills the suggestion into an editable field on
+  mount and after "Create Another", identical UX to `AddItemWizard`'s
+  `item_code` field including the hint copy.
+
+Proven live against the real preview + `ngj-backend-checkpoint-a`, not just
+asserted: created a booking through the actual UI with the code overridden
+to `ZZTEST-CUSTOM-CODE`, confirmed via Supabase directly that the literal
+override (not an auto-generated fallback) was stored. Then attempted a
+second, non-overlapping booking reusing that same code — the UI rendered
+the exact friendly message, and a direct query confirmed exactly one row
+exists with that code (no duplicate, no partial insert). All fixtures and
+the throwaway auth user cleaned up after; database confirmed back to just
+the one real `RNT-0001` booking.
+
 **Date-input investigation, resolved 2026-08-11 before starting Checkpoint (c)
 — not an application bug.** Checkpoint (b)'s testing notes flagged an
 apparent "date parsing ambiguity"; investigated properly rather than left as
