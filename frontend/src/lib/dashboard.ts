@@ -1,12 +1,37 @@
 import { apiFetch } from "./api";
-import type { Booking, BookingCustomerSummary, BookingItemSummary } from "./bookings";
+import type { BookingCustomerSummary, BookingItemSummary, BookingItemStatus, BookingItemType } from "./bookings";
 
-export interface DueTodayBooking extends Booking {
+// Both rows below are now booking_items-grain, not Booking-grain — "due
+// today" / "overdue" are inherently per-item concepts once a family
+// booking can have several items on different schedules (§8).
+
+export interface DueTodayBookingItem {
+  id: string;
+  booking_id: string;
+  item_id: string;
+  quantity_booked: number;
+  type: BookingItemType;
+  pickup_date: string;
+  return_date: string | null;
+  actual_return_date: string | null;
+  status: BookingItemStatus;
+  price_charged: number;
+  bookings: { booking_code: string; customer_id: string } | null;
   items: BookingItemSummary | null;
   customers: BookingCustomerSummary | null;
 }
 
-export interface OverdueBooking extends Booking {
+export interface OverdueBookingItem {
+  id: string;
+  booking_id: string;
+  item_id: string;
+  quantity_booked: number;
+  type: BookingItemType;
+  pickup_date: string;
+  return_date: string | null;
+  status: BookingItemStatus;
+  booking_code: string;
+  customer_id: string;
   items: { item_code: string; name: string } | null;
   customers: { name: string; phone: string } | null;
   balance_due: number;
@@ -25,8 +50,8 @@ export interface DashboardStats {
 }
 
 export interface DashboardSummary {
-  due_today: DueTodayBooking[];
-  overdue: OverdueBooking[];
+  due_today: DueTodayBookingItem[];
+  overdue: OverdueBookingItem[];
   outstanding_balance: number;
   stats: DashboardStats;
 }

@@ -1,7 +1,12 @@
 import { useEffect, useMemo, useState, type FormEvent } from "react";
 import { fetchItems, type Item } from "../../lib/items";
 import type { Customer } from "../../lib/customers";
-import { createBooking, type Booking, type BookingType, type ConflictingBooking } from "../../lib/bookings";
+import {
+  createLegacyBooking,
+  type LegacyFlatBooking,
+  type BookingType,
+  type ConflictingBooking,
+} from "../../lib/bookings";
 import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/payments";
 import { CustomerPicker } from "./CustomerPicker";
@@ -28,7 +33,7 @@ export function BookingForm() {
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [conflicts, setConflicts] = useState<ConflictingBooking[] | null>(null);
-  const [saved, setSaved] = useState<Booking | null>(null);
+  const [saved, setSaved] = useState<LegacyFlatBooking | null>(null);
 
   useEffect(() => {
     fetchItems({ activeOnly: true }).then(setItems);
@@ -92,7 +97,7 @@ export function BookingForm() {
     setConflicts(null);
     setSaving(true);
     try {
-      const result = await createBooking({
+      const result = await createLegacyBooking({
         type,
         item_id: itemId,
         quantity_booked: selectedItem.tracking_type === "quantity" ? toIntOrNull(quantityBooked) ?? 1 : 1,

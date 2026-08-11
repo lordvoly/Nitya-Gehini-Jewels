@@ -4,13 +4,13 @@ import { BookingDetail } from "../components/bookings/BookingDetail";
 import { BookingForm } from "../components/bookings/BookingForm";
 import { BookingsList } from "../components/bookings/BookingsList";
 import { ReturnForm } from "../components/bookings/ReturnForm";
-import type { BookingWithDetails } from "../lib/bookings";
+import type { LegacyFlatBookingWithDetails } from "../lib/bookings";
 import "../styles/shared.css";
 
 export default function BookingsPage() {
   const [searchParams] = useSearchParams();
   const [view, setView] = useState<"add" | "list">("add");
-  const [returningBooking, setReturningBooking] = useState<BookingWithDetails | null>(null);
+  const [returningBooking, setReturningBooking] = useState<LegacyFlatBookingWithDetails | null>(null);
   const [viewingBookingId, setViewingBookingId] = useState<string | null>(null);
 
   // Deep link from elsewhere (e.g. the Dashboard) straight into a specific

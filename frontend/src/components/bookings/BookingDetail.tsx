@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
-import { fetchBooking, type BookingDetail as BookingDetailData } from "../../lib/bookings";
+import { fetchLegacyBooking, type LegacyFlatBookingDetail as BookingDetailData } from "../../lib/bookings";
 import {
   fetchPayments,
   recordPayment,
@@ -30,7 +30,7 @@ export function BookingDetail({ bookingId, onBack }: { bookingId: string; onBack
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    return Promise.all([fetchBooking(bookingId), fetchPayments(bookingId)])
+    return Promise.all([fetchLegacyBooking(bookingId), fetchPayments(bookingId)])
       .then(([b, p]) => {
         setBooking(b);
         setPayments(p);

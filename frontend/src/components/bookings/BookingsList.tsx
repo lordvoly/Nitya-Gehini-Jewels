@@ -1,21 +1,21 @@
 import { useCallback, useEffect, useState } from "react";
-import { fetchBookings, type BookingWithDetails } from "../../lib/bookings";
+import { fetchLegacyBookings, type LegacyFlatBookingWithDetails } from "../../lib/bookings";
 import { bookingStatusPill } from "../../lib/statusPill";
 
 export function BookingsList({
   onProcessReturn,
   onViewDetail,
 }: {
-  onProcessReturn: (booking: BookingWithDetails) => void;
+  onProcessReturn: (booking: LegacyFlatBookingWithDetails) => void;
   onViewDetail: (bookingId: string) => void;
 }) {
-  const [bookings, setBookings] = useState<BookingWithDetails[]>([]);
+  const [bookings, setBookings] = useState<LegacyFlatBookingWithDetails[]>([]);
   const [loading, setLoading] = useState(false);
 
   const refresh = useCallback(async () => {
     setLoading(true);
     try {
-      setBookings(await fetchBookings());
+      setBookings(await fetchLegacyBookings());
     } finally {
       setLoading(false);
     }

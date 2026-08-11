@@ -89,6 +89,10 @@ export default function ReportsPage() {
           <div className="stat-value">₹{summary.total_revenue}</div>
           <div className="stat-label">Total revenue (price charged)</div>
         </div>
+        <p className="wizard-hint">
+          Total bookings counts family transactions (one visit, however many items). Rentals/Sales counts
+          individual items — a visit with one rental and one sale in the same booking adds 1 to both.
+        </p>
       </div>
 
       <label className="field-label checkbox-row">

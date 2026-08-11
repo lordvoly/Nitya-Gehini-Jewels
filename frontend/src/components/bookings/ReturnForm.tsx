@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from "react";
-import { processReturn, type Booking, type BookingWithDetails } from "../../lib/bookings";
+import { processLegacyReturn, type LegacyFlatBooking, type LegacyFlatBookingWithDetails } from "../../lib/bookings";
 
-export function ReturnForm({ booking, onCancel }: { booking: BookingWithDetails; onCancel: () => void }) {
+export function ReturnForm({ booking, onCancel }: { booking: LegacyFlatBookingWithDetails; onCancel: () => void }) {
   // Combined from two sources: the item's own components template (only
   // for set items — items.components itself is never touched here) and
   // this booking's own custom_addons (free-text extras added at booking
@@ -23,7 +23,7 @@ export function ReturnForm({ booking, onCancel }: { booking: BookingWithDetails;
   const [depositRefundDate, setDepositRefundDate] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
-  const [result, setResult] = useState<Booking | null>(null);
+  const [result, setResult] = useState<LegacyFlatBooking | null>(null);
 
   function toggleComponent(name: string) {
     setChecklist((c) => ({ ...c, [name]: !c[name] }));
@@ -34,7 +34,7 @@ export function ReturnForm({ booking, onCancel }: { booking: BookingWithDetails;
     setError(null);
     setSaving(true);
     try {
-      const updated = await processReturn(booking.id, {
+      const updated = await processLegacyReturn(booking, {
         return_checklist: checklistNames.length > 0 ? checklist : null,
         return_notes: returnNotes.trim() || null,
         actual_return_date: actualReturnDate || null,

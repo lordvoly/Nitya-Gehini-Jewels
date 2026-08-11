@@ -52,9 +52,9 @@ export default function DashboardPage() {
         <h2>Today's Returns Due ({due_today.length})</h2>
         {due_today.length === 0 && <p className="wizard-hint">Nothing due back today.</p>}
         {due_today.map((b) => (
-          <Link key={b.id} to={`/bookings?booking=${b.id}`} className="found-panel dashboard-link">
+          <Link key={b.id} to={`/bookings?booking=${b.booking_id}`} className="found-panel dashboard-link">
             <p>
-              <strong>{b.booking_code}</strong> — {b.items?.item_code} {b.items?.name} · {b.customers?.name}
+              <strong>{b.bookings?.booking_code}</strong> — {b.items?.item_code} {b.items?.name} · {b.customers?.name}
             </p>
           </Link>
         ))}
@@ -64,7 +64,7 @@ export default function DashboardPage() {
         <h2>Overdue Rentals ({overdue.length})</h2>
         {overdue.length === 0 && <p className="wizard-hint">Nothing overdue.</p>}
         {urgentOverdue.map((b) => (
-          <Link key={b.id} to={`/bookings?booking=${b.id}`} className="overdue-panel urgent dashboard-link">
+          <Link key={b.id} to={`/bookings?booking=${b.booking_id}`} className="overdue-panel urgent dashboard-link">
             <p>
               <span className="pill pill-attention">Next customer waiting</span>
             </p>
@@ -78,7 +78,7 @@ export default function DashboardPage() {
           </Link>
         ))}
         {otherOverdue.map((b) => (
-          <Link key={b.id} to={`/bookings?booking=${b.id}`} className="overdue-panel dashboard-link">
+          <Link key={b.id} to={`/bookings?booking=${b.booking_id}`} className="overdue-panel dashboard-link">
             <p>
               <strong>{b.booking_code}</strong> — {b.items?.item_code} {b.items?.name} · {b.customers?.name} ·{" "}
               {Math.abs(b.days_until_return)} day{Math.abs(b.days_until_return) === 1 ? "" : "s"} overdue
