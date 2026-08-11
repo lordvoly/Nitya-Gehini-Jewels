@@ -547,9 +547,9 @@ bookingsRouter.post("/:bookingId/items", async (req, res) => {
     .eq("booking_id", req.params.bookingId)
     .eq("item_id", input.item_id)
     .neq("status", "cancelled")
-    .maybeSingle();
+    .limit(1);
   if (existingError) return res.status(500).json({ error: existingError.message });
-  if (existingForItem) {
+  if (existingForItem && existingForItem.length > 0) {
     return res.status(409).json({ error: "This item is already included in this booking" });
   }
 
