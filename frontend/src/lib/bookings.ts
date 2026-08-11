@@ -60,8 +60,8 @@ export interface BookingItem {
 }
 
 // The parent/family transaction. total_paid/balance_due (from
-// booking_financials_v2) and computed_status/*_item_count (from
-// booking_status_v2) are merged in server-side at read time — never stored,
+// booking_financials) and computed_status/*_item_count (from
+// booking_status) are merged in server-side at read time — never stored,
 // same rule as everywhere else in this app.
 export interface Booking {
   id: string;

@@ -12,13 +12,6 @@ export const bookingsRouter = Router();
 // reports, tools) still wants exactly this list.
 export const ACTIVE_STATUSES = ["booked", "out"];
 
-// NOTE — Checkpoint (a) / preview-branch code: every view name below is
-// suffixed `_v2` (booking_financials_v2, booking_status_v2, etc.) because
-// Stage 2 (03_schema_cutover.sql) hasn't renamed them into their permanent
-// names yet — see PROJECT_PLAN_V2.md §8. At cutover time this is a
-// mechanical find-and-replace of "_v2" -> "" across this file, done in the
-// same deploy as the cutover migration, not before.
-
 const ITEMS_EMBED = "item_code, name, item_type, tracking_type, components";
 const BOOKING_ITEMS_EMBED = `*, items(${ITEMS_EMBED})`;
 
@@ -28,7 +21,7 @@ const BOOKING_ITEMS_EMBED = `*, items(${ITEMS_EMBED})`;
 // bookings.item_id, which pointed at a single item per row) — so, unlike
 // booking_financials/booking_status below, the item nesting itself is a
 // genuine PostgREST relationship embed, not a two-query merge.
-// booking_financials_v2/booking_status_v2 remain computed VIEWS with no real
+// booking_financials/booking_status remain computed VIEWS with no real
 // FK to bookings, so total_paid/balance_due/computed_status/*_item_count
 // still need the same two-queries-plus-merge pattern used everywhere else
 // in this codebase for that reason.
@@ -46,9 +39,9 @@ bookingsRouter.get("/", async (req, res) => {
   if (ids.length === 0) return res.json([]);
 
   const [{ data: financials, error: financialsError }, { data: statuses, error: statusesError }] = await Promise.all([
-    supabase.from("booking_financials_v2").select("booking_id, total_paid, balance_due, price_charged").in("booking_id", ids),
+    supabase.from("booking_financials").select("booking_id, total_paid, balance_due, price_charged").in("booking_id", ids),
     supabase
-      .from("booking_status_v2")
+      .from("booking_status")
       .select("booking_id, computed_status, active_item_count, resolved_item_count")
       .in("booking_id", ids),
   ]);
@@ -78,13 +71,13 @@ bookingsRouter.get("/", async (req, res) => {
 });
 
 bookingsRouter.get("/overdue", async (_req, res) => {
-  const { data, error } = await supabase.from("overdue_rentals_v2").select("*");
+  const { data, error } = await supabase.from("overdue_rentals").select("*");
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
 
 bookingsRouter.get("/upcoming-returns", async (_req, res) => {
-  const { data, error } = await supabase.from("upcoming_returns_v2").select("*");
+  const { data, error } = await supabase.from("upcoming_returns").select("*");
   if (error) return res.status(500).json({ error: error.message });
   res.json(data);
 });
@@ -105,7 +98,7 @@ bookingsRouter.get("/next-code", async (_req, res) => {
 
 // GET /api/bookings/:id — parent + nested line items, each carrying its own
 // "When Returns" chain (previous_booking_item / future_booking_items),
-// computed from booking_sequence_v2 keyed by booking_item_id — a 3-item
+// computed from booking_sequence keyed by booking_item_id — a 3-item
 // family booking has three independent physical items, each with its own
 // neighbors, so this is N independent chains, not one for the whole
 // booking (§8 decision 5). Only meaningful for tracking_type = 'unique'
@@ -133,7 +126,7 @@ bookingsRouter.get("/:id", async (req, res) => {
       }
 
       const { data: sequence, error: sequenceError } = await supabase
-        .from("booking_sequence_v2")
+        .from("booking_sequence")
         .select("prev_booking_item_id, prev_booking_code, prev_customer_name, prev_pickup_date")
         .eq("booking_item_id", bi.id)
         .maybeSingle();
@@ -177,9 +170,9 @@ bookingsRouter.get("/:id", async (req, res) => {
   );
 
   const [{ data: financials, error: financialsError }, { data: status, error: statusError }] = await Promise.all([
-    supabase.from("booking_financials_v2").select("total_paid, balance_due, price_charged").eq("booking_id", req.params.id).maybeSingle(),
+    supabase.from("booking_financials").select("total_paid, balance_due, price_charged").eq("booking_id", req.params.id).maybeSingle(),
     supabase
-      .from("booking_status_v2")
+      .from("booking_status")
       .select("computed_status, active_item_count, resolved_item_count")
       .eq("booking_id", req.params.id)
       .maybeSingle(),
@@ -465,9 +458,9 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
             .select(`*, customers(name, phone), booking_items(${BOOKING_ITEMS_EMBED})`)
             .eq("id", bookingId)
             .single(),
-          supabase.from("booking_financials_v2").select("total_paid, balance_due, price_charged").eq("booking_id", bookingId).maybeSingle(),
+          supabase.from("booking_financials").select("total_paid, balance_due, price_charged").eq("booking_id", bookingId).maybeSingle(),
           supabase
-            .from("booking_status_v2")
+            .from("booking_status")
             .select("computed_status, active_item_count, resolved_item_count")
             .eq("booking_id", bookingId)
             .maybeSingle(),
@@ -612,7 +605,7 @@ bookingsRouter.post("/:bookingId/items/:itemId/cancel", async (req, res) => {
     .reduce((sum, s) => sum + Number(s.price_charged), 0);
 
   const { data: financials, error: financialsError } = await supabase
-    .from("booking_financials_v2")
+    .from("booking_financials")
     .select("total_paid")
     .eq("booking_id", req.params.bookingId)
     .maybeSingle();

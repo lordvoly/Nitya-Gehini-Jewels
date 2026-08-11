@@ -4,10 +4,6 @@ import { istMonthRange, istDaysAgo } from "../lib/dates.js";
 
 export const reportsRouter = Router();
 
-// NOTE — Checkpoint (a) / preview-branch code: no views are read here, but
-// see PROJECT_PLAN_V2.md §8 for the same _v2-until-cutover note that
-// applies to dashboard.ts/bookings.ts.
-
 interface BookingItemRow {
   id: string;
   booking_id: string;

@@ -4,10 +4,6 @@ import { supabase } from "../lib/supabase.js";
  * Tools exposed to Claude Haiku 4.5 in the chat endpoint (Phase 3).
  * Every answer the bot gives must be grounded in one of these — it must
  * never invent a location, price, or availability.
- *
- * NOTE — Checkpoint (a) / preview-branch code: upcoming_returns_v2 /
- * overdue_rentals_v2 are the `_v2`-suffixed views until Stage 2 renames
- * them — see PROJECT_PLAN_V2.md §8.
  */
 
 export const toolDefinitions = [
@@ -118,13 +114,13 @@ export async function runTool(name: string, input: Record<string, unknown>) {
       return { customers, bookings };
     }
     case "get_upcoming_returns": {
-      const { data, error } = await supabase.from("upcoming_returns_v2").select("*");
+      const { data, error } = await supabase.from("upcoming_returns").select("*");
       if (error) throw error;
       const daysAhead = Number(input.days_ahead ?? 7);
       return (data ?? []).filter((b) => (b.days_until_return ?? Infinity) <= daysAhead);
     }
     case "get_overdue_rentals": {
-      const { data, error } = await supabase.from("overdue_rentals_v2").select("*");
+      const { data, error } = await supabase.from("overdue_rentals").select("*");
       if (error) throw error;
       return data;
     }

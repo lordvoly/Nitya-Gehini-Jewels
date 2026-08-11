@@ -5,9 +5,6 @@ import { ACTIVE_STATUSES } from "./bookings.js";
 
 export const dashboardRouter = Router();
 
-// NOTE — Checkpoint (a) / preview-branch code: view names below are
-// suffixed `_v2` until Stage 2 renames them — see PROJECT_PLAN_V2.md §8.
-
 // GET /api/dashboard/summary — read-only status snapshot for the dashboard.
 // Composes existing tables/views rather than reimplementing any of the
 // booking/conflict/financial logic that already lives in bookings.ts — this
@@ -17,7 +14,7 @@ export const dashboardRouter = Router();
 // schedules.
 dashboardRouter.get("/summary", async (_req, res) => {
   // Today's returns due: return_date = today (IST), still active. Distinct
-  // from upcoming_returns_v2 (return_date >= today) and overdue_rentals_v2
+  // from upcoming_returns (return_date >= today) and overdue_rentals
   // (return_date < today) — this is exactly "due today", regardless of
   // whether it was ever formally checked out.
   const { data: dueTodayRows, error: dueTodayError } = await supabase
@@ -41,11 +38,11 @@ dashboardRouter.get("/summary", async (_req, res) => {
   });
 
   // Overdue rentals, including the next_customer_waiting urgency flag —
-  // overdue_rentals_v2 has no real FK for items/customers (it's a view), so
+  // overdue_rentals has no real FK for items/customers (it's a view), so
   // batch-fetch and merge by id, same two-queries-plus-merge pattern used
   // elsewhere.
   const { data: overdueRows, error: overdueError } = await supabase
-    .from("overdue_rentals_v2")
+    .from("overdue_rentals")
     .select("*")
     .order("return_date");
   if (overdueError) return res.status(500).json({ error: overdueError.message });
@@ -72,12 +69,12 @@ dashboardRouter.get("/summary", async (_req, res) => {
     customers: customersById.get(r.customer_id) ?? null,
   }));
 
-  // Outstanding balance: sum of booking_financials_v2.balance_due over
+  // Outstanding balance: sum of booking_financials.balance_due over
   // bookings whose computed status is 'active' — preserves the exact old
   // semantics (booked/out-equivalent only, not completed/cancelled), just
-  // re-derived through booking_status_v2 instead of a stored column.
+  // re-derived through booking_status instead of a stored column.
   const { data: activeStatusRows, error: activeStatusError } = await supabase
-    .from("booking_status_v2")
+    .from("booking_status")
     .select("booking_id")
     .eq("computed_status", "active");
   if (activeStatusError) return res.status(500).json({ error: activeStatusError.message });
@@ -85,7 +82,7 @@ dashboardRouter.get("/summary", async (_req, res) => {
   let outstanding_balance = 0;
   if (activeIds.length) {
     const { data: financials, error: financialsError } = await supabase
-      .from("booking_financials_v2")
+      .from("booking_financials")
       .select("balance_due")
       .in("booking_id", activeIds);
     if (financialsError) return res.status(500).json({ error: financialsError.message });

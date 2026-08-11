@@ -38,7 +38,7 @@ export function bookingItemStatusPill(status: BookingItemStatus): PillInfo {
 
 // The parent family booking's computed rollup (§8 decision B) — Active
 // bookings additionally get the "X of Y items returned" fraction text,
-// built here from booking_status_v2's raw counts rather than in the view
+// built here from booking_status's raw counts rather than in the view
 // (compute the numbers, format at the edge — same rule as every other
 // computed value in this app).
 export function bookingComputedStatusPill(
