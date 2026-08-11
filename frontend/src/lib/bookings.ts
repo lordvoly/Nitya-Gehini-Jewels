@@ -391,7 +391,10 @@ export async function processLegacyReturn(
   booking: LegacyFlatBooking,
   payload: ReturnPayload,
 ): Promise<LegacyFlatBooking> {
-  const updatedItem = await processReturn(booking.id, booking.booking_item_id, payload);
+  // The route matches on items.id, not booking_items.id (§8 decision D's
+  // URL shape is /items/:itemId/..., keyed on the physical item) — use
+  // booking.item_id, not booking.booking_item_id.
+  const updatedItem = await processReturn(booking.id, booking.item_id, payload);
   return {
     ...booking,
     status: updatedItem.status,
