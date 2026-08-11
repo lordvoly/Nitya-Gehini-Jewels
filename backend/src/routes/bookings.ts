@@ -438,14 +438,35 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
         }
       }
 
-      const { data: full, error: fullError } = await supabase
-        .from("bookings")
-        .select(`*, customers(name, phone), booking_items(${BOOKING_ITEMS_EMBED})`)
-        .eq("id", (data as { id: string }).id)
-        .single();
+      const bookingId = (data as { id: string }).id;
+      const [{ data: full, error: fullError }, { data: financials, error: financialsError }, { data: status, error: statusError }] =
+        await Promise.all([
+          supabase
+            .from("bookings")
+            .select(`*, customers(name, phone), booking_items(${BOOKING_ITEMS_EMBED})`)
+            .eq("id", bookingId)
+            .single(),
+          supabase.from("booking_financials_v2").select("total_paid, balance_due, price_charged").eq("booking_id", bookingId).maybeSingle(),
+          supabase
+            .from("booking_status_v2")
+            .select("computed_status, active_item_count, resolved_item_count")
+            .eq("booking_id", bookingId)
+            .maybeSingle(),
+        ]);
       if (fullError) return res.status(500).json({ error: fullError.message });
+      if (financialsError) return res.status(500).json({ error: financialsError.message });
+      if (statusError) return res.status(500).json({ error: statusError.message });
 
-      return res.status(201).json({ ...full, warning });
+      return res.status(201).json({
+        ...full,
+        total_paid: financials?.total_paid ?? 0,
+        balance_due: financials?.balance_due ?? 0,
+        price_charged: financials?.price_charged ?? 0,
+        computed_status: status?.computed_status ?? "cancelled",
+        active_item_count: status?.active_item_count ?? 0,
+        resolved_item_count: status?.resolved_item_count ?? 0,
+        warning,
+      });
     }
 
     // P0001 = the RPC's own RAISE EXCEPTION (a conflict slipped past the

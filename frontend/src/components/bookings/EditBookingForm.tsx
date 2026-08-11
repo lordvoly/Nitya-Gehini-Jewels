@@ -144,14 +144,18 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     setParentError(null);
     setSavingParent(true);
     try {
-      const updated = await updateBooking(bookingId, {
+      // PATCH /:id returns only the updated row's own columns (no
+      // customers/booking_items/financials embed) — re-fetch the full shape
+      // via load() rather than setBooking()-ing the PATCH response directly,
+      // which would wipe booking.booking_items and crash the item list below.
+      await updateBooking(bookingId, {
         customer_id: customer.id,
         gst_applicable: gstApplicable,
         gst_invoice_number: gstApplicable ? gstInvoiceNumber.trim() || null : null,
         hsn_code: gstApplicable ? hsnCode.trim() || null : null,
         tax_rate: gstApplicable ? toNumberOrNull(taxRate) : null,
       });
-      setBooking(updated);
+      await load();
     } catch (err) {
       setParentError(err instanceof Error ? err.message : "Failed to save");
     } finally {
@@ -179,7 +183,11 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     setItemErrors((e) => ({ ...e, [bi.id]: "" }));
     setSavingItemId(bi.id);
     try {
-      const updated = await updateBookingItem(bookingId, bi.item_id, {
+      // PATCH .../items/:itemId returns only the raw booking_items row (no
+      // nested items(item_code, name, ...) embed) — re-fetch via load()
+      // rather than splicing that response into state, which would blank
+      // out this row's item name/code in the header above.
+      await updateBookingItem(bookingId, bi.item_id, {
         pickup_date: state.pickupDate,
         return_date: bi.type === "rental" ? state.returnDate || null : null,
         price_charged: toNumberOrNull(state.price) ?? 0,
@@ -188,7 +196,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
         deposit_collected: bi.type === "rental" ? state.depositCollected : false,
         custom_addons: state.customAddons,
       });
-      setBooking((b) => (b ? { ...b, booking_items: b.booking_items.map((x) => (x.id === bi.id ? updated : x)) } : b));
+      await load();
     } catch (err) {
       setItemErrors((e) => ({ ...e, [bi.id]: err instanceof Error ? err.message : "Failed to save" }));
     } finally {
@@ -200,8 +208,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     setRemoveErrors((e) => ({ ...e, [bi.id]: "" }));
     setRemovingId(bi.id);
     try {
-      const updated = await cancelBookingItem(bookingId, bi.item_id);
-      setBooking((b) => (b ? { ...b, booking_items: b.booking_items.map((x) => (x.id === bi.id ? updated : x)) } : b));
+      await cancelBookingItem(bookingId, bi.item_id);
       setConfirmingRemoveId(null);
       await load();
     } catch (err) {
