@@ -376,9 +376,28 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
     return res.status(400).json({ error: "advance_method is required when recording an advance payment" });
   }
 
+  // Every downstream per-item route (edit/cancel/return) looks a line item
+  // up by (booking_id, item_id) and expects exactly one row back — the same
+  // physical item can never appear twice in one family booking, or those
+  // routes become ambiguous. The RPC only catches this incidentally (when
+  // the duplicate would also fail its own date/quantity check), so it's
+  // enforced explicitly here regardless of whether the two entries would
+  // otherwise conflict. Reported through the same item_conflicts shape as
+  // the checks below so the frontend surfaces it inline on the same row.
   const itemConflicts: ItemConflict[] = [];
   const warnings: string[] = [];
+  const seenItemIds = new Set<string>();
   for (let i = 0; i < lineItems.length; i++) {
+    if (seenItemIds.has(lineItems[i].item_id)) {
+      itemConflicts.push({
+        index: i,
+        item_id: lineItems[i].item_id,
+        error: "This item is already included elsewhere in this booking",
+      });
+      continue;
+    }
+    seenItemIds.add(lineItems[i].item_id);
+
     const conflict = await checkItemConflict(lineItems[i]);
     if (conflict) {
       itemConflicts.push({ index: i, item_id: lineItems[i].item_id, error: conflict.error, conflicts: conflict.conflicts });
@@ -515,6 +534,23 @@ bookingsRouter.post("/:bookingId/items", async (req, res) => {
   }
   if (input.price_charged == null) {
     return res.status(400).json({ error: "price_charged is required" });
+  }
+
+  // Same invariant as POST / (create): a physical item can only appear once
+  // per family booking, since every per-item route below looks a line item
+  // up by (booking_id, item_id) and expects exactly one row. Scoped to
+  // non-cancelled rows — a cancelled line for this item doesn't block
+  // re-adding it.
+  const { data: existingForItem, error: existingError } = await supabase
+    .from("booking_items")
+    .select("id")
+    .eq("booking_id", req.params.bookingId)
+    .eq("item_id", input.item_id)
+    .neq("status", "cancelled")
+    .maybeSingle();
+  if (existingError) return res.status(500).json({ error: existingError.message });
+  if (existingForItem) {
+    return res.status(409).json({ error: "This item is already included in this booking" });
   }
 
   const conflict = await checkItemConflict(input);
