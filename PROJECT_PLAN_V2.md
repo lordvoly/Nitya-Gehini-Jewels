@@ -215,7 +215,7 @@ This document is meant to be handed to Claude Code as the spec to scaffold from.
 
 ---
 
-## 8. Multi-Item Bookings Restructuring (Checkpoint (c) DONE 2026-08-11 — Stage 2 not yet executed)
+## 8. Multi-Item Bookings Restructuring (Stage 2 cutover executed 2026-08-11 — see §8.1 for post-cutover work, including refund infrastructure)
 
 **Checkpoint (c) — Booking-specific component cluster — DONE 2026-08-11,
 tested against the real Vercel preview + `ngj-backend-checkpoint-a`. Three
@@ -1565,3 +1565,140 @@ frontend components (SQL views `booking_financials`/`overdue_rentals`/
 since it's a snapshot of the pre-migration codebase, not a durable design
 decision. Now superseded by the file-by-file application-code migration plan
 immediately above, which was scoped against the real current code.
+
+### §8.1 Stage 2 cutover — executed 2026-08-11
+
+Run as one tight, uninterrupted sequence, per explicit instruction: merged
+`feat/booking-items-checkpoint-a` to `master` locally, ran
+`03_schema_cutover.sql` against production (drops the old single-item
+`bookings` columns/views/`booking_status` enum, renames every `_v2` view to
+its permanent name), pushed `master` immediately after, watched both Render
+and Vercel to a fresh successful deploy, then verified against the real live
+site: logged in, viewed Dashboard, created one real throwaway booking,
+processed its return, confirmed against Supabase directly, deleted the test
+data. Two real bugs were caught and fixed as part of this sequence, not
+found in advance:
+
+- The merged code still referenced `_v2`-suffixed views in 4 backend files +
+  2 frontend files (the blue-green rename was only ever applied to the SQL
+  side during Checkpoint (a)–(c) prep) — fixed with a mechanical replace,
+  committed separately from the destructive SQL so the deployed code and the
+  migrated schema landed together.
+- Vercel's Production environment was missing `VITE_API_URL` entirely (only
+  two Preview-scoped entries existed from earlier checkpoint testing) —
+  production had been silently serving a build with `localhost:4000` baked
+  in for roughly 5 hours before this was caught during step 4's live check.
+  Fixed by adding a Production-scoped `VITE_API_URL` and redeploying.
+
+Pre-flight (before running the cutover): confirmed via `pg_policies` that no
+RLS policy anywhere references a column the cutover drops, and via a catalog
+query that `bookings.status` was genuinely the only column ever typed
+`booking_status` before that enum was dropped. Separately, a gap in
+`create_booking_with_items` was found by code review (tracing the actual
+write path, before either handler was ever exercised live) and fixed before
+Stage 2: the function's date-overlap conflict check didn't stop the same
+`item_id` from appearing twice in one `p_items` array on non-overlapping
+dates — an explicit uniqueness check was added at the top of the function,
+before any inserts, and proven live by calling the RPC directly (two
+non-overlapping lines on one unique item went from a silent 200 with two
+ambiguous rows to a clean `400`/rollback with zero rows left behind).
+
+Post-cutover housekeeping: deleted the temporary `ngj-backend-checkpoint-a`
+Render service and the `feat/booking-items-checkpoint-a` branch (fully
+merged, nothing lost), and removed the two leftover Preview-scoped
+`VITE_API_URL` Vercel entries.
+
+### §8.2 Refund infrastructure — lost-and-found and cancel-with-refund (2026-08-12)
+
+Two features sharing one mechanism, both explicitly reversing this plan's
+earlier decision 6 (§8, "no plain Cancel Booking action exists anywhere in
+this form... held entirely until the refund/lost-and-found infrastructure
+exists") — that infrastructure is what this section builds, so the
+restriction is lifted.
+
+**Schema** (`supabase/migrations/20260812130000_refund_infrastructure.sql`):
+`payments` gains `type` (enum `payment`/`refund`, default `payment`); new
+table `item_charges` (`booking_item_id` FK, `description`, `charge_amount`,
+`charged_at`, `resolved`, `resolved_at`, `refund_amount`,
+`refund_payment_id` FK to `payments`, a `resolved_fields_together` CHECK
+keeping the four resolution columns null-together or non-null-together).
+Deliberately no change to the `balance_due = price_charged - sum(amount)`
+formula in `booking_financials` — every new money movement (a lost-item
+charge, a refund on removal, a refund on cancel, resolving a charge) is
+expressed purely through the **sign** of a new `payments` row against the
+existing formula. This needed working backward, algebraically, from what
+each of the four confirm-live scenarios required `balance_due` to do:
+charges and removal/cancel refunds are NEGATIVE rows (money owed increases,
+or paid-in money is given back), but *resolving* a charge is a POSITIVE
+`refund`-type row, since it nets back out the charge's own earlier negative
+row rather than representing money actually leaving the shop.
+
+**Lost-and-found** (`ReturnForm.tsx` + `backend/src/routes/bookings.ts`'s
+return handler): each unchecked checklist item gets an inline "Charge for
+this" offer, description pre-filled from the component/add-on name and
+editable, amount required. Checked entries create one `item_charges` row
+(`resolved=false`) plus one linked negative `payments` row
+(`type='payment'`) in the same request as the return itself; a failed
+charge insert doesn't fail the return, it appends to the existing
+non-blocking `warning` field instead. New `backend/src/routes/itemCharges.ts`
+(`GET /api/item-charges?resolved=false`, the universal cross-booking
+outstanding view, nested through real FKs — `item_charges → booking_items →
+items`/`bookings → customers` — in one PostgREST embed, unlike the
+computed-view separate-queries-plus-merge pattern used elsewhere in this
+app) and `POST /api/item-charges/:id/resolve` (writes a positive `refund`
+payment, then flips `resolved`/`resolved_at`/`refund_amount`/
+`refund_payment_id` together). New frontend page `ChargesPage.tsx`
+("Outstanding Charges", added to the bottom tab bar as "Charges") lists
+every row with booking code (deep-linking to `BookingDetail` via the
+existing `?booking=<id>` pattern), customer, item, description, amount, and
+an inline Resolve action pre-filled with `charge_amount`, editable.
+
+**Remove-item and Cancel Booking** (`EditBookingForm.tsx` +
+`bookings.ts`'s `/items/:itemId/cancel` and new `/:id/cancel` routes):
+removing an item no longer hard-blocks when it would leave the customer
+overpaid. `POST .../cancel` without a `refund_amount` now returns `409
+{ error, refund_amount_needed }` (the exact amount) instead of a dead end;
+a second call WITH `refund_amount` records a negative `refund` payment and
+completes the removal — surfaced in the frontend as a
+`CancelItemResult` discriminated union (`cancelled` | `refund_needed`) in
+`lib/bookings.ts`, with the confirm-row switching to an editable
+refund-amount field pre-filled from the backend's number on the
+`refund_needed` branch. New whole-booking `POST /api/bookings/:id/cancel`
+loops the same mechanism server-side across every still-active line item
+in one transaction-equivalent sequence — one refund for the whole booking,
+computed by the frontend from `booking.total_paid` (editable) rather than
+prompted per item, since the frontend already has that number and doesn't
+need a probe-first round trip the way single-item removal does. Every item
+flips to `status='cancelled'`; `computed_status` reads `'cancelled'`
+automatically off the existing `booking_status` rollup (`active_item_count
+= 0`) with no new status logic. Nothing is ever deleted — full booking
+history stays intact, matching how single-item removal already worked.
+
+**Verified live**, real numbers, against real production (throwaway
+`ZZTEST`-prefixed fixtures via a throwaway admin test account, never the
+real admin credentials; cleaned up after, confirmed via direct Supabase
+queries both before and after):
+
+1. Returned a rental with one checklist component left unchecked, charged
+   ₹800 for it — `balance_due` rose from ₹0 to exactly ₹800, a `payments`
+   row of `-800` (`type='payment'`) appeared, and the charge showed up in
+   Outstanding Charges with the right booking/customer/item.
+2. Resolved that charge for ₹800 — it disappeared from Outstanding Charges,
+   a `+800` `refund`-type payment appeared alongside the original `-800`
+   payment, and `balance_due` dropped back to ₹0.
+3. On a 2-item, fully-paid booking (₹4000 total), removed one ₹2000 item —
+   first call correctly returned the exact refund needed (₹2000) instead of
+   blocking; confirming it recorded a `-2000` refund payment, the item
+   flipped to `cancelled`, and the booking's `price_charged`/`total_paid`/
+   `balance_due` all landed at ₹2000/₹2000/₹0.
+4. Cancelled a whole 3-item booking (₹3000 total, ₹1200 advance paid) via
+   the new Cancel Booking action, refund amount pre-filled with the ₹1200
+   already paid — one `-1200` refund payment was recorded, all three items
+   flipped to `cancelled`, `computed_status` read `'cancelled'`, and
+   `total_paid`/`balance_due` both landed at ₹0.
+
+All four confirmed both in the actual rendered UI (not just via direct API
+calls) and by querying `payments`/`booking_items` directly in Supabase
+afterward. All test fixtures (3 bookings, 6 items, 1 customer, the
+throwaway admin account) deleted after; real data (`NGJ-0001` /
+`Peacock Bridal Set`, `RNT-0001`) confirmed untouched throughout.
