@@ -85,13 +85,19 @@ export function BookingsList({
                         {bi.type === "rental" ? "Rental" : "Sale"} · {bi.pickup_date}
                         {bi.return_date ? ` → ${bi.return_date}` : ""}
                       </span>
-                      {bi.items?.tracking_type === "unique" && (
-                        <span className="booking-card-item-next">
-                          {bi.future_booking_items && bi.future_booking_items.length > 0
-                            ? `Next: ${bi.future_booking_items[0].customer_name ?? "—"}, ${bi.future_booking_items[0].pickup_date}`
-                            : "No bookings ahead"}
-                        </span>
-                      )}
+                      {bi.items?.tracking_type === "unique" &&
+                        (bi.future_booking_items && bi.future_booking_items.length > 0 ? (
+                          <button
+                            type="button"
+                            className="booking-card-item-next booking-card-item-next-link"
+                            onClick={() => onViewDetail(bi.future_booking_items![0].booking_id!)}
+                          >
+                            Next: {bi.future_booking_items[0].booking_code} —{" "}
+                            {bi.future_booking_items[0].customer_name ?? "—"}, {bi.future_booking_items[0].pickup_date}
+                          </button>
+                        ) : (
+                          <span className="booking-card-item-next">No bookings ahead</span>
+                        ))}
                     </div>
                     <div className="booking-card-item-actions">
                       <span className={`pill ${itemPill.className}`}>{itemPill.label}</span>

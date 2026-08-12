@@ -54,7 +54,7 @@ async function attachChains<T extends ChainableBookingItem>(
 
       const { data: itemChain, error: chainError } = await supabase
         .from("booking_items")
-        .select("id, pickup_date, bookings(booking_code, customers(name))")
+        .select("id, booking_id, pickup_date, bookings(booking_code, customers(name))")
         .eq("item_id", bi.item_id)
         .neq("status", "cancelled")
         .order("pickup_date", { ascending: true })
@@ -67,6 +67,10 @@ async function attachChains<T extends ChainableBookingItem>(
           ? []
           : (itemChain ?? []).slice(currentIndex + 1).map((row) => ({
               id: row.id,
+              // The line item's own booking_id — lets a caller (e.g.
+              // BookingsList's "Next: ..." line) link straight into that
+              // future booking's detail view without a second lookup.
+              booking_id: row.booking_id,
               booking_code: (row as unknown as { bookings: { booking_code: string; customers: { name: string } | null } | null })
                 .bookings?.booking_code,
               customer_name: (row as unknown as { bookings: { booking_code: string; customers: { name: string } | null } | null })

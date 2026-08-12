@@ -23,6 +23,9 @@ export interface BookingCustomerSummary {
 
 export interface BookingChainLink {
   id: string;
+  // Only present on future_booking_items (the "next" direction) — that's
+  // the one direction anything actually links out to today.
+  booking_id?: string;
   booking_code: string;
   customer_name: string | null;
   pickup_date: string;
