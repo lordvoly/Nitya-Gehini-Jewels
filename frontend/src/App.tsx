@@ -19,7 +19,7 @@ const TABS = [
   { to: "/bookings", label: "Bookings" },
   { to: "/reports", label: "Reports" },
   { to: "/charges", label: "Charges" },
-  { to: "/assistant", label: "Assistant" },
+  { to: "/assistant", label: "Ask" },
 ];
 
 export default function App() {
