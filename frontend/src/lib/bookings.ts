@@ -153,6 +153,7 @@ export function fetchBookings(params?: {
   item_id?: string;
   customer_id?: string;
   computed_status?: BookingComputedStatus;
+  search?: string;
 }) {
   const qs = params ? new URLSearchParams(params as Record<string, string>).toString() : "";
   return apiFetch<Booking[]>(`/api/bookings${qs ? `?${qs}` : ""}`);

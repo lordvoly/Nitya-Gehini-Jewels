@@ -94,7 +94,9 @@ async function attachChains<T extends ChainableBookingItem>(
   );
 }
 
-// GET /api/bookings?item_id=&customer_id=&computed_status=
+const BOOKING_LIST_SELECT = `*, customers(name, phone), booking_items(${BOOKING_ITEMS_EMBED})`;
+
+// GET /api/bookings?item_id=&customer_id=&computed_status=&search=
 //
 // booking_items.booking_id / .item_id are real FKs (unlike the old
 // bookings.item_id, which pointed at a single item per row) — so, unlike
@@ -105,16 +107,41 @@ async function attachChains<T extends ChainableBookingItem>(
 // still need the same two-queries-plus-merge pattern used everywhere else
 // in this codebase for that reason.
 bookingsRouter.get("/", async (req, res) => {
-  let query = supabase
-    .from("bookings")
-    .select(`*, customers(name, phone), booking_items(${BOOKING_ITEMS_EMBED})`)
-    .order("created_at", { ascending: false });
-  if (typeof req.query.customer_id === "string") query = query.eq("customer_id", req.query.customer_id);
-  if (typeof req.query.item_id === "string") query = query.eq("booking_items.item_id", req.query.item_id);
-  const { data: bookings, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
+  const term = typeof req.query.search === "string" ? req.query.search.trim() : "";
 
-  const ids = (bookings ?? []).map((b) => b.id);
+  let bookings: Record<string, unknown>[] | null;
+
+  if (term) {
+    // Same separate-queries-plus-merge pattern as customers.ts's search:
+    // booking_code lives on bookings directly, but customer name lives on
+    // the joined customers table, and a single request can't OR-filter
+    // across a relationship boundary that way in PostgREST.
+    const [byCode, matchingCustomers] = await Promise.all([
+      supabase.from("bookings").select(BOOKING_LIST_SELECT).ilike("booking_code", `%${term}%`),
+      supabase.from("customers").select("id").ilike("name", `%${term}%`),
+    ]);
+    if (byCode.error) return res.status(500).json({ error: byCode.error.message });
+    if (matchingCustomers.error) return res.status(500).json({ error: matchingCustomers.error.message });
+
+    const customerIds = (matchingCustomers.data ?? []).map((c) => c.id);
+    const byCustomer = customerIds.length
+      ? await supabase.from("bookings").select(BOOKING_LIST_SELECT).in("customer_id", customerIds)
+      : { data: [] as Record<string, unknown>[], error: null };
+    if (byCustomer.error) return res.status(500).json({ error: byCustomer.error.message });
+
+    const merged = new Map<string, Record<string, unknown>>();
+    for (const b of [...(byCode.data ?? []), ...(byCustomer.data ?? [])]) merged.set(b.id as string, b);
+    bookings = Array.from(merged.values()).sort((a, b) => (b.created_at as string).localeCompare(a.created_at as string));
+  } else {
+    let query = supabase.from("bookings").select(BOOKING_LIST_SELECT).order("created_at", { ascending: false });
+    if (typeof req.query.customer_id === "string") query = query.eq("customer_id", req.query.customer_id);
+    if (typeof req.query.item_id === "string") query = query.eq("booking_items.item_id", req.query.item_id);
+    const { data, error } = await query;
+    if (error) return res.status(500).json({ error: error.message });
+    bookings = data;
+  }
+
+  const ids = (bookings ?? []).map((b) => b.id as string);
   if (ids.length === 0) return res.json([]);
 
   // Same per-item "When Returns" chain GET /:id computes, now also on the

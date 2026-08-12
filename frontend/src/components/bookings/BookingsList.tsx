@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useState } from "react";
 import { fetchBookings, type Booking, type BookingItem } from "../../lib/bookings";
 import { bookingItemStatusPill, bookingComputedStatusPill } from "../../lib/statusPill";
 import { formatDateDisplay } from "../../lib/dates";
@@ -16,35 +16,58 @@ export function BookingsList({
   onViewDetail: (bookingId: string) => void;
   onEditBooking: (bookingId: string) => void;
 }) {
+  const [term, setTerm] = useState("");
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(false);
 
-  const refresh = useCallback(async () => {
-    setLoading(true);
-    try {
-      setBookings(await fetchBookings());
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
+  // Same debounced, cancelled-flag-guarded search as CustomersList: a
+  // 300ms pause before the request fires, and a newer search's response
+  // can't be clobbered by an older one landing late.
   useEffect(() => {
-    refresh();
-  }, [refresh]);
+    let cancelled = false;
+    setLoading(true);
+    const handle = setTimeout(() => {
+      fetchBookings(term ? { search: term } : undefined)
+        .then((data) => {
+          if (!cancelled) setBookings(data);
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false);
+        });
+    }, 300);
+    return () => {
+      cancelled = true;
+      clearTimeout(handle);
+    };
+  }, [term]);
 
   return (
     <div>
+      <input
+        className="search-input"
+        type="text"
+        placeholder="Search by booking code or customer…"
+        value={term}
+        onChange={(e) => setTerm(e.target.value)}
+      />
       <div className="list-header">
-        <h2>All Bookings ({bookings.length})</h2>
-        <button className="btn-secondary" onClick={refresh} disabled={loading}>
-          {loading ? "Refreshing…" : "Refresh"}
-        </button>
+        <h2>{term ? `Results (${bookings.length})` : `All Bookings (${bookings.length})`}</h2>
+        {loading && <span className="wizard-hint">Searching…</span>}
       </div>
 
       {bookings.length === 0 && !loading && (
         <div className="empty-state">
-          <h3>No bookings yet</h3>
-          <p>Create your first rental or sale to see it here.</p>
+          {term ? (
+            <>
+              <h3>No bookings match</h3>
+              <p>Nothing found for "{term}" — check the spelling or try just the booking code.</p>
+            </>
+          ) : (
+            <>
+              <h3>No bookings yet</h3>
+              <p>Create your first rental or sale to see it here.</p>
+            </>
+          )}
         </div>
       )}
 
