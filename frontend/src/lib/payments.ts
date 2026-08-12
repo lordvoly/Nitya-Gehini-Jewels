@@ -12,12 +12,20 @@ export const PAYMENT_METHOD_LABELS: Record<PaymentMethod, string> = {
   other: "Other",
 };
 
+export type PaymentType = "payment" | "refund";
+
 export interface Payment {
   id: string;
   booking_id: string;
   amount: number;
   payment_date: string;
   method: PaymentMethod;
+  // Always present from the backend now — a plain 'payment' amount can
+  // still be negative (a lost-item charge recorded at return time; see
+  // the refund-infrastructure migration's sign-convention note), so this
+  // label is what actually distinguishes "money in" bookkeeping from a
+  // real refund, not the sign alone.
+  type: PaymentType;
   notes: string | null;
   created_at: string;
 }

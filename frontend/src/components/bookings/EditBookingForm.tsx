@@ -7,6 +7,7 @@ import {
   updateBookingItem,
   addBookingItem,
   cancelBookingItem,
+  cancelBooking,
   type Booking,
   type BookingItem,
   type BookingItemType,
@@ -71,11 +72,11 @@ function draftFromItem(bi: BookingItem): ItemEditState {
 }
 
 // Parent fields (customer, GST) + per-item field edits + Add Item + Remove
-// Item — decision 4/6 (§8): no plain "Cancel Booking" action exists anywhere
-// in this form. Removing an item never hard-deletes (backend flips status to
-// 'cancelled'); the backend blocks removal if it would push balance_due
-// negative, or if the item isn't currently booked/out — both surfaced here
-// as the exact backend error message, not re-derived client-side.
+// Item + whole-booking Cancel (§8 decision 6, now built on refund
+// infrastructure). Removing an item never hard-deletes (backend flips
+// status to 'cancelled'); it no longer blocks on a negative balance either
+// — the exact refund amount needed comes back from the backend and is
+// shown/editable here before confirming.
 export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: string; onDone: () => void; onCancel: () => void }) {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -97,11 +98,20 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
   const [removeErrors, setRemoveErrors] = useState<Record<string, string>>({});
+  // Populated only once the backend has told us removing this item would
+  // leave the customer overpaid — the exact amount it reports, editable
+  // before the second, confirming call.
+  const [refundNeeded, setRefundNeeded] = useState<Record<string, { message: string; amount: string }>>({});
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [draft, setDraft] = useState<NewItemDraft>(emptyDraft());
   const [addingItem, setAddingItem] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+
+  const [confirmingCancelBooking, setConfirmingCancelBooking] = useState(false);
+  const [cancelBookingRefund, setCancelBookingRefund] = useState("");
+  const [cancellingBooking, setCancellingBooking] = useState(false);
+  const [cancelBookingError, setCancelBookingError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -125,6 +135,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
         setHsnCode(b.hsn_code ?? "");
         setTaxRate(b.tax_rate != null ? String(b.tax_rate) : "");
         setItemEdits(Object.fromEntries(b.booking_items.map((bi) => [bi.id, draftFromItem(bi)])));
+        setCancelBookingRefund(String(b.total_paid ?? 0));
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load booking"))
       .finally(() => setLoading(false));
@@ -204,17 +215,56 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     }
   }
 
+  // Two calls, same handler: the first (no refundNeeded entry yet) tries a
+  // plain removal; if the backend comes back with an exact amount needed,
+  // that's stashed in refundNeeded and the confirm row switches to show it
+  // instead of closing. The second call (refundNeeded[bi.id] present)
+  // sends that — possibly edited — amount, which the backend records as an
+  // actual refund before completing the removal.
   async function handleRemoveItem(bi: BookingItem) {
     setRemoveErrors((e) => ({ ...e, [bi.id]: "" }));
     setRemovingId(bi.id);
     try {
-      await cancelBookingItem(bookingId, bi.item_id);
+      const pending = refundNeeded[bi.id];
+      const result = await cancelBookingItem(bookingId, bi.item_id, pending ? toNumberOrNull(pending.amount) ?? 0 : undefined);
+      if (result.type === "refund_needed") {
+        setRefundNeeded((all) => ({ ...all, [bi.id]: { message: result.message, amount: String(result.refundAmountNeeded) } }));
+        return;
+      }
       setConfirmingRemoveId(null);
+      setRefundNeeded((all) => {
+        const next = { ...all };
+        delete next[bi.id];
+        return next;
+      });
       await load();
     } catch (err) {
       setRemoveErrors((e) => ({ ...e, [bi.id]: err instanceof Error ? err.message : "Failed to remove item" }));
     } finally {
       setRemovingId(null);
+    }
+  }
+
+  function cancelRemoveItem(itemId: string) {
+    setConfirmingRemoveId(null);
+    setRefundNeeded((all) => {
+      const next = { ...all };
+      delete next[itemId];
+      return next;
+    });
+  }
+
+  async function handleCancelBooking() {
+    setCancelBookingError(null);
+    setCancellingBooking(true);
+    try {
+      await cancelBooking(bookingId, toNumberOrNull(cancelBookingRefund) ?? 0);
+      setConfirmingCancelBooking(false);
+      await load();
+    } catch (err) {
+      setCancelBookingError(err instanceof Error ? err.message : "Failed to cancel booking");
+    } finally {
+      setCancellingBooking(false);
     }
   }
 
@@ -296,6 +346,8 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     );
   }
 
+  const hasActiveItems = booking.booking_items.some((bi) => bi.status === "booked" || bi.status === "out");
+
   return (
     <div className="wizard-card">
       <div className="wizard-step">
@@ -350,11 +402,17 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
                   <span className={`pill ${pill.className}`}>{pill.label}</span>
                 </div>
                 <p className="wizard-hint">
-                  {bi.status === "returned" ? "Returned — no further edits." : "Cancelled — no further edits."}
+                  {bi.status === "returned"
+                    ? "Returned — no further edits."
+                    : bi.status === "cancelled"
+                      ? "Cancelled — no further edits."
+                      : "No further edits."}
                 </p>
               </div>
             );
           }
+
+          const pendingRefund = refundNeeded[bi.id];
 
           return (
             <div className="line-item-card" key={bi.id}>
@@ -464,20 +522,48 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
                 </button>
 
                 {confirmingRemoveId === bi.id ? (
-                  <span>
-                    Remove this item?{" "}
-                    <button
-                      type="button"
-                      className="btn-danger"
-                      disabled={removingId === bi.id}
-                      onClick={() => handleRemoveItem(bi)}
-                    >
-                      {removingId === bi.id ? "Removing…" : "Yes, Remove"}
-                    </button>{" "}
-                    <button type="button" className="btn-secondary" onClick={() => setConfirmingRemoveId(null)}>
-                      Cancel
-                    </button>
-                  </span>
+                  pendingRefund ? (
+                    <span className="refund-confirm-row">
+                      {pendingRefund.message}
+                      <label className="field-label">
+                        Refund Amount (₹)
+                        <input
+                          type="number"
+                          min={0}
+                          value={pendingRefund.amount}
+                          onChange={(e) =>
+                            setRefundNeeded((all) => ({ ...all, [bi.id]: { ...all[bi.id], amount: e.target.value } }))
+                          }
+                        />
+                      </label>
+                      <button
+                        type="button"
+                        className="btn-danger"
+                        disabled={removingId === bi.id}
+                        onClick={() => handleRemoveItem(bi)}
+                      >
+                        {removingId === bi.id ? "Removing…" : "Confirm Refund & Remove"}
+                      </button>{" "}
+                      <button type="button" className="btn-secondary" onClick={() => cancelRemoveItem(bi.id)}>
+                        Cancel
+                      </button>
+                    </span>
+                  ) : (
+                    <span>
+                      Remove this item?{" "}
+                      <button
+                        type="button"
+                        className="btn-danger"
+                        disabled={removingId === bi.id}
+                        onClick={() => handleRemoveItem(bi)}
+                      >
+                        {removingId === bi.id ? "Removing…" : "Yes, Remove"}
+                      </button>{" "}
+                      <button type="button" className="btn-secondary" onClick={() => cancelRemoveItem(bi.id)}>
+                        Cancel
+                      </button>
+                    </span>
+                  )
                 ) : (
                   <button type="button" className="btn-danger" onClick={() => setConfirmingRemoveId(bi.id)}>
                     Remove Item
@@ -629,6 +715,42 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
             <button type="button" className="btn-secondary" onClick={() => setShowAddForm(true)}>
               + Add Item
             </button>
+          </div>
+        )}
+
+        {hasActiveItems && (
+          <div className="danger-zone">
+            <h2>Cancel Booking</h2>
+            <p className="wizard-hint">
+              Cancels every still-active item in this booking at once — booking history stays intact, nothing is deleted.
+            </p>
+            {confirmingCancelBooking ? (
+              <>
+                <label className="field-label">
+                  Refund Amount (₹)
+                  <input
+                    type="number"
+                    min={0}
+                    value={cancelBookingRefund}
+                    onChange={(e) => setCancelBookingRefund(e.target.value)}
+                  />
+                </label>
+                <p className="wizard-hint">Pre-filled with the total already paid — edit if keeping part of it.</p>
+                {cancelBookingError && <p className="wizard-error">{cancelBookingError}</p>}
+                <div className="wizard-actions">
+                  <button type="button" className="btn-secondary" onClick={() => setConfirmingCancelBooking(false)}>
+                    Back
+                  </button>
+                  <button type="button" className="btn-danger" disabled={cancellingBooking} onClick={handleCancelBooking}>
+                    {cancellingBooking ? "Cancelling…" : "Confirm Cancel Booking"}
+                  </button>
+                </div>
+              </>
+            ) : (
+              <button type="button" className="btn-danger" onClick={() => setConfirmingCancelBooking(true)}>
+                Cancel Booking
+              </button>
+            )}
           </div>
         )}
       </div>

@@ -20,6 +20,15 @@ paymentsRouter.get("/", async (req, res) => {
 // booking time. payment_date defaults to today in IST when omitted, the
 // same left-blank-on-purpose pattern as actual_return_date on
 // POST /api/bookings/:id/return.
+//
+// Always type='payment', always amount > 0 here — this is the one route a
+// human fills in directly, and a manual entry should never be negative or
+// a refund. The negative-amount/refund-type rows the lost-and-found and
+// cancel-with-refund flows create are inserted directly by bookings.ts /
+// itemCharges.ts via the service-role client, deliberately bypassing this
+// route and its positivity check (same "internal insert, not an internal
+// call to this route" pattern already used for the advance-at-booking-
+// creation flow).
 paymentsRouter.post("/", async (req: AuthedRequest, res) => {
   const { booking_id, amount, method, payment_date, notes } = req.body ?? {};
   if (!booking_id || amount == null || !method) {
@@ -34,6 +43,7 @@ paymentsRouter.post("/", async (req: AuthedRequest, res) => {
       booking_id,
       amount,
       method,
+      type: "payment",
       payment_date: payment_date || istToday(),
       notes: notes?.trim() || null,
       recorded_by: req.user?.id ?? null,

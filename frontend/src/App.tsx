@@ -5,6 +5,7 @@ import ItemsPage from "./pages/ItemsPage";
 import CustomersPage from "./pages/CustomersPage";
 import BookingsPage from "./pages/BookingsPage";
 import ReportsPage from "./pages/ReportsPage";
+import ChargesPage from "./pages/ChargesPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { useAuth } from "./lib/auth";
 import { supabase } from "./lib/supabase";
@@ -16,6 +17,7 @@ const TABS = [
   { to: "/customers", label: "Customers" },
   { to: "/bookings", label: "Bookings" },
   { to: "/reports", label: "Reports" },
+  { to: "/charges", label: "Charges" },
 ];
 
 export default function App() {
@@ -74,6 +76,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <ReportsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/charges"
+            element={
+              <ProtectedRoute>
+                <ChargesPage />
               </ProtectedRoute>
             }
           />

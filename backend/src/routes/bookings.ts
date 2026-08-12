@@ -642,11 +642,17 @@ bookingsRouter.post("/:bookingId/items", async (req, res) => {
 // POST /api/bookings/:bookingId/items/:itemId/cancel — remove a line item
 // (§8 decision 4). Never a hard delete — status -> 'cancelled', same
 // "never destroy booking history" rule used everywhere else in this
-// schema. Blocked if it would push balance_due negative (money already
-// collected must still fit under the reduced total), and only while the
-// item is still booked/out (an already-returned item can't be
-// retroactively un-booked).
-bookingsRouter.post("/:bookingId/items/:itemId/cancel", async (req, res) => {
+// schema. Only while the item is still booked/out (an already-returned
+// item can't be retroactively un-booked).
+//
+// No longer blocks on a negative balance (refund infrastructure): if
+// removing this item would leave the customer overpaid, the first call
+// (without refund_amount) is rejected with the exact amount needed so the
+// frontend can show/edit it; the confirming call (with refund_amount)
+// records that as a real refund — payments row, type='refund', NEGATIVE
+// amount, since actual money is leaving the shop (see the migration's
+// sign-convention note) — before the item is cancelled.
+bookingsRouter.post("/:bookingId/items/:itemId/cancel", async (req: AuthedRequest, res) => {
   const { data: bookingItem, error: itemFetchError } = await supabase
     .from("booking_items")
     .select("*")
@@ -678,11 +684,27 @@ bookingsRouter.post("/:bookingId/items/:itemId/cancel", async (req, res) => {
   if (financialsError) return res.status(500).json({ error: financialsError.message });
 
   const totalPaid = Number(financials?.total_paid ?? 0);
-  if (totalPaid > newTotal) {
-    const overpaid = (totalPaid - newTotal).toFixed(2);
+  const overpaid = totalPaid - newTotal;
+  const requestedRefund = req.body?.refund_amount != null ? Number(req.body.refund_amount) : null;
+
+  if (overpaid > 0 && requestedRefund == null) {
     return res.status(409).json({
-      error: `Removing this item would mean refunding ₹${overpaid}, which isn't supported yet`,
+      error: `Removing this item means refunding ₹${overpaid.toFixed(2)} already paid toward it.`,
+      refund_amount_needed: Number(overpaid.toFixed(2)),
     });
+  }
+
+  if (requestedRefund != null && requestedRefund > 0) {
+    const { error: refundError } = await supabase.from("payments").insert({
+      booking_id: req.params.bookingId,
+      amount: -requestedRefund,
+      method: "other",
+      type: "refund",
+      payment_date: istToday(),
+      notes: `Refund for removing item from booking`,
+      recorded_by: req.user?.id ?? null,
+    });
+    if (refundError) return res.status(400).json({ error: `Refund couldn't be recorded: ${refundError.message}` });
   }
 
   const { data, error } = await supabase
@@ -694,6 +716,57 @@ bookingsRouter.post("/:bookingId/items/:itemId/cancel", async (req, res) => {
   if (error) return res.status(400).json({ error: error.message });
 
   res.status(200).json(data);
+});
+
+// POST /api/bookings/:id/cancel — whole-booking cancel (§8 decision 6,
+// finally built now that refund infrastructure exists). Loops the same
+// mechanism the single-item remove endpoint uses across every still-active
+// (booked/out) line item in one call — an already-returned item is
+// already resolved and stays untouched, same restriction the single-item
+// endpoint enforces. Takes ONE refund_amount for the whole booking rather
+// than prompting per item: the frontend already has the booking's current
+// total_paid loaded (via fetchBooking) and can pre-fill/edit it without a
+// round-trip first, unlike the single-item flow where the "amount after
+// removing just this one" isn't already sitting in state.
+bookingsRouter.post("/:id/cancel", async (req: AuthedRequest, res) => {
+  const { data: items, error: itemsError } = await supabase
+    .from("booking_items")
+    .select("id")
+    .eq("booking_id", req.params.id)
+    .in("status", ACTIVE_STATUSES);
+  if (itemsError) return res.status(500).json({ error: itemsError.message });
+  if (!items || items.length === 0) {
+    return res.status(409).json({ error: "This booking has no active items to cancel" });
+  }
+
+  const refundAmount = req.body?.refund_amount != null ? Number(req.body.refund_amount) : 0;
+  if (!(refundAmount >= 0)) {
+    return res.status(400).json({ error: "refund_amount can't be negative" });
+  }
+
+  if (refundAmount > 0) {
+    const { error: refundError } = await supabase.from("payments").insert({
+      booking_id: req.params.id,
+      amount: -refundAmount,
+      method: "other",
+      type: "refund",
+      payment_date: istToday(),
+      notes: "Refund for cancelling booking",
+      recorded_by: req.user?.id ?? null,
+    });
+    if (refundError) return res.status(400).json({ error: `Refund couldn't be recorded: ${refundError.message}` });
+  }
+
+  const { error: cancelError } = await supabase
+    .from("booking_items")
+    .update({ status: "cancelled" })
+    .in(
+      "id",
+      items.map((i) => i.id),
+    );
+  if (cancelError) return res.status(400).json({ error: cancelError.message });
+
+  res.status(200).json({ ok: true, cancelled_item_count: items.length });
 });
 
 // PATCH /api/bookings/:id — parent-level fields only (customer_id, GST
@@ -780,7 +853,18 @@ bookingsRouter.patch("/:bookingId/items/:itemId", async (req, res) => {
 // booking. Assumes an item appears at most once per booking — .single()
 // below is a data-integrity backstop for that assumption, not just a
 // convenience.
-bookingsRouter.post("/:bookingId/items/:itemId/return", async (req, res) => {
+//
+// Optional `charges: { description, amount }[]` — lost-and-found: one
+// unresolved item_charges row plus one linked payments row per entry (see
+// the sign-convention note at the top of the refund-infrastructure
+// migration — a charge is a NEGATIVE payments.amount, since no cash
+// actually changed hands yet; that's what makes balance_due reflect it
+// immediately with zero changes to how balance_due itself is computed).
+// Charges are processed after the return itself succeeds, same
+// non-blocking-warning-on-secondary-failure pattern as the advance
+// payment at booking creation — a failed charge insert doesn't undo an
+// already-completed return.
+bookingsRouter.post("/:bookingId/items/:itemId/return", async (req: AuthedRequest, res) => {
   const { data: bookingItem, error: bookingError } = await supabase
     .from("booking_items")
     .select(`*, items(${ITEMS_EMBED})`)
@@ -837,6 +921,41 @@ bookingsRouter.post("/:bookingId/items/:itemId/return", async (req, res) => {
 
   if (item?.tracking_type === "unique") {
     await supabase.from("items").update({ status: "available" }).eq("id", req.params.itemId);
+  }
+
+  const charges = Array.isArray(req.body?.charges) ? (req.body.charges as { description?: string; amount?: number }[]) : [];
+  for (const charge of charges) {
+    const description = charge.description?.trim();
+    const amount = Number(charge.amount);
+    if (!description || !(amount > 0)) continue; // silently skip a malformed entry rather than fail the whole return
+
+    const { error: chargeInsertError } = await supabase.from("item_charges").insert({
+      booking_item_id: bookingItem.id,
+      description,
+      charge_amount: amount,
+      charged_at: effectiveReturnDate,
+    });
+    if (chargeInsertError) {
+      warning = warning
+        ? `${warning} Also, a charge for "${description}" couldn't be recorded — add it manually.`
+        : `A charge for "${description}" couldn't be recorded — add it manually.`;
+      continue;
+    }
+
+    const { error: chargePaymentError } = await supabase.from("payments").insert({
+      booking_id: req.params.bookingId,
+      amount: -amount,
+      method: "other",
+      type: "payment",
+      payment_date: effectiveReturnDate,
+      notes: `Lost/damaged: ${description}`,
+      recorded_by: req.user?.id ?? null,
+    });
+    if (chargePaymentError) {
+      warning = warning
+        ? `${warning} Also, the charge for "${description}" was recorded but its balance adjustment failed — check Outstanding Charges.`
+        : `The charge for "${description}" was recorded but its balance adjustment failed — check Outstanding Charges.`;
+    }
   }
 
   res.status(200).json({ ...data, warning });

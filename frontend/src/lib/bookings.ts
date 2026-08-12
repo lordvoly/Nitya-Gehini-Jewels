@@ -163,12 +163,20 @@ export function fetchBooking(id: string) {
   return apiFetch<Booking>(`/api/bookings/${id}`);
 }
 
+export interface ReturnCharge {
+  description: string;
+  amount: number;
+}
+
 export interface ReturnPayload {
   return_checklist: Record<string, boolean> | null;
   return_notes: string | null;
   actual_return_date: string | null;
   deposit_refunded: boolean | null;
   deposit_refund_date: string | null;
+  // Lost-and-found: one item_charges + linked payments row per entry,
+  // created server-side after the return itself succeeds.
+  charges?: ReturnCharge[];
 }
 
 export function processReturn(bookingId: string, itemId: string, payload: ReturnPayload) {
@@ -185,9 +193,43 @@ export function addBookingItem(bookingId: string, item: NewBookingItem) {
   });
 }
 
-export function cancelBookingItem(bookingId: string, itemId: string) {
-  return apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${itemId}/cancel`, {
+// Two-step by design: removing an item that would leave the customer
+// overpaid no longer blocks outright — the first call (no refundAmount)
+// comes back as "refund_needed" with the exact amount, so the caller can
+// show/edit it before confirming with a second call that passes it. Any
+// other error (already returned/cancelled, etc.) still throws normally.
+export type CancelItemResult =
+  | { type: "cancelled"; item: BookingItem }
+  | { type: "refund_needed"; message: string; refundAmountNeeded: number };
+
+export async function cancelBookingItem(bookingId: string, itemId: string, refundAmount?: number): Promise<CancelItemResult> {
+  try {
+    const item = await apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${itemId}/cancel`, {
+      method: "POST",
+      body: JSON.stringify(refundAmount != null ? { refund_amount: refundAmount } : {}),
+    });
+    return { type: "cancelled", item };
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 409) {
+      const body = e.body as { error?: string; refund_amount_needed?: number } | undefined;
+      if (body?.refund_amount_needed != null) {
+        return { type: "refund_needed", message: body.error ?? e.message, refundAmountNeeded: body.refund_amount_needed };
+      }
+    }
+    throw e;
+  }
+}
+
+// Whole-booking cancel (§8 decision 6) — loops the same remove-item
+// mechanism across every still-active line item server-side, one refund
+// for the whole booking rather than per item. refundAmount is always
+// caller-supplied (pre-filled from the already-loaded booking.total_paid,
+// editable) — no probe-first round trip needed the way single-item
+// removal has, since the frontend already has that number.
+export function cancelBooking(bookingId: string, refundAmount: number) {
+  return apiFetch<{ ok: true; cancelled_item_count: number }>(`/api/bookings/${bookingId}/cancel`, {
     method: "POST",
+    body: JSON.stringify({ refund_amount: refundAmount }),
   });
 }
 

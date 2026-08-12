@@ -1,5 +1,12 @@
 import { useState, type FormEvent } from "react";
-import { processReturn, type Booking, type BookingItem } from "../../lib/bookings";
+import { processReturn, type Booking, type BookingItem, type ReturnCharge } from "../../lib/bookings";
+import { toNumberOrNull } from "../../lib/numbers";
+
+interface ChargeDraft {
+  enabled: boolean;
+  description: string;
+  amount: string;
+}
 
 // Scoped to a single line item (§8 decision D) — booking is passed only for
 // display context (booking_code, customer name) and to build the request
@@ -24,6 +31,12 @@ export function ReturnForm({
   const [checklist, setChecklist] = useState<Record<string, boolean>>(
     Object.fromEntries(checklistNames.map((name) => [name, false])),
   );
+  // Lost-and-found: an offer to charge for it, per unchecked component —
+  // keyed the same way as checklist, description pre-filled from the
+  // component name but editable (e.g. "Earrings" -> "1 lost earring").
+  const [charges, setCharges] = useState<Record<string, ChargeDraft>>(
+    Object.fromEntries(checklistNames.map((name) => [name, { enabled: false, description: name, amount: "" }])),
+  );
   const [returnNotes, setReturnNotes] = useState("");
   // Left blank on purpose — the backend defaults to today in IST when this
   // is omitted, rather than the frontend computing "today" itself (which
@@ -36,7 +49,17 @@ export function ReturnForm({
   const [result, setResult] = useState<BookingItem | null>(null);
 
   function toggleComponent(name: string) {
-    setChecklist((c) => ({ ...c, [name]: !c[name] }));
+    setChecklist((c) => {
+      const next = { ...c, [name]: !c[name] };
+      // Checking a component back off cancels any pending charge for it —
+      // nothing to charge for once it's confirmed present.
+      if (next[name]) setCharges((all) => ({ ...all, [name]: { ...all[name], enabled: false } }));
+      return next;
+    });
+  }
+
+  function updateCharge(name: string, patch: Partial<ChargeDraft>) {
+    setCharges((all) => ({ ...all, [name]: { ...all[name], ...patch } }));
   }
 
   async function handleSubmit(e: FormEvent) {
@@ -44,12 +67,21 @@ export function ReturnForm({
     setError(null);
     setSaving(true);
     try {
+      const chargesPayload: ReturnCharge[] = checklistNames
+        .filter((name) => !checklist[name] && charges[name]?.enabled)
+        .map((name) => ({
+          description: charges[name].description.trim() || name,
+          amount: toNumberOrNull(charges[name].amount) ?? 0,
+        }))
+        .filter((c) => c.amount > 0);
+
       const updated = await processReturn(booking.id, item.item_id, {
         return_checklist: checklistNames.length > 0 ? checklist : null,
         return_notes: returnNotes.trim() || null,
         actual_return_date: actualReturnDate || null,
         deposit_refunded: item.deposit_collected ? depositRefunded : null,
         deposit_refund_date: item.deposit_collected && depositRefunded ? depositRefundDate || null : null,
+        charges: chargesPayload.length > 0 ? chargesPayload : undefined,
       });
       setResult(updated);
     } catch (err) {
@@ -92,10 +124,41 @@ export function ReturnForm({
             <p className="field-label">Return Checklist</p>
             <div className="checklist">
               {checklistNames.map((name) => (
-                <label key={name} className="checklist-item">
-                  <input type="checkbox" checked={checklist[name] ?? false} onChange={() => toggleComponent(name)} />
-                  {name}
-                </label>
+                <div key={name} className="checklist-row">
+                  <label className="checklist-item">
+                    <input type="checkbox" checked={checklist[name] ?? false} onChange={() => toggleComponent(name)} />
+                    {name}
+                  </label>
+                  {!checklist[name] && (
+                    <div className="lost-and-found">
+                      <label className="checklist-item">
+                        <input
+                          type="checkbox"
+                          checked={charges[name]?.enabled ?? false}
+                          onChange={(e) => updateCharge(name, { enabled: e.target.checked })}
+                        />
+                        Charge for this
+                      </label>
+                      {charges[name]?.enabled && (
+                        <div className="lost-and-found-fields">
+                          <input
+                            type="text"
+                            value={charges[name].description}
+                            onChange={(e) => updateCharge(name, { description: e.target.value })}
+                            placeholder="Description"
+                          />
+                          <input
+                            type="number"
+                            min={0}
+                            value={charges[name].amount}
+                            onChange={(e) => updateCharge(name, { amount: e.target.value })}
+                            placeholder="Amount (₹)"
+                          />
+                        </div>
+                      )}
+                    </div>
+                  )}
+                </div>
               ))}
             </div>
           </>
