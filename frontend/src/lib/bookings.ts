@@ -29,8 +29,9 @@ export interface BookingChainLink {
 }
 
 // One line item within a family booking. "When Returns" chain fields are
-// only present on the GET /api/bookings/:id response, only for
-// tracking_type = 'unique' items (§8 decision 5).
+// present on both GET /api/bookings and GET /api/bookings/:id — only for
+// tracking_type = 'unique' items (§8 decision 5); a 'quantity' item always
+// gets previous_booking_item: null / future_booking_items: [].
 export interface BookingItem {
   id: string;
   booking_id: string;

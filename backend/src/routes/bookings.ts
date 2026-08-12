@@ -15,6 +15,81 @@ export const ACTIVE_STATUSES = ["booked", "out"];
 const ITEMS_EMBED = "item_code, name, item_type, tracking_type, components";
 const BOOKING_ITEMS_EMBED = `*, items(${ITEMS_EMBED})`;
 
+interface ChainableBookingItem {
+  id: string;
+  item_id: string;
+  pickup_date: string;
+  items?: { tracking_type: string } | null;
+}
+
+interface BookingChainLink {
+  id: string;
+  booking_code: string | undefined;
+  customer_name: string | null;
+  pickup_date: string;
+}
+
+// Shared by GET / (list) and GET /:id (detail) — same per-item "When
+// Returns" computation either way, just applied to a flat batch of items
+// instead of one booking's items at a time, so a list page doesn't pay for
+// N separate round-trips of booking-shaped Promise.all nesting. Only
+// meaningful for tracking_type = 'unique' items; a 'quantity' item's chain
+// is left empty (no single well-defined "next in line" when many bookings
+// can be active on it at once) — see the fuller comment on GET /:id below.
+async function attachChains<T extends ChainableBookingItem>(
+  items: T[],
+): Promise<(T & { previous_booking_item: BookingChainLink | null; future_booking_items: BookingChainLink[] })[]> {
+  return Promise.all(
+    items.map(async (bi) => {
+      if (bi.items?.tracking_type !== "unique") {
+        return { ...bi, previous_booking_item: null, future_booking_items: [] };
+      }
+
+      const { data: sequence, error: sequenceError } = await supabase
+        .from("booking_sequence")
+        .select("prev_booking_item_id, prev_booking_code, prev_customer_name, prev_pickup_date")
+        .eq("booking_item_id", bi.id)
+        .maybeSingle();
+      if (sequenceError) throw sequenceError;
+
+      const { data: itemChain, error: chainError } = await supabase
+        .from("booking_items")
+        .select("id, pickup_date, bookings(booking_code, customers(name))")
+        .eq("item_id", bi.item_id)
+        .neq("status", "cancelled")
+        .order("pickup_date", { ascending: true })
+        .order("created_at", { ascending: true });
+      if (chainError) throw chainError;
+
+      const currentIndex = (itemChain ?? []).findIndex((row) => row.id === bi.id);
+      const futureBookingItems =
+        currentIndex === -1
+          ? []
+          : (itemChain ?? []).slice(currentIndex + 1).map((row) => ({
+              id: row.id,
+              booking_code: (row as unknown as { bookings: { booking_code: string; customers: { name: string } | null } | null })
+                .bookings?.booking_code,
+              customer_name: (row as unknown as { bookings: { booking_code: string; customers: { name: string } | null } | null })
+                .bookings?.customers?.name ?? null,
+              pickup_date: row.pickup_date,
+            }));
+
+      return {
+        ...bi,
+        previous_booking_item: sequence?.prev_booking_item_id
+          ? {
+              id: sequence.prev_booking_item_id,
+              booking_code: sequence.prev_booking_code,
+              customer_name: sequence.prev_customer_name,
+              pickup_date: sequence.prev_pickup_date,
+            }
+          : null,
+        future_booking_items: futureBookingItems,
+      };
+    }),
+  );
+}
+
 // GET /api/bookings?item_id=&customer_id=&computed_status=
 //
 // booking_items.booking_id / .item_id are real FKs (unlike the old
@@ -38,6 +113,17 @@ bookingsRouter.get("/", async (req, res) => {
   const ids = (bookings ?? []).map((b) => b.id);
   if (ids.length === 0) return res.json([]);
 
+  // Same per-item "When Returns" chain GET /:id computes, now also on the
+  // list so BookingsList's cards can show a one-line "Next: ..." per item
+  // without a click-through — one flattened Promise.all across every
+  // booking's items on the page, not a nested loop per booking.
+  const chainsByItemId = new Map(
+    (await attachChains((bookings ?? []).flatMap((b) => (b.booking_items ?? []) as ChainableBookingItem[]))).map((bi) => [
+      bi.id,
+      { previous_booking_item: bi.previous_booking_item, future_booking_items: bi.future_booking_items },
+    ]),
+  );
+
   const [{ data: financials, error: financialsError }, { data: statuses, error: statusesError }] = await Promise.all([
     supabase.from("booking_financials").select("booking_id, total_paid, balance_due, price_charged").in("booking_id", ids),
     supabase
@@ -53,6 +139,10 @@ bookingsRouter.get("/", async (req, res) => {
 
   let result = bookings.map((b) => ({
     ...b,
+    booking_items: ((b.booking_items ?? []) as ChainableBookingItem[]).map((bi) => ({
+      ...bi,
+      ...chainsByItemId.get(bi.id),
+    })),
     total_paid: financialsByBookingId.get(b.id)?.total_paid ?? 0,
     balance_due: financialsByBookingId.get(b.id)?.balance_due ?? 0,
     price_charged: financialsByBookingId.get(b.id)?.price_charged ?? 0,
@@ -112,62 +202,7 @@ bookingsRouter.get("/:id", async (req, res) => {
     .single();
   if (error || !booking) return res.status(404).json({ error: "Booking not found" });
 
-  const items = (booking.booking_items ?? []) as Array<{
-    id: string;
-    item_id: string;
-    pickup_date: string;
-    items: { tracking_type: string } | null;
-  }>;
-
-  const itemsWithChains = await Promise.all(
-    items.map(async (bi) => {
-      if (bi.items?.tracking_type !== "unique") {
-        return { ...bi, previous_booking_item: null, future_booking_items: [] };
-      }
-
-      const { data: sequence, error: sequenceError } = await supabase
-        .from("booking_sequence")
-        .select("prev_booking_item_id, prev_booking_code, prev_customer_name, prev_pickup_date")
-        .eq("booking_item_id", bi.id)
-        .maybeSingle();
-      if (sequenceError) throw sequenceError;
-
-      const { data: itemChain, error: chainError } = await supabase
-        .from("booking_items")
-        .select("id, pickup_date, bookings(booking_code, customers(name))")
-        .eq("item_id", bi.item_id)
-        .neq("status", "cancelled")
-        .order("pickup_date", { ascending: true })
-        .order("created_at", { ascending: true });
-      if (chainError) throw chainError;
-
-      const currentIndex = (itemChain ?? []).findIndex((row) => row.id === bi.id);
-      const futureBookingItems =
-        currentIndex === -1
-          ? []
-          : (itemChain ?? []).slice(currentIndex + 1).map((row) => ({
-              id: row.id,
-              booking_code: (row as unknown as { bookings: { booking_code: string; customers: { name: string } | null } | null })
-                .bookings?.booking_code,
-              customer_name: (row as unknown as { bookings: { booking_code: string; customers: { name: string } | null } | null })
-                .bookings?.customers?.name ?? null,
-              pickup_date: row.pickup_date,
-            }));
-
-      return {
-        ...bi,
-        previous_booking_item: sequence?.prev_booking_item_id
-          ? {
-              id: sequence.prev_booking_item_id,
-              booking_code: sequence.prev_booking_code,
-              customer_name: sequence.prev_customer_name,
-              pickup_date: sequence.prev_pickup_date,
-            }
-          : null,
-        future_booking_items: futureBookingItems,
-      };
-    }),
-  );
+  const itemsWithChains = await attachChains((booking.booking_items ?? []) as ChainableBookingItem[]);
 
   const [{ data: financials, error: financialsError }, { data: status, error: statusError }] = await Promise.all([
     supabase.from("booking_financials").select("total_paid, balance_due, price_charged").eq("booking_id", req.params.id).maybeSingle(),
