@@ -80,13 +80,20 @@ dashboardRouter.get("/summary", async (_req, res) => {
   if (activeStatusError) return res.status(500).json({ error: activeStatusError.message });
   const activeIds = (activeStatusRows ?? []).map((b) => b.booking_id);
   let outstanding_balance = 0;
+  let outstanding_balance_count = 0;
   if (activeIds.length) {
     const { data: financials, error: financialsError } = await supabase
       .from("booking_financials")
       .select("balance_due")
       .in("booking_id", activeIds);
     if (financialsError) return res.status(500).json({ error: financialsError.message });
-    outstanding_balance = (financials ?? []).reduce((sum, f) => sum + Number(f.balance_due), 0);
+    // Filtered to strictly positive balances — a booking sitting at exactly
+    // 0 (the common case) or, in a rare overpaid-and-not-yet-refunded edge
+    // case, negative, isn't "owed" and shouldn't count as a due booking for
+    // the dashboard popup's count.
+    const dueFinancials = (financials ?? []).filter((f) => Number(f.balance_due) > 0);
+    outstanding_balance = dueFinancials.reduce((sum, f) => sum + Number(f.balance_due), 0);
+    outstanding_balance_count = dueFinancials.length;
   }
 
   const [
@@ -114,9 +121,14 @@ dashboardRouter.get("/summary", async (_req, res) => {
   const items_out = new Set((itemsOutRows ?? []).map((r) => r.item_id)).size;
 
   res.json({
+    // Server IST date, echoed back so the frontend never has to compute
+    // "today" itself (see CLAUDE.md) — used only to key the once-per-day
+    // dashboard-popup dismissal, not for any business logic.
+    today: istToday(),
     due_today,
     overdue,
     outstanding_balance,
+    outstanding_balance_count,
     stats: {
       total_active_items: total_active_items ?? 0,
       items_out,

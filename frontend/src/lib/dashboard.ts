@@ -50,9 +50,13 @@ export interface DashboardStats {
 }
 
 export interface DashboardSummary {
+  // Server IST date (see backend/src/routes/dashboard.ts) — used only to key
+  // the once-per-day dashboard-popup dismissal, never computed locally.
+  today: string;
   due_today: DueTodayBookingItem[];
   overdue: OverdueBookingItem[];
   outstanding_balance: number;
+  outstanding_balance_count: number;
   stats: DashboardStats;
 }
 

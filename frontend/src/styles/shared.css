@@ -848,6 +848,17 @@ a {
   flex: 1;
 }
 
+/* ── Dashboard alert popups ───────────────────────────────────────────── */
+
+.alert-modal h2 {
+  margin-top: 0;
+}
+
+.alert-modal p {
+  margin: 10px 0 18px;
+  line-height: 1.5;
+}
+
 /* ── Dashboard ────────────────────────────────────────────────────────── */
 
 .stat-grid {
