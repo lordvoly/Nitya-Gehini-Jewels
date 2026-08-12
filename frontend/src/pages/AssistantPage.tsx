@@ -14,6 +14,17 @@ const STARTER_QUESTIONS = [
   "What's due back in the next 3 days?",
 ];
 
+// The model's replies commonly use **bold** for emphasis (item names, key
+// facts) — rendered here rather than left as literal asterisks, since raw
+// markdown syntax reads as broken to a non-technical user. Deliberately not
+// a full markdown parser: this is the one construct Claude's answers
+// actually use in practice.
+function renderFormatted(text: string) {
+  return text.split(/(\*\*[^*]+\*\*)/g).map((part, i) =>
+    part.startsWith("**") && part.endsWith("**") ? <strong key={i}>{part.slice(2, -2)}</strong> : <span key={i}>{part}</span>,
+  );
+}
+
 export default function AssistantPage() {
   // Session-only by design — plain React state, cleared on refresh/logout,
   // no persistence needed per the task.
@@ -80,7 +91,7 @@ export default function AssistantPage() {
         <div className="chat-messages">
           {messages.map((m, i) => (
             <div key={i} className={`chat-bubble ${m.role}`}>
-              {extractText(m.content)}
+              {renderFormatted(extractText(m.content))}
             </div>
           ))}
           {sending && (
