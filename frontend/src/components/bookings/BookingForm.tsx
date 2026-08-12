@@ -10,6 +10,7 @@ import {
 } from "../../lib/bookings";
 import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/payments";
+import { formatDateDisplay } from "../../lib/dates";
 import { CustomerPicker } from "./CustomerPicker";
 
 interface LineItemDraft {
@@ -377,7 +378,7 @@ export function BookingForm() {
                       {(conflict.conflicts as { id: string; booking_code?: string; pickup_date: string; return_date: string | null }[]).map(
                         (c) => (
                           <li key={c.id}>
-                            {c.pickup_date} → {c.return_date}
+                            {formatDateDisplay(c.pickup_date)} → {formatDateDisplay(c.return_date)}
                           </li>
                         ),
                       )}

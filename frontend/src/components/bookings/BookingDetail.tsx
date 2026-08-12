@@ -10,6 +10,7 @@ import {
 } from "../../lib/payments";
 import { toNumberOrNull } from "../../lib/numbers";
 import { bookingItemStatusPill, bookingComputedStatusPill } from "../../lib/statusPill";
+import { formatDateDisplay } from "../../lib/dates";
 
 export function BookingDetail({
   bookingId,
@@ -122,9 +123,9 @@ export function BookingDetail({
                   <ul className="review-list">
                     <li>Type: {bi.type === "rental" ? "Rental" : "Sale"}</li>
                     <li>
-                      Dates: {bi.pickup_date}
-                      {bi.return_date ? ` → ${bi.return_date}` : ""}
-                      {bi.actual_return_date ? ` (returned ${bi.actual_return_date})` : ""}
+                      Dates: {formatDateDisplay(bi.pickup_date)}
+                      {bi.return_date ? ` → ${formatDateDisplay(bi.return_date)}` : ""}
+                      {bi.actual_return_date ? ` (returned ${formatDateDisplay(bi.actual_return_date)})` : ""}
                     </li>
                     <li>Price charged: ₹{bi.price_charged}</li>
                     {bi.type === "rental" && bi.deposit_amount > 0 && (
@@ -151,7 +152,7 @@ export function BookingDetail({
                         <ul className="review-list">
                           {bi.future_booking_items.map((fb) => (
                             <li key={fb.id}>
-                              {fb.booking_code} — {fb.customer_name} ({fb.pickup_date})
+                              {fb.booking_code} — {fb.customer_name} ({formatDateDisplay(fb.pickup_date)})
                             </li>
                           ))}
                         </ul>
@@ -177,7 +178,7 @@ export function BookingDetail({
               <ul className="review-list">
                 {payments.map((p) => (
                   <li key={p.id}>
-                    ₹{p.amount} — {PAYMENT_METHOD_LABELS[p.method]} · {p.payment_date}
+                    ₹{p.amount} — {PAYMENT_METHOD_LABELS[p.method]} · {formatDateDisplay(p.payment_date)}
                     {p.notes ? ` — ${p.notes}` : ""}
                   </li>
                 ))}

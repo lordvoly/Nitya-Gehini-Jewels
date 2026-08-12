@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { fetchBookings, type Booking, type BookingItem } from "../../lib/bookings";
 import { bookingItemStatusPill, bookingComputedStatusPill } from "../../lib/statusPill";
+import { formatDateDisplay } from "../../lib/dates";
 
 // One card per family transaction — a flat table row can't express "one
 // booking, several items on independent schedules," which is the whole
@@ -82,8 +83,8 @@ export function BookingsList({
                         {bi.items?.item_code} — {bi.items?.name}
                       </strong>
                       <span>
-                        {bi.type === "rental" ? "Rental" : "Sale"} · {bi.pickup_date}
-                        {bi.return_date ? ` → ${bi.return_date}` : ""}
+                        {bi.type === "rental" ? "Rental" : "Sale"} · {formatDateDisplay(bi.pickup_date)}
+                        {bi.return_date ? ` → ${formatDateDisplay(bi.return_date)}` : ""}
                       </span>
                       {bi.items?.tracking_type === "unique" &&
                         (bi.future_booking_items && bi.future_booking_items.length > 0 ? (
@@ -93,7 +94,7 @@ export function BookingsList({
                             onClick={() => onViewDetail(bi.future_booking_items![0].booking_id!)}
                           >
                             Next: {bi.future_booking_items[0].booking_code} —{" "}
-                            {bi.future_booking_items[0].customer_name ?? "—"}, {bi.future_booking_items[0].pickup_date}
+                            {bi.future_booking_items[0].customer_name ?? "—"}, {formatDateDisplay(bi.future_booking_items[0].pickup_date)}
                           </button>
                         ) : (
                           <span className="booking-card-item-next">No bookings ahead</span>
