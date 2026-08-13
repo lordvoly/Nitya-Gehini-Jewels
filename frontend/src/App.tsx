@@ -30,8 +30,10 @@ const TABS = [
 ];
 
 // Mobile's primary bar only has room for the 4 highest-frequency
-// destinations, icon-only — everything else moves to the FAB (Assistant)
-// or the "More" sheet below.
+// destinations (icon + small label — icon-only risked an unsure tap for a
+// less technical user) — everything else moves to the FAB (Assistant) or
+// the header's "More" sheet. Exactly 2 + 2 either side of the FAB, no odd
+// item padded in to compensate.
 const MOBILE_PRIMARY_TABS = [
   { to: "/", label: "Dashboard", Icon: Home },
   { to: "/bookings", label: "Bookings", Icon: Calendar },
@@ -40,8 +42,10 @@ const MOBILE_PRIMARY_TABS = [
 ];
 
 // Not part of the primary 4 and not frequent enough for a dedicated FAB —
-// Charges isn't named in the original split (Reports/Expenses) but leaving
-// it unreachable on mobile would be a real regression, so it lives here too.
+// opened from a header icon rather than the bottom bar, so the bottom bar
+// stays an even 2-2 split around the FAB. Charges isn't named in the
+// original split (Reports/Expenses) but leaving it unreachable on mobile
+// would be a real regression, so it lives here too.
 const MOBILE_MORE_ITEMS = [
   { to: "/reports", label: "Reports", Icon: BarChart3 },
   { to: "/expenses", label: "Expenses", Icon: Wallet },
@@ -68,9 +72,21 @@ export default function App() {
           Nitya Gehini Jewels
         </NavLink>
         {session && (
-          <button className="btn-secondary" onClick={() => supabase.auth.signOut()}>
-            Log Out
-          </button>
+          <div className="app-header-actions">
+            <button
+              type="button"
+              className="mobile-more-btn"
+              aria-label="More"
+              aria-haspopup="true"
+              aria-expanded={moreOpen}
+              onClick={() => setMoreOpen(true)}
+            >
+              <Menu size={22} strokeWidth={2} aria-hidden="true" />
+            </button>
+            <button className="btn-secondary" onClick={() => supabase.auth.signOut()}>
+              Log Out
+            </button>
+          </div>
         )}
       </header>
 
@@ -163,10 +179,10 @@ export default function App() {
                   key={tab.to}
                   to={tab.to}
                   end={tab.to === "/"}
-                  aria-label={tab.label}
                   className={({ isActive }) => (isActive ? "mobile-tab-icon active" : "mobile-tab-icon")}
                 >
-                  <tab.Icon size={24} strokeWidth={2} aria-hidden="true" />
+                  <tab.Icon size={22} strokeWidth={2} aria-hidden="true" />
+                  <span>{tab.label}</span>
                 </NavLink>
               ))}
             </div>
@@ -176,22 +192,12 @@ export default function App() {
                   key={tab.to}
                   to={tab.to}
                   end={tab.to === "/"}
-                  aria-label={tab.label}
                   className={({ isActive }) => (isActive ? "mobile-tab-icon active" : "mobile-tab-icon")}
                 >
-                  <tab.Icon size={24} strokeWidth={2} aria-hidden="true" />
+                  <tab.Icon size={22} strokeWidth={2} aria-hidden="true" />
+                  <span>{tab.label}</span>
                 </NavLink>
               ))}
-              <button
-                type="button"
-                className="mobile-tab-icon"
-                aria-label="More"
-                aria-haspopup="true"
-                aria-expanded={moreOpen}
-                onClick={() => setMoreOpen(true)}
-              >
-                <Menu size={24} strokeWidth={2} aria-hidden="true" />
-              </button>
             </div>
           </nav>
 
