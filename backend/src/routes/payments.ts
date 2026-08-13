@@ -5,13 +5,26 @@ import type { AuthedRequest } from "../middleware/auth.js";
 
 export const paymentsRouter = Router();
 
+// Shared by GET / below and the AI assistant's get_booking_by_code tool —
+// the exact same filtered query either way.
+export async function getPaymentsForBooking(bookingId: string) {
+  const { data, error } = await supabase.from("payments").select("*").eq("booking_id", bookingId).order("payment_date", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
 // GET /api/payments?booking_id=...
 paymentsRouter.get("/", async (req, res) => {
-  let query = supabase.from("payments").select("*").order("payment_date", { ascending: false });
-  if (typeof req.query.booking_id === "string") query = query.eq("booking_id", req.query.booking_id);
-  const { data, error } = await query;
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  try {
+    if (typeof req.query.booking_id === "string") {
+      return res.json(await getPaymentsForBooking(req.query.booking_id));
+    }
+    const { data, error } = await supabase.from("payments").select("*").order("payment_date", { ascending: false });
+    if (error) throw error;
+    res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
 });
 
 // POST /api/payments — record a (possibly partial) payment against a

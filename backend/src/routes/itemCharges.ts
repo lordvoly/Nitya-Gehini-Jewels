@@ -15,6 +15,14 @@ const CHARGE_EMBED = `*, booking_items(
   bookings(id, booking_code, customers(name))
 )`;
 
+// Shared by GET / below and the AI assistant's get_outstanding_charges tool
+// — the exact same query either way, not a second reimplementation.
+export async function getItemCharges(resolved: boolean) {
+  const { data, error } = await supabase.from("item_charges").select(CHARGE_EMBED).eq("resolved", resolved).order("charged_at", { ascending: false });
+  if (error) throw error;
+  return data;
+}
+
 // GET /api/item-charges?resolved=false — the universal outstanding-charges
 // view: every lost/damaged charge across every booking, not scoped to one
 // booking. Defaults to resolved=false (the "still outstanding" set this
@@ -22,13 +30,11 @@ const CHARGE_EMBED = `*, booking_items(
 // ?resolved=true explicitly to see the resolved history instead.
 itemChargesRouter.get("/", async (req, res) => {
   const resolvedParam = typeof req.query.resolved === "string" ? req.query.resolved === "true" : false;
-  const { data, error } = await supabase
-    .from("item_charges")
-    .select(CHARGE_EMBED)
-    .eq("resolved", resolvedParam)
-    .order("charged_at", { ascending: false });
-  if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  try {
+    res.json(await getItemCharges(resolvedParam));
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
 });
 
 // POST /api/item-charges/:id/resolve — settle an outstanding charge.

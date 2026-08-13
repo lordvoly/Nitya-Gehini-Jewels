@@ -225,28 +225,30 @@ bookingsRouter.get("/next-code", async (_req, res) => {
 // booking (§8 decision 5). Only meaningful for tracking_type = 'unique'
 // items; a 'quantity' item's chain is left null (no single well-defined
 // "next in line" when many bookings can be active on it at once).
-bookingsRouter.get("/:id", async (req, res) => {
+// Shared by GET /:id below and the AI assistant's get_booking_by_code tool
+// (which resolves booking_code -> id first, then calls this) — the exact
+// same assembly either way: booking + items/chains + financials + status.
+// Returns null when the booking doesn't exist, same as .maybeSingle()'s own
+// "not found" shape, so callers can decide how to surface that themselves.
+export async function getBookingDetail(id: string) {
   const { data: booking, error } = await supabase
     .from("bookings")
     .select(`*, customers(name, phone), booking_items(${BOOKING_ITEMS_EMBED})`)
-    .eq("id", req.params.id)
-    .single();
-  if (error || !booking) return res.status(404).json({ error: "Booking not found" });
+    .eq("id", id)
+    .maybeSingle();
+  if (error) throw error;
+  if (!booking) return null;
 
   const itemsWithChains = await attachChains((booking.booking_items ?? []) as ChainableBookingItem[]);
 
   const [{ data: financials, error: financialsError }, { data: status, error: statusError }] = await Promise.all([
-    supabase.from("booking_financials").select("total_paid, balance_due, price_charged").eq("booking_id", req.params.id).maybeSingle(),
-    supabase
-      .from("booking_status")
-      .select("computed_status, active_item_count, resolved_item_count")
-      .eq("booking_id", req.params.id)
-      .maybeSingle(),
+    supabase.from("booking_financials").select("total_paid, balance_due, price_charged").eq("booking_id", id).maybeSingle(),
+    supabase.from("booking_status").select("computed_status, active_item_count, resolved_item_count").eq("booking_id", id).maybeSingle(),
   ]);
-  if (financialsError) return res.status(500).json({ error: financialsError.message });
-  if (statusError) return res.status(500).json({ error: statusError.message });
+  if (financialsError) throw financialsError;
+  if (statusError) throw statusError;
 
-  res.json({
+  return {
     ...booking,
     booking_items: itemsWithChains,
     total_paid: financials?.total_paid ?? 0,
@@ -255,7 +257,17 @@ bookingsRouter.get("/:id", async (req, res) => {
     computed_status: status?.computed_status ?? "cancelled",
     active_item_count: status?.active_item_count ?? 0,
     resolved_item_count: status?.resolved_item_count ?? 0,
-  });
+  };
+}
+
+bookingsRouter.get("/:id", async (req, res) => {
+  try {
+    const booking = await getBookingDetail(req.params.id);
+    if (!booking) return res.status(404).json({ error: "Booking not found" });
+    res.json(booking);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
 });
 
 async function nextBookingCode(): Promise<string> {
