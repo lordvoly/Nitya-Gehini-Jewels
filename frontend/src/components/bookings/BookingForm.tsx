@@ -27,10 +27,10 @@ interface LineItemDraft {
   newAddon: string;
 }
 
-function emptyLineItem(): LineItemDraft {
+function emptyLineItem(type: BookingItemType): LineItemDraft {
   return {
     key: crypto.randomUUID(),
-    type: "rental",
+    type,
     itemId: "",
     quantityBooked: "1",
     pickupDate: "",
@@ -47,7 +47,13 @@ export function BookingForm() {
   const [items, setItems] = useState<Item[]>([]);
   const [bookingCode, setBookingCode] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
-  const [lineItems, setLineItems] = useState<LineItemDraft[]>([emptyLineItem()]);
+  // The entry-point choice — nothing else renders until this is set. Once
+  // chosen it drives the heading and what new line items default to; it
+  // deliberately never touches a line item's own `type` after the fact
+  // (see chooseType below), so switching it back and forth can't silently
+  // change data on rows already added.
+  const [bookingType, setBookingType] = useState<BookingItemType | null>(null);
+  const [lineItems, setLineItems] = useState<LineItemDraft[]>([]);
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [advanceMethod, setAdvanceMethod] = useState<PaymentMethod>("cash");
   const [gstApplicable, setGstApplicable] = useState(false);
@@ -73,12 +79,23 @@ export function BookingForm() {
       .catch(() => {});
   }, []);
 
+  // First answer to "Rental or Sale?" seeds one line item of that type;
+  // switching it afterward (the tabs stay clickable) only changes the
+  // heading and what the "+ Add Another Item" button defaults to — rows
+  // already on the form keep whatever type they were created with.
+  function chooseType(type: BookingItemType) {
+    if (bookingType === null) {
+      setLineItems([emptyLineItem(type)]);
+    }
+    setBookingType(type);
+  }
+
   function updateLineItem(key: string, patch: Partial<LineItemDraft>) {
     setLineItems((rows) => rows.map((r) => (r.key === key ? { ...r, ...patch } : r)));
   }
 
-  function addLineItem() {
-    setLineItems((rows) => [...rows, emptyLineItem()]);
+  function addLineItem(type: BookingItemType) {
+    setLineItems((rows) => [...rows, emptyLineItem(type)]);
   }
 
   function removeLineItem(key: string) {
@@ -96,12 +113,6 @@ export function BookingForm() {
     const selected = items.find((i) => i.id === itemId) ?? null;
     const autoPrice = selected ? (row.type === "rental" ? selected.rental_price : selected.sale_price) : null;
     updateLineItem(row.key, { itemId, quantityBooked: "1", price: autoPrice != null ? String(autoPrice) : "" });
-  }
-
-  function handleTypeChange(row: LineItemDraft, type: BookingItemType) {
-    const selected = selectedItemFor(row);
-    const autoPrice = selected ? (type === "rental" ? selected.rental_price : selected.sale_price) : null;
-    updateLineItem(row.key, { type, price: autoPrice != null ? String(autoPrice) : "" });
   }
 
   function addCustomAddon(row: LineItemDraft) {
@@ -171,7 +182,8 @@ export function BookingForm() {
       .then(({ booking_code }) => setBookingCode(booking_code))
       .catch(() => {});
     setCustomer(null);
-    setLineItems([emptyLineItem()]);
+    setBookingType(null);
+    setLineItems([]);
     setAdvanceAmount("");
     setAdvanceMethod("cash");
     setGstApplicable(false);
@@ -214,55 +226,71 @@ export function BookingForm() {
   return (
     <form className="wizard-card" onSubmit={handleSubmit}>
       <div className="wizard-step">
-        <h2>New Booking</h2>
+        <h2>
+          {bookingType === "rental" ? "New Rental Booking" : bookingType === "sale" ? "New Sale" : "New Booking"}
+        </h2>
+        {!bookingType && <p className="wizard-hint">Is this a rental or a sale?</p>}
 
-        <label className="field-label">
-          Booking Code
-          <input
-            type="text"
-            value={bookingCode}
-            onChange={(e) => setBookingCode(e.target.value)}
-            placeholder="Auto-generated"
-          />
-        </label>
-        <p className="wizard-hint">Suggested automatically — edit it if you'd rather use your own code.</p>
+        <div className="type-gate">
+          <button
+            type="button"
+            className={bookingType === "rental" ? "type-gate-btn active" : "type-gate-btn"}
+            onClick={() => chooseType("rental")}
+          >
+            Rental
+          </button>
+          <button
+            type="button"
+            className={bookingType === "sale" ? "type-gate-btn active" : "type-gate-btn"}
+            onClick={() => chooseType("sale")}
+          >
+            Sale
+          </button>
+        </div>
 
-        <p className="field-label">Customer</p>
-        <CustomerPicker selected={customer} onSelect={setCustomer} />
+        {bookingType && (
+          <>
+            <label className="field-label">
+              Booking Code
+              <input
+                type="text"
+                value={bookingCode}
+                onChange={(e) => setBookingCode(e.target.value)}
+                placeholder="Auto-generated"
+              />
+            </label>
+            <p className="wizard-hint">Suggested automatically — edit it if you'd rather use your own code.</p>
 
-        {lineItems.map((row, index) => {
-          const selected = selectedItemFor(row);
-          const eligibleItems = items.filter((i) => i.tracking_type === "quantity" || i.status === "available");
-          const conflict = itemConflicts.find((c) => c.index === index);
-          return (
-            <div className="line-item-card" key={row.key}>
-              <div className="line-item-card-header">
-                <h3>Item {index + 1}</h3>
-                {lineItems.length > 1 && (
-                  <button type="button" className="btn-secondary" onClick={() => removeLineItem(row.key)}>
-                    Remove
-                  </button>
-                )}
-              </div>
+            <p className="field-label">Customer</p>
+            <CustomerPicker selected={customer} onSelect={setCustomer} />
 
-              <div className="toggle-group">
-                <button
-                  type="button"
-                  className={row.type === "rental" ? "toggle-btn active" : "toggle-btn"}
-                  onClick={() => handleTypeChange(row, "rental")}
-                >
-                  Rental
-                </button>
-                <button
-                  type="button"
-                  className={row.type === "sale" ? "toggle-btn active" : "toggle-btn"}
-                  onClick={() => handleTypeChange(row, "sale")}
-                >
-                  Sale
-                </button>
-              </div>
+            {lineItems.map((row, index) => {
+              const selected = selectedItemFor(row);
+              const eligibleItems = items.filter((i) => i.tracking_type === "quantity" || i.status === "available");
+              const conflict = itemConflicts.find((c) => c.index === index);
+              // Only when a line's own type doesn't match the booking's primary
+              // type (added via "+ Add a [X] item instead" below) — otherwise
+              // it's implied by context and a badge would just be noise.
+              const isMixedType = row.type !== bookingType;
+              return (
+                <div className="line-item-card" key={row.key}>
+                  <div className="line-item-card-header">
+                    <h3>
+                      Item {index + 1}
+                      {isMixedType && (
+                        <span className="pill pill-active line-item-type-badge">
+                          {row.type === "rental" ? "Rental" : "Sale"}
+                        </span>
+                      )}
+                    </h3>
+                    {lineItems.length > 1 && (
+                      <button type="button" className="btn-secondary" onClick={() => removeLineItem(row.key)}>
+                        Remove
+                      </button>
+                    )}
+                  </div>
 
-              <label className="field-label">
+                  <label className="field-label">
                 Item
                 <select value={row.itemId} onChange={(e) => handleItemChange(row, e.target.value)}>
                   <option value="">Select an item…</option>
@@ -390,69 +418,80 @@ export function BookingForm() {
           );
         })}
 
-        <div className="add-item-row">
-          <button type="button" className="btn-secondary" onClick={addLineItem}>
-            + Add Another Item
-          </button>
-        </div>
+            <div className="add-item-row">
+              <button type="button" className="btn-secondary" onClick={() => addLineItem(bookingType)}>
+                + Add Another Item
+              </button>
+              <button
+                type="button"
+                className="add-other-type-link"
+                onClick={() => addLineItem(bookingType === "rental" ? "sale" : "rental")}
+              >
+                + Add a {bookingType === "rental" ? "Sale" : "Rental"} item instead
+              </button>
+            </div>
 
-        <label className="field-label">
-          Advance Received (₹)
-          <input
-            type="number"
-            min={0}
-            value={advanceAmount}
-            onChange={(e) => setAdvanceAmount(e.target.value)}
-            placeholder="Optional"
-          />
-        </label>
-        {(toNumberOrNull(advanceAmount) ?? 0) > 0 && (
-          <label className="field-label">
-            Payment Method
-            <select value={advanceMethod} onChange={(e) => setAdvanceMethod(e.target.value as PaymentMethod)}>
-              {PAYMENT_METHODS.map((m) => (
-                <option key={m} value={m}>
-                  {PAYMENT_METHOD_LABELS[m]}
-                </option>
-              ))}
-            </select>
-          </label>
-        )}
-
-        <label className="field-label">
-          <input type="checkbox" checked={gstApplicable} onChange={(e) => setGstApplicable(e.target.checked)} />{" "}
-          GST applicable
-        </label>
-
-        {gstApplicable && (
-          <>
             <label className="field-label">
-              GST Invoice Number
+              Advance Received (₹)
               <input
-                type="text"
-                value={gstInvoiceNumber}
-                onChange={(e) => setGstInvoiceNumber(e.target.value)}
+                type="number"
+                min={0}
+                value={advanceAmount}
+                onChange={(e) => setAdvanceAmount(e.target.value)}
+                placeholder="Optional"
               />
             </label>
+            {(toNumberOrNull(advanceAmount) ?? 0) > 0 && (
+              <label className="field-label">
+                Payment Method
+                <select value={advanceMethod} onChange={(e) => setAdvanceMethod(e.target.value as PaymentMethod)}>
+                  {PAYMENT_METHODS.map((m) => (
+                    <option key={m} value={m}>
+                      {PAYMENT_METHOD_LABELS[m]}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+
             <label className="field-label">
-              HSN Code
-              <input type="text" value={hsnCode} onChange={(e) => setHsnCode(e.target.value)} />
+              <input type="checkbox" checked={gstApplicable} onChange={(e) => setGstApplicable(e.target.checked)} />{" "}
+              GST applicable
             </label>
-            <label className="field-label">
-              Tax Rate (%)
-              <input type="number" min={0} value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
-            </label>
+
+            {gstApplicable && (
+              <>
+                <label className="field-label">
+                  GST Invoice Number
+                  <input
+                    type="text"
+                    value={gstInvoiceNumber}
+                    onChange={(e) => setGstInvoiceNumber(e.target.value)}
+                  />
+                </label>
+                <label className="field-label">
+                  HSN Code
+                  <input type="text" value={hsnCode} onChange={(e) => setHsnCode(e.target.value)} />
+                </label>
+                <label className="field-label">
+                  Tax Rate (%)
+                  <input type="number" min={0} value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
+                </label>
+              </>
+            )}
+
+            {error && <p className="wizard-error">{error}</p>}
           </>
         )}
-
-        {error && <p className="wizard-error">{error}</p>}
       </div>
 
-      <div className="wizard-nav">
-        <button type="submit" className="btn-primary btn-save" disabled={!canSubmit || saving}>
-          {saving ? "Creating…" : "Create Booking"}
-        </button>
-      </div>
+      {bookingType && (
+        <div className="wizard-nav">
+          <button type="submit" className="btn-primary btn-save" disabled={!canSubmit || saving}>
+            {saving ? "Creating…" : "Create Booking"}
+          </button>
+        </div>
+      )}
     </form>
   );
 }

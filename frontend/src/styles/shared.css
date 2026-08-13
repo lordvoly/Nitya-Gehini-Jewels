@@ -1244,6 +1244,18 @@ a {
   text-transform: uppercase;
   letter-spacing: 0.03em;
   margin: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+/* Only shown on a line whose type doesn't match the booking's primary
+   choice (added via "+ Add a [X] item instead") — text-transform reset
+   since the parent h3 is uppercase and every other .pill in the app reads
+   in normal case. */
+.line-item-type-badge {
+  text-transform: none;
+  letter-spacing: normal;
 }
 
 .line-item-error {
@@ -1255,6 +1267,60 @@ a {
 
 .add-item-row {
   margin-top: 16px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* De-emphasized on purpose — this is the escape hatch for the rare mixed
+   booking, not a primary action; a bordered .btn-secondary next to
+   "+ Add Another Item" would compete with it for attention. */
+.add-other-type-link {
+  background: none;
+  border: none;
+  padding: 0;
+  font: inherit;
+  font-size: 13px;
+  color: var(--ink-soft);
+  text-decoration: underline;
+  text-decoration-color: transparent;
+  cursor: pointer;
+  transition: text-decoration-color 0.15s ease;
+}
+
+.add-other-type-link:hover,
+.add-other-type-link:focus-visible {
+  text-decoration-color: currentColor;
+}
+
+/* ── Booking type gate (BookingForm's entry-point choice) ────────────────
+   Deliberately larger/more prominent than the ordinary .toggle-group used
+   elsewhere (e.g. AddCustomerForm's customer-type picker) — this is the
+   first, most important decision on the form, not an incidental option. */
+.type-gate {
+  display: flex;
+  gap: 10px;
+  margin: 4px 0 20px;
+}
+
+.type-gate-btn {
+  flex: 1;
+  min-height: 64px;
+  font-size: 18px;
+  font-weight: 700;
+  font-family: inherit;
+  border: 2px solid var(--line);
+  border-radius: var(--radius-lg);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.type-gate-btn.active {
+  background: var(--wine);
+  color: #fff;
+  border-color: var(--wine);
 }
 
 .danger-zone {

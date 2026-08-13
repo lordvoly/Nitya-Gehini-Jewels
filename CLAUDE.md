@@ -781,6 +781,56 @@ once this is live.
 **Next step — Phase 2 (bookkeeping):** now fully complete — Payments, Expenses, P&L,
 Outstanding Dues, and invoice/receipt generation are all done.
 
+BookingForm entry-point restructure, new session (2026-08-13) — the per-item
+Rental/Sale toggle shown on every line was the actual source of clutter the earlier
+mobile-nav overflow fixes were adjacent to but didn't touch. Replaced with an
+entry-point choice: `BookingForm` now opens with nothing but two large "Rental"/
+"Sale" buttons (`.type-gate`/`.type-gate-btn`, deliberately styled larger than the
+`.toggle-group` pattern `AddCustomerForm`'s customer-type picker already uses, since
+this is the form's first and most important decision, not an incidental option) —
+`bookingCode`, the customer picker, and every line item stay hidden until one is
+picked. The choice sets `bookingType` state, which (a) drives the heading ("New
+Rental Booking" / "New Sale"), (b) is what every new line item defaults to via
+`emptyLineItem(type)`/`addLineItem(type)`, and (c) stays clickable afterward as a
+tab-like pair — switching it only changes the heading and the default for *future*
+lines, deliberately never touching a line already on the form, so toggling back and
+forth can't silently change data on existing rows.
+
+Mixing is still fully supported, just de-emphasized per explicit instruction: a
+small, low-key "+ Add a [Sale/Rental] item instead" text link (`.add-other-type-link`
+— underlined text, not a bordered button, so it doesn't visually compete with
+"+ Add Another Item") adds a line item of the *opposite* type. Any line whose own
+`type` doesn't match the booking's current `bookingType` gets a small `.pill`
+badge next to its "Item N" heading (`.line-item-type-badge`) — the only place type
+is still shown per-line, and only when it's genuinely not implied by context. The
+old per-line `.toggle-group` and its `handleTypeChange` handler are gone entirely,
+not just conditionally hidden — there's no way to retype an existing line short of
+removing it and re-adding through whichever button gives the type you want.
+Deliberately unchanged: `booking_code` generation (still the neutral `BK-000N`
+prefix regardless of `bookingType` — this is a UX default, not a new booking
+category) and every existing per-type field/validation rule (`return_date` required
+for rental, deposit fields rental-only, etc.) — those already lived on each line's
+own `type`, which this task never touches, only what's *defaulted* and *shown*.
+
+Verified live with throwaway `ZZTEST` items/customer (created and fully deleted
+after, including a second throwaway admin account after the first one's session
+token had gone stale mid-session — an unrelated pre-existing quirk, not something
+this task introduced or fixed, worth knowing about if it recurs): choosing Rental
+and adding 3 items showed zero `.toggle-group` elements and zero badges, all 3
+showing Return Date; same inverted for Sale (zero toggles/badges, zero Return Date
+fields, all showing Sale Date instead, no Security Deposit field). Used
+"+ Add a Sale item instead" once inside a Rental booking — confirmed live in the DOM
+that exactly one badge appeared, reading "Sale", on exactly that line; its price
+field correctly auto-filled from the item's `sale_price` while the Rental line's
+used `rental_price`. Submitted that real mixed booking — saved as one transaction,
+`booking_code` came back `BK-0001` (not `RNT-`/`SALE-`), and a direct Supabase query
+confirmed the two `booking_items` rows landed with `type: "rental"` and
+`type: "sale"` respectively, correct `return_date` (set / `null`) on each. Then
+attempted a second booking on the same rental item with genuinely overlapping dates
+(21–23 Aug against the existing 20–22 Aug) — correctly blocked with the exact
+existing conflict shown, unchanged conflict-detection behavior confirmed live rather
+than just assumed from the fact that no backend code was touched by this task.
+
 Mobile nav restructure, new session (2026-08-13, revised twice more the same
 session after live feedback on each iteration) — repeated tab-bar overflow (clipped
 at 7 tabs, then again at 8) came from cramming every destination into one flat row
