@@ -123,17 +123,21 @@ a {
 
 .app-tab {
   flex: 1;
+  min-width: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   min-height: 56px;
-  padding: 8px 4px;
+  padding: 8px 2px;
   text-decoration: none;
   color: var(--ink-soft);
-  font-size: 12.5px;
+  font-size: 11px;
   font-weight: 700;
   border-top: 3px solid transparent;
   text-align: center;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .app-tab.active {

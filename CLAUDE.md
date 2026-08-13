@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Rebuild of the v1 Airtable + static HTML system as a real backend + database.
 Full context and rationale: `PROJECT_PLAN_V2.md` (keep it in sync if the plan changes).
 
-## Current status (2026-08-10)
+## Current status (2026-08-12)
 
 **Done:** Auth (login/logout, protected routes, `/api/me` role scaffold — not yet used
 to gate anything). Items, end to end, including edit/delete: backend
@@ -585,11 +585,90 @@ after; real items (`NGJ-0001`, `NGJ-0003`, both with their real multi-entry
 `components` lists) and the real booking `RNT-0001` (`custom_addons: []` via the
 column default) confirmed untouched throughout.
 
-**Next step — Phase 2 (bookkeeping), continued:** Payments is now done (see above).
-Per `PROJECT_PLAN_V2.md` §5, still remaining:
-- **Expenses** — `backend/src/routes/expenses.ts` has `GET /api/expenses?from=&to=`
-  and `POST /api/expenses`, same situation: scaffolded, no frontend at all yet, not
-  even a nav entry.
+Multi-item bookings restructuring ("Stage 2 cutover"), executed 2026-08-11 — full
+detail in `PROJECT_PLAN_V2.md` §8/§8.1, summarized here since it's a major schema
+change. `bookings` split into a parent/child model: `bookings` is now the
+per-transaction record (customer, GST fields, codes) and a new `booking_items` table
+holds one row per physical item within that transaction (`item_id`, `type`,
+`pickup_date`/`return_date`, `status`, `price_charged` snapshot, deposit fields,
+`return_checklist`, `custom_addons`) — everything that used to live directly on
+`bookings` per the old one-row-per-item model. `payments.booking_id` still points at
+the parent `bookings` row (one running balance per family transaction, not per item);
+`booking_financials` is now an aggregate over `booking_items` grouped by
+`booking_id`. A booking-level status is computed from its `booking_items`' statuses,
+never stored. Run as one uninterrupted sequence against production; two real bugs
+were caught and fixed during the cutover itself (stale `_v2` view references in 4
+backend + 2 frontend files; Vercel Production was missing `VITE_API_URL` entirely,
+serving a `localhost:4000`-baked build for ~5 hours before caught). Old single-item
+columns/views and the `booking_status` enum were dropped from production as part of
+this — there is no fallback to the pre-cutover shape.
+
+Refund infrastructure, 2026-08-12 (`PROJECT_PLAN_V2.md` §8.2) — lost-and-found item
+charges and cancel-with-refund, both explicitly reversing the earlier decision that
+no plain Cancel Booking action would exist until this infrastructure existed. New
+`payments.type` (`payment`/`refund`) and a new `item_charges` table; every money
+movement (a lost-item charge, a refund on item removal or cancel, resolving a charge)
+is expressed purely through the sign of a `payments` row — `booking_financials`'s
+`balance_due` formula itself never changed. Return flow (`ReturnForm.tsx`) offers an
+inline "Charge for this" on each unchecked checklist item; new `ChargesPage.tsx`
+("Charges" tab) is the one cross-booking view of every unresolved charge, with an
+inline Resolve action. Removing an item or cancelling a whole booking no longer
+hard-blocks when it would leave the customer overpaid — it returns the exact refund
+amount needed, then completes on a second call with that amount confirmed. All
+verified live against real production with throwaway `ZZTEST` fixtures and a
+throwaway admin account, cleaned up after; real data untouched throughout.
+
+Dashboard alerts, 2026-08-12 — dismissible Payment Due / Item Due popups shown on
+Dashboard load, summarizing data the page already computes (outstanding balance;
+today's returns due + overdue rentals, including `next_customer_waiting`). Shown at
+most once per IST day per user via localStorage keyed off the backend's own
+echoed-back date, never a frontend-computed one; silent when nothing's due.
+
+AI Assistant chat page, 2026-08-12 (Phase 3 frontend) — the backend chat-completion
+endpoint and its grounded tools (`backend/src/routes/chat.ts`, `backend/src/tools/`)
+already existed from earlier scaffolding; this wires up the frontend that was never
+built: a new `/assistant` route (tab labeled "Ask" — "Assistant" clipped on a real
+390px viewport once a 7th tab was added), session-only message history, and 4
+tappable starter questions for a non-technical first-time user. Two small live-found
+fixes same day: the model's replies use markdown `**bold**` for emphasis, which
+rendered as literal asterisks until a minimal (not full-parser) fix; and the tab
+label itself, per above.
+
+Expenses frontend, new session (2026-08-13) — the backend (`GET`/`POST
+/api/expenses`) existed but had no frontend at all. Backend gained real validation to
+match `payments.ts`'s pattern (`category`/`amount` required, `amount > 0`, `category`
+checked against the enum) and a resolved-range-echoed-back date filter identical to
+Reports' (`istMonthRange()` default, `{ period, expenses }` response shape — a
+breaking change from the old bare-array response, safe since nothing else in the
+backend called this route). New `frontend/src/lib/expenses.ts` +
+`ExpensesPage.tsx` (date-range picker, period total, inline add-expense form, list
+table) and an "Expenses" tab added to `App.tsx`'s nav — the 8th bottom tab.
+
+That 8th tab reproduced the exact mobile-clipping bug from the "Ask" tab session,
+worse: `.app-tab`'s `flex: 1` had no `min-width: 0`, so flex items never shrink below
+their content's intrinsic width — fine at 7 tabs if the widest labels' total still
+fit, but the real fix needed here since one more tab always risks this again
+regardless of which label is added. Fixed properly this time instead of just
+shortening the new label: `.app-tab` now has `min-width: 0`, a smaller `font-size`
+(12.5px → 11px), tighter padding, and `white-space: nowrap` +
+`text-overflow: ellipsis` as a backstop for any future addition. Confirmed live at a
+genuine 390px viewport (same-origin-iframe technique) — before the fix, measured via
+`getBoundingClientRect` that the tab bar needed 444px against a 386px container
+(`Charges`/`Ask` visibly clipped); after, `scrollWidth === clientWidth` (386px) with
+all 8 labels rendering in full, no ellipsis triggered at this width.
+
+Verified live against real Supabase rows, not just typechecked: added a throwaway
+`ZZTEST`-prefixed expense (Utilities, ₹1500, date left blank) through the actual UI —
+confirmed it defaulted to `istToday()` (`2026-08-13`) in the database, not just the
+UI, and that `recorded_by` was populated with the real logged-in user's id. Narrowing
+the "From" date past the expense's date correctly emptied the list (confirming the
+date-range filter isn't just decorative). Submitting the add-expense form with no
+amount showed the "Enter an amount greater than 0" client-side error and made no
+request. Test row deleted directly via Supabase after; no real data existed in
+`expenses` to disturb.
+
+**Next step — Phase 2 (bookkeeping), continued:** Payments and Expenses are now both
+done (see above). Per `PROJECT_PLAN_V2.md` §5, still remaining:
 - **P&L by period** and **outstanding dues report** — neither exists yet in any form
   (not even scaffolded backend routes). Reports' existing date-range-picker pattern
   (`istMonthRange()`, resolved-range-echoed-back-in-response) is the template to reuse
@@ -682,29 +761,50 @@ return" must mean the same thing regardless of who's looking. Backend: use
 
 **`price_charged` on a booking is a snapshot**, taken at booking creation. Never
 recompute it from `items.rental_price`/`sale_price` after the fact — those can change
-later without altering past bookings.
+later without altering past bookings. Lives on `booking_items` (per line item), not
+`bookings`, since the Stage 2 cutover — see Data model summary below.
 
 **Item components/checklists belong to the parent item, not a separate table.**
 `items.components` is the template list (e.g. `["Necklace","Earrings","Tika"]`);
-`bookings.return_checklist` is that same list instantiated per-booking at return time.
-Matches v1's model — don't split this into a normalized child table.
+`booking_items.return_checklist` is that same list instantiated per-line-item at
+return time. Matches v1's model — don't split this into a normalized child table.
 
 ## Data model summary
 
-See `supabase/migrations/20260804000000_init_schema.sql` for the authoritative schema
-(enums, constraints, indexes, views, RLS) and later migrations for additive changes.
-Six tables:
+See `supabase/migrations/20260804000000_init_schema.sql` for the original schema and
+later migrations for additive changes. The Stage 2 parent/child restructuring
+(`PROJECT_PLAN_V2.md` §8) is the one exception to the usual `supabase/migrations/`
+pattern — its SQL lives in `supabase/proposed/20260811_booking_items_restructure/`
+(run by hand against production as a one-time sequence, `01_schema_additive.sql`
+through the destructive `03_schema_cutover.sql`, not as a numbered migration) — plus
+`20260812130000_refund_infrastructure.sql` for the payments/item_charges additions
+after that. Seven tables:
 
 - **items** — inventory. `item_type` (`set`/`single`) determines whether `components`
   is used; `tracking_type` (`unique`/`quantity`) determines whether the item is a single
   trackable physical piece or a stock count.
 - **customers** — dedupe on `phone` (unique) before creating. `customer_type`
   (`regular`/`influencer`/`mua`, default `regular`) drives the Reports collab toggle.
-- **bookings** — covers both rentals and sales (`type`). `price_charged` is a snapshot.
-  `return_date` is required for rentals, not for sales.
-- **payments** — supports multiple partial payments per booking (advance + balance, or
-  installments); `booking_financials` view sums these into `total_paid`/`balance_due`.
-- **expenses** — for the P&L/bookkeeping views (Phase 2).
+- **bookings** — the per-transaction parent record (one per family pickup visit, not
+  per item): `customer_id`, `booking_code`, GST fields (`gst_applicable`,
+  `gst_invoice_number`, `hsn_code`, `tax_rate`, whole-transaction level). No
+  price/date/status fields of its own since the Stage 2 cutover — those all moved to
+  `booking_items`.
+- **booking_items** — one row per physical item within a booking: `booking_id`,
+  `item_id`, `type` (rental/sale, per item), `pickup_date`/`return_date`, `status`,
+  `price_charged` (snapshot), deposit fields, `return_checklist`, `custom_addons`. A
+  booking's overall status is computed from its `booking_items`' statuses, never
+  stored.
+- **payments** — `booking_id` points at the parent `bookings` row (one running balance
+  per family transaction); `booking_financials` view aggregates over `booking_items`
+  grouped by `booking_id` into `total_paid`/`balance_due`. `type` (`payment`/`refund`)
+  distinguishes money in vs. money back out — every refund (item removal, cancel,
+  resolving a lost-item charge) is a negative/positive `payments` row rather than a
+  separate ledger.
+- **item_charges** — lost/damaged-item charges raised at return time
+  (`booking_item_id` FK), resolved via a linked `refund`-type `payments` row.
+- **expenses** — for the P&L/bookkeeping views (Phase 2, still unbuilt on the
+  frontend).
 - **users** — mirrors `auth.users`, adds `role` (`admin`/`operator`).
 
 ## Request flow / architecture
@@ -728,19 +828,17 @@ The Claude Haiku chat tool definitions and their Supabase-backed implementations
 split per-tool — each case in the `runTool` switch queries a table or view the same way
 a REST route would.
 
-**Phase 1 is scaffolded but not complete.** `backend/src/routes/bookings.ts` has
-`TODO(Phase 1)` comments marking two known gaps: booking creation doesn't yet do
-conflict detection (overlapping dates for `unique` items, or oversold quantity for
-`quantity` items), and the return endpoint doesn't yet populate/validate
-`return_checklist` against the item's `components`. Check these TODOs before assuming
-booking/return logic is enforced.
-
 ## Build phases
 
 See `PROJECT_PLAN_V2.md` §5 for full detail. Order: Phase 1 core operations (item
 intake, bookings, returns, dashboard) → Phase 2 bookkeeping (payments, expenses, P&L,
 GST invoices) → Phase 3 AI chatbot → Phase 4 backlog (QR labels, WhatsApp reminders,
-etc). Don't build ahead of the current phase without checking in.
+etc). Phase 1 is complete (including the Stage 2 multi-item restructuring and refund
+infrastructure). Phase 3's frontend (`AssistantPage.tsx`) is also done — the backend
+chat route/tools (`backend/src/tools/index.ts`) already queried through
+`booking_items` correctly post-cutover, so the page just needed wiring up, which
+landed 2026-08-12. Phase 2 is otherwise still in progress — see "Next step" above.
+Don't build ahead of the current phase without checking in.
 
 ## Open questions (not something to guess at)
 

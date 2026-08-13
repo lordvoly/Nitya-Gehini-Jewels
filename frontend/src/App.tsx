@@ -5,6 +5,7 @@ import ItemsPage from "./pages/ItemsPage";
 import CustomersPage from "./pages/CustomersPage";
 import BookingsPage from "./pages/BookingsPage";
 import ReportsPage from "./pages/ReportsPage";
+import ExpensesPage from "./pages/ExpensesPage";
 import ChargesPage from "./pages/ChargesPage";
 import AssistantPage from "./pages/AssistantPage";
 import ProtectedRoute from "./components/ProtectedRoute";
@@ -18,6 +19,7 @@ const TABS = [
   { to: "/customers", label: "Customers" },
   { to: "/bookings", label: "Bookings" },
   { to: "/reports", label: "Reports" },
+  { to: "/expenses", label: "Expenses" },
   { to: "/charges", label: "Charges" },
   { to: "/assistant", label: "Ask" },
 ];
@@ -78,6 +80,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <ReportsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/expenses"
+            element={
+              <ProtectedRoute>
+                <ExpensesPage />
               </ProtectedRoute>
             }
           />
