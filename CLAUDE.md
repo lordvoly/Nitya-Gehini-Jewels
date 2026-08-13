@@ -896,6 +896,40 @@ hamburger) with every mobile-only element (`display: none`) absent.
 real touch-target sizing and iOS/Android rendering still need a check on a real
 device, same caveat as the original design pass.
 
+Assistant page: instant-send starters + per-reply follow-up chips, new session
+(2026-08-13) — two changes. Starter questions (shown on an empty chat) now send on a
+single tap instead of just filling the input for a manual Send. After every reply, a
+new `POST /api/chat/suggestions` (`backend/src/routes/chat.ts`) fires a second, small
+Haiku call — no tool access, `tool_choice` forced to a one-off `suggest_questions`
+tool so the response is reliably structured (`{ questions: string[] }`) rather than
+prose that needs parsing — asking for 2-3 short follow-ups grounded in the
+conversation so far, sent as the same `{ messages }` array (including the reply just
+shown) already sent to the main endpoint. Rendered as tappable chips
+(`.chat-suggestion-chip`) below the latest reply; tapping one sends immediately, same
+as a starter question. Starter taps, suggestion taps, and the input form all now
+funnel through one `sendMessage()` — no separate populate-then-send path exists
+anymore. A `suggestionsRequestRef` counter guards against a slow suggestions call
+from an earlier turn resolving after a newer turn has already started and clobbering
+its chips; a failed suggestions call is swallowed silently (no user-facing error) so
+this non-critical addition can never disrupt the core chat flow. Free-form typing is
+completely untouched — same input, same Send button, same submit handler.
+
+Verified live against the deployed site, not locally: `backend/.env` has no real
+`ANTHROPIC_API_KEY` (only Render's production env var does — a local-only gap, not a
+bug), so this had to ship and be tested live rather than in dev, using a throwaway
+admin account created and fully deleted after. Confirmed: tapping "Where is the
+Peacock Bridal Set?" sent immediately with no extra click and returned a real,
+grounded reply (location, rental/sale price); the chips that followed were
+genuinely specific to that item ("What items are included…", "Is it available for
+a specific date range…"), not the 4 fixed starters repeating. Tapped one of those
+chips — sent immediately, got a real reply, and a *new*, differently-worded set of
+item-specific chips appeared. Typed a free-form question ("How many customers do we
+have?") and sent via the Send button — worked exactly as before (populates the
+input, does not auto-send, requires the click), returned a real reply, and produced
+its own topically-relevant chips (customer/rental-history follow-ups, not item
+ones) — confirming the suggestions endpoint responds to *whatever* was just
+discussed, not a hardcoded topic.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.
