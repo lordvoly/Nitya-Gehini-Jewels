@@ -1,5 +1,5 @@
 import type { NextFunction, Request, Response } from "express";
-import { supabase } from "../lib/supabase.js";
+import { supabase, useMockDb } from "../lib/supabase.js";
 
 export interface AuthedRequest extends Request {
   user?: { id: string; role: "admin" | "operator"; name: string; email: string };
@@ -10,6 +10,16 @@ export interface AuthedRequest extends Request {
  * the matching row from `users` (for its role). Attaches it to req.user.
  */
 export async function requireAuth(req: AuthedRequest, res: Response, next: NextFunction) {
+  if (useMockDb) {
+    req.user = {
+      id: "dev-user",
+      role: "admin",
+      name: "Dev User",
+      email: "dev@example.com",
+    };
+    return next();
+  }
+
   const authHeader = req.headers.authorization;
   const token = authHeader?.startsWith("Bearer ") ? authHeader.slice(7) : undefined;
 

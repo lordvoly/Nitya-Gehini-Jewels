@@ -1,0 +1,109 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;0,800;0,900;1,100;1,200;1,300;1,400;1,500;1,600;1,700;1,800;1,900&display=swap');
+
+@import "@tabler/icons-webfont/dist/tabler-icons.min.css";
+
+// Import Bootstrap functions first
+@import "bootstrap/scss/functions";
+
+// Override Bootstrap variables here
+@import "./variables";
+
+// Import Bootstrap
+@import "bootstrap/scss/bootstrap";
+
+// Custom styles
+@import "./custom";
+
+/* Custom Enhancements for Admin Dashboard Forms & Components */
+body {
+  background-color: #f8f9fa;
+  font-family: 'Poppins', sans-serif;
+  color: #262626;
+}
+
+.card {
+  border-radius: 12px;
+  border: 1px solid #e5e5e5;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.btn-primary {
+  background-color: #E66239 !important;
+  border-color: #E66239 !important;
+  color: #ffffff !important;
+  font-weight: 500;
+  border-radius: 8px;
+  &:hover, &:focus, &:active {
+    background-color: #d2532c !important;
+    border-color: #d2532c !important;
+  }
+}
+
+.btn-secondary, .btn-outline-secondary {
+  border-radius: 8px;
+}
+
+.form-control, .form-select {
+  border-radius: 8px;
+  border: 1px solid #d4d4d4;
+  padding: 0.5rem 0.875rem;
+  font-size: 0.875rem;
+  &:focus {
+    border-color: #E66239;
+    box-shadow: 0 0 0 0.2rem rgba(230, 98, 57, 0.15);
+  }
+}
+
+/* Badge styles */
+.badge-subtle-primary {
+  background-color: rgba(230, 98, 57, 0.1);
+  color: #E66239;
+}
+.badge-subtle-success {
+  background-color: rgba(0, 201, 81, 0.1);
+  color: #00C951;
+}
+.badge-subtle-warning {
+  background-color: rgba(240, 177, 0, 0.1);
+  color: #d99f00;
+}
+.badge-subtle-danger {
+  background-color: rgba(251, 44, 54, 0.1);
+  color: #FB2C36;
+}
+
+/* Dropzone / Upload Box Style */
+.upload-box {
+  border: 2px dashed #d4d4d4;
+  border-radius: 12px;
+  padding: 2rem;
+  text-align: center;
+  background-color: #fafafa;
+  cursor: pointer;
+  transition: border-color 0.2s, background-color 0.2s;
+  &:hover {
+    border-color: #E66239;
+    background-color: rgba(230, 98, 57, 0.02);
+  }
+}
+
+/* Chat Bubbles */
+.chat-bubble {
+  padding: 12px 16px;
+  border-radius: 12px;
+  margin-bottom: 12px;
+  max-width: 80%;
+  &.user {
+    background-color: #E66239;
+    color: white;
+    margin-left: auto;
+    border-bottom-right-radius: 2px;
+  }
+  &.assistant {
+    background-color: #ffffff;
+    border: 1px solid #e5e5e5;
+    color: #262626;
+    margin-right: auto;
+    border-bottom-left-radius: 2px;
+  }
+}

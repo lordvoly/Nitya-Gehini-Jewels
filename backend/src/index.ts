@@ -24,7 +24,11 @@ const allowedOrigins = (process.env.CORS_ORIGIN ?? "")
   .map((s) => s.trim())
   .filter(Boolean);
 
-app.use(cors({ origin: allowedOrigins }));
+app.use(
+  cors({
+    origin: allowedOrigins.length > 0 ? allowedOrigins : ["http://localhost:5173", "http://127.0.0.1:5173"],
+  }),
+);
 app.use(express.json());
 
 app.get("/health", (_req, res) => res.json({ ok: true }));

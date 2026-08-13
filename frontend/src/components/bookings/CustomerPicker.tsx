@@ -3,9 +3,6 @@ import { AddCustomerForm } from "../customers/AddCustomerForm";
 import { Modal } from "../common/Modal";
 import { fetchCustomers, type Customer } from "../../lib/customers";
 
-// Search-first: look the customer up by phone/name before ever offering to
-// create a new one, since phone dedupe only helps if the operator actually
-// searches first rather than reflexively adding a new record.
 export function CustomerPicker({
   selected,
   onSelect,
@@ -36,12 +33,21 @@ export function CustomerPicker({
 
   if (selected) {
     return (
-      <div className="found-panel">
-        <p>
-          <strong>{selected.name}</strong> — {selected.phone}
-        </p>
-        <button type="button" className="btn-secondary" onClick={() => onSelect(null)}>
-          Change Customer
+      <div className="p-3 bg-light rounded border d-flex align-items-center justify-content-between">
+        <div className="d-flex align-items-center gap-3">
+          <div className="avatar avatar-md rounded-circle bg-primary-subtle text-primary fw-bold d-flex align-items-center justify-content-center">
+            {selected.name.slice(0, 2).toUpperCase()}
+          </div>
+          <div>
+            <h6 className="mb-0 fw-bold text-dark">{selected.name}</h6>
+            <span className="text-muted small">
+              <i className="ti ti-phone me-1"></i>
+              {selected.phone}
+            </span>
+          </div>
+        </div>
+        <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => onSelect(null)}>
+          <i className="ti ti-refresh me-1"></i> Change
         </button>
       </div>
     );
@@ -49,25 +55,46 @@ export function CustomerPicker({
 
   return (
     <div>
-      <input
-        className="search-input"
-        type="text"
-        placeholder="Search customer by name or phone…"
-        value={term}
-        onChange={(e) => setTerm(e.target.value)}
-      />
+      <div className="input-group mb-2">
+        <span className="input-group-text bg-white">
+          <i className="ti ti-search text-muted"></i>
+        </span>
+        <input
+          className="form-control"
+          type="text"
+          placeholder="Search customer by name or phone…"
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+        />
+      </div>
+
       {results.length > 0 && (
-        <div className="option-list">
+        <div className="list-group mb-3 shadow-sm border">
           {results.map((c) => (
-            <button type="button" key={c.id} className="toggle-btn" onClick={() => onSelect(c)}>
-              {c.name} — {c.phone}
+            <button
+              type="button"
+              key={c.id}
+              className="list-group-item list-group-item-action d-flex justify-content-between align-items-center py-2"
+              onClick={() => onSelect(c)}
+            >
+              <div>
+                <strong className="text-dark me-2">{c.name}</strong>
+                <span className="text-muted small">{c.phone}</span>
+              </div>
+              <i className="ti ti-chevron-right text-muted fs-7"></i>
             </button>
           ))}
         </div>
       )}
-      <button type="button" className="btn-secondary" onClick={() => setShowAddModal(true)}>
-        + Add New Customer
+
+      <button
+        type="button"
+        className="btn btn-outline-primary btn-sm d-inline-flex align-items-center gap-1 mt-1"
+        onClick={() => setShowAddModal(true)}
+      >
+        <i className="ti ti-user-plus"></i> Add New Customer
       </button>
+
       {showAddModal && (
         <Modal onClose={() => setShowAddModal(false)}>
           <AddCustomerForm

@@ -44,9 +44,6 @@ function emptyDraft(): NewItemDraft {
   };
 }
 
-// Per-line-item field edits, keyed by booking_items.id — separate from
-// NewItemDraft (Add Item) since these edit an existing row via PATCH rather
-// than building a POST payload from scratch.
 interface ItemEditState {
   pickupDate: string;
   returnDate: string;
@@ -71,12 +68,6 @@ function draftFromItem(bi: BookingItem): ItemEditState {
   };
 }
 
-// Parent fields (customer, GST) + per-item field edits + Add Item + Remove
-// Item + whole-booking Cancel (§8 decision 6, now built on refund
-// infrastructure). Removing an item never hard-deletes (backend flips
-// status to 'cancelled'); it no longer blocks on a negative balance either
-// — the exact refund amount needed comes back from the backend and is
-// shown/editable here before confirming.
 export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: string; onDone: () => void; onCancel: () => void }) {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [items, setItems] = useState<Item[]>([]);
@@ -96,11 +87,8 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({});
 
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
-  const [removingId, setRemovingId] = useState<string | null>(null);
+  const [deletingId, setDeletingId] = useState<string | null>(null);
   const [removeErrors, setRemoveErrors] = useState<Record<string, string>>({});
-  // Populated only once the backend has told us removing this item would
-  // leave the customer overpaid — the exact amount it reports, editable
-  // before the second, confirming call.
   const [refundNeeded, setRefundNeeded] = useState<Record<string, { message: string; amount: string }>>({});
 
   const [showAddForm, setShowAddForm] = useState(false);
@@ -155,10 +143,6 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     setParentError(null);
     setSavingParent(true);
     try {
-      // PATCH /:id returns only the updated row's own columns (no
-      // customers/booking_items/financials embed) — re-fetch the full shape
-      // via load() rather than setBooking()-ing the PATCH response directly,
-      // which would wipe booking.booking_items and crash the item list below.
       await updateBooking(bookingId, {
         customer_id: customer.id,
         gst_applicable: gstApplicable,
@@ -194,10 +178,6 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     setItemErrors((e) => ({ ...e, [bi.id]: "" }));
     setSavingItemId(bi.id);
     try {
-      // PATCH .../items/:itemId returns only the raw booking_items row (no
-      // nested items(item_code, name, ...) embed) — re-fetch via load()
-      // rather than splicing that response into state, which would blank
-      // out this row's item name/code in the header above.
       await updateBookingItem(bookingId, bi.item_id, {
         pickup_date: state.pickupDate,
         return_date: bi.type === "rental" ? state.returnDate || null : null,
@@ -215,15 +195,9 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     }
   }
 
-  // Two calls, same handler: the first (no refundNeeded entry yet) tries a
-  // plain removal; if the backend comes back with an exact amount needed,
-  // that's stashed in refundNeeded and the confirm row switches to show it
-  // instead of closing. The second call (refundNeeded[bi.id] present)
-  // sends that — possibly edited — amount, which the backend records as an
-  // actual refund before completing the removal.
   async function handleRemoveItem(bi: BookingItem) {
     setRemoveErrors((e) => ({ ...e, [bi.id]: "" }));
-    setRemovingId(bi.id);
+    setDeletingId(bi.id);
     try {
       const pending = refundNeeded[bi.id];
       const result = await cancelBookingItem(bookingId, bi.item_id, pending ? toNumberOrNull(pending.amount) ?? 0 : undefined);
@@ -241,7 +215,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     } catch (err) {
       setRemoveErrors((e) => ({ ...e, [bi.id]: err instanceof Error ? err.message : "Failed to remove item" }));
     } finally {
-      setRemovingId(null);
+      setDeletingId(null);
     }
   }
 
@@ -327,21 +301,22 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
 
   if (loading) {
     return (
-      <div className="wizard-card">
-        <p>Loading…</p>
+      <div className="card border-0 shadow-sm p-5 text-center">
+        <div className="spinner-border text-primary mx-auto mb-2" role="status"></div>
+        <span className="text-muted small">Loading booking editor…</span>
       </div>
     );
   }
 
   if (error || !booking) {
     return (
-      <div className="wizard-card">
-        <p className="wizard-error">{error ?? "Booking not found"}</p>
-        <div className="wizard-nav">
-          <button className="btn-secondary" onClick={onCancel}>
-            Back
-          </button>
+      <div className="card border-0 shadow-sm p-4">
+        <div className="alert alert-danger mb-3">
+          <i className="ti ti-alert-circle me-1"></i> {error ?? "Booking not found"}
         </div>
+        <button type="button" className="btn btn-outline-secondary btn-sm" onClick={onCancel}>
+          Back
+        </button>
       </div>
     );
   }
@@ -349,418 +324,394 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   const hasActiveItems = booking.booking_items.some((bi) => bi.status === "booked" || bi.status === "out");
 
   return (
-    <div className="wizard-card">
-      <div className="wizard-step">
-        <h2>Edit Booking — {booking.booking_code}</h2>
+    <div className="card border-0 shadow-sm">
+      <div className="card-header bg-white p-4 border-bottom d-flex align-items-center justify-content-between">
+        <h5 className="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
+          <i className="ti ti-edit text-primary"></i> Edit Booking: {booking.booking_code}
+        </h5>
+        <button type="button" className="btn btn-outline-secondary btn-sm" onClick={onDone}>
+          <i className="ti ti-check me-1"></i> Done Editing
+        </button>
+      </div>
 
-        <form onSubmit={handleSaveParent}>
-          <p className="field-label">Customer</p>
-          <CustomerPicker selected={customer} onSelect={setCustomer} />
+      <div className="card-body p-4">
+        {/* Parent Details Form */}
+        <form className="mb-4" onSubmit={handleSaveParent}>
+          <h6 className="fw-bold text-dark mb-3">Customer & Billing Information</h6>
+          <div className="row g-3 mb-3">
+            <div className="col-12 col-md-6">
+              <label className="form-label fw-medium small">Customer</label>
+              <CustomerPicker selected={customer} onSelect={setCustomer} />
+            </div>
 
-          <label className="field-label">
-            <input type="checkbox" checked={gstApplicable} onChange={(e) => setGstApplicable(e.target.checked)} />{" "}
-            GST applicable
-          </label>
-          {gstApplicable && (
-            <>
-              <label className="field-label">
-                GST Invoice Number
-                <input type="text" value={gstInvoiceNumber} onChange={(e) => setGstInvoiceNumber(e.target.value)} />
-              </label>
-              <label className="field-label">
-                HSN Code
-                <input type="text" value={hsnCode} onChange={(e) => setHsnCode(e.target.value)} />
-              </label>
-              <label className="field-label">
-                Tax Rate (%)
-                <input type="number" min={0} value={taxRate} onChange={(e) => setTaxRate(e.target.value)} />
-              </label>
-            </>
-          )}
-          {parentError && <p className="wizard-error">{parentError}</p>}
-          <div className="wizard-actions">
-            <button type="submit" className="btn-primary" disabled={savingParent || !customer}>
-              {savingParent ? "Saving…" : "Save Booking Details"}
-            </button>
-          </div>
-        </form>
+            <div className="col-12 col-md-6">
+              <div className="form-check mt-md-4">
+                <input
+                  type="checkbox"
+                  className="form-check-input"
+                  id="editGstCheck"
+                  checked={gstApplicable}
+                  onChange={(e) => setGstApplicable(e.target.checked)}
+                />
+                <label className="form-check-label fw-medium small" htmlFor="editGstCheck">
+                  GST Applicable
+                </label>
+              </div>
+            </div>
 
-        <h2>Items ({booking.booking_items.length})</h2>
-        {booking.booking_items.map((bi) => {
-          const state = itemEdits[bi.id];
-          const pill = bookingItemStatusPill(bi.status);
-          const editable = bi.status === "booked" || bi.status === "out";
-          if (!state) return null;
-
-          if (!editable) {
-            return (
-              <div className="line-item-card" key={bi.id}>
-                <div className="line-item-card-header">
-                  <h3>
-                    {bi.items?.item_code} — {bi.items?.name}
-                  </h3>
-                  <span className={`pill ${pill.className}`}>{pill.label}</span>
+            {gstApplicable && (
+              <>
+                <div className="col-12 col-md-4">
+                  <label className="form-label fw-medium small">GST Invoice Number</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={gstInvoiceNumber}
+                    onChange={(e) => setGstInvoiceNumber(e.target.value)}
+                  />
                 </div>
-                <p className="wizard-hint">
-                  {bi.status === "returned"
-                    ? "Returned — no further edits."
-                    : bi.status === "cancelled"
-                      ? "Cancelled — no further edits."
-                      : "No further edits."}
-                </p>
-              </div>
-            );
-          }
 
-          const pendingRefund = refundNeeded[bi.id];
+                <div className="col-12 col-md-4">
+                  <label className="form-label fw-medium small">HSN Code</label>
+                  <input
+                    type="text"
+                    className="form-control"
+                    value={hsnCode}
+                    onChange={(e) => setHsnCode(e.target.value)}
+                  />
+                </div>
 
-          return (
-            <div className="line-item-card" key={bi.id}>
-              <div className="line-item-card-header">
-                <h3>
-                  {bi.items?.item_code} — {bi.items?.name}
-                </h3>
-                <span className={`pill ${pill.className}`}>{pill.label}</span>
-              </div>
-
-              {bi.items?.tracking_type === "quantity" && (
-                <label className="field-label">
-                  Quantity
+                <div className="col-12 col-md-4">
+                  <label className="form-label fw-medium small">Tax Rate (%)</label>
                   <input
                     type="number"
-                    min={1}
-                    value={state.quantityBooked}
-                    onChange={(e) => updateItemEdit(bi.id, { quantityBooked: e.target.value })}
+                    className="form-control"
+                    min={0}
+                    value={taxRate}
+                    onChange={(e) => setTaxRate(e.target.value)}
                   />
-                </label>
-              )}
-
-              <label className="field-label">
-                {bi.type === "rental" ? "Pickup Date" : "Sale Date"}
-                <input
-                  type="date"
-                  value={state.pickupDate}
-                  onChange={(e) => updateItemEdit(bi.id, { pickupDate: e.target.value })}
-                />
-              </label>
-
-              {bi.type === "rental" && (
-                <label className="field-label">
-                  Return Date
-                  <input
-                    type="date"
-                    min={state.pickupDate || undefined}
-                    value={state.returnDate}
-                    onChange={(e) => updateItemEdit(bi.id, { returnDate: e.target.value })}
-                  />
-                </label>
-              )}
-
-              <label className="field-label">
-                Price Charged (₹)
-                <input
-                  type="number"
-                  min={0}
-                  value={state.price}
-                  onChange={(e) => updateItemEdit(bi.id, { price: e.target.value })}
-                />
-              </label>
-
-              {bi.type === "rental" && (
-                <>
-                  <label className="field-label">
-                    Security Deposit (₹)
-                    <input
-                      type="number"
-                      min={0}
-                      value={state.depositAmount}
-                      onChange={(e) => updateItemEdit(bi.id, { depositAmount: e.target.value })}
-                    />
-                  </label>
-                  <label className="field-label">
-                    <input
-                      type="checkbox"
-                      checked={state.depositCollected}
-                      onChange={(e) => updateItemEdit(bi.id, { depositCollected: e.target.checked })}
-                    />{" "}
-                    Deposit collected
-                  </label>
-                </>
-              )}
-
-              <p className="field-label">Additional Items</p>
-              <div className="add-custom-row">
-                <input
-                  type="text"
-                  placeholder="e.g. borrowed pouch"
-                  value={state.newAddon}
-                  onChange={(e) => updateItemEdit(bi.id, { newAddon: e.target.value })}
-                  onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addAddonToEdit(bi))}
-                />
-                <button type="button" className="btn-secondary" onClick={() => addAddonToEdit(bi)}>
-                  Add
-                </button>
-              </div>
-              {state.customAddons.length > 0 && (
-                <div className="chip-list">
-                  {state.customAddons.map((name) => (
-                    <span className="chip" key={name}>
-                      {name}
-                      <button type="button" onClick={() => removeAddonFromEdit(bi, name)} aria-label={`Remove ${name}`}>
-                        ×
-                      </button>
-                    </span>
-                  ))}
                 </div>
-              )}
+              </>
+            )}
+          </div>
 
-              {itemErrors[bi.id] && <p className="line-item-error">{itemErrors[bi.id]}</p>}
+          {parentError && (
+            <div className="alert alert-danger py-2 px-3 small mb-3">
+              <i className="ti ti-alert-circle me-1"></i> {parentError}
+            </div>
+          )}
 
-              <div className="line-item-card-header" style={{ marginTop: 14 }}>
-                <button type="button" className="btn-primary" disabled={savingItemId === bi.id} onClick={() => handleSaveItem(bi)}>
-                  {savingItemId === bi.id ? "Saving…" : "Save Item"}
-                </button>
+          <button type="submit" className="btn btn-outline-primary btn-sm fw-semibold" disabled={savingParent || !customer}>
+            {savingParent ? "Saving…" : "Save Customer & Billing Changes"}
+          </button>
+        </form>
 
-                {confirmingRemoveId === bi.id ? (
-                  pendingRefund ? (
-                    <span className="refund-confirm-row">
-                      {pendingRefund.message}
-                      <label className="field-label">
-                        Refund Amount (₹)
+        <hr className="my-4" />
+
+        {/* Existing Line Items */}
+        <h6 className="fw-bold text-dark mb-3">
+          <i className="ti ti-box me-1 text-primary"></i> Line Items ({booking.booking_items.length})
+        </h6>
+
+        <div className="d-flex flex-column gap-3 mb-4">
+          {booking.booking_items.map((bi) => {
+            const state = itemEdits[bi.id];
+            const pill = bookingItemStatusPill(bi.status);
+            const editable = bi.status === "booked" || bi.status === "out";
+            if (!state) return null;
+
+            return (
+              <div className="card border p-3 bg-light" key={bi.id}>
+                <div className="d-flex align-items-center justify-content-between mb-2">
+                  <div>
+                    <span className="badge bg-light text-dark border font-monospace me-2">{bi.items?.item_code}</span>
+                    <strong className="text-dark">{bi.items?.name}</strong>
+                  </div>
+                  <span className={`badge px-2 py-1 fs-7 ${pill.className === "pill-attention" ? "bg-danger-subtle text-danger" : "bg-success-subtle text-success"}`}>
+                    {pill.label}
+                  </span>
+                </div>
+
+                {editable && (
+                  <div className="row g-3 mt-1">
+                    <div className="col-12 col-md-4">
+                      <label className="form-label fw-medium small">Pickup Date</label>
+                      <input
+                        type="date"
+                        className="form-control form-control-sm"
+                        value={state.pickupDate}
+                        onChange={(e) => updateItemEdit(bi.id, { pickupDate: e.target.value })}
+                      />
+                    </div>
+
+                    {bi.type === "rental" && (
+                      <div className="col-12 col-md-4">
+                        <label className="form-label fw-medium small">Return Date</label>
                         <input
-                          type="number"
-                          min={0}
-                          value={pendingRefund.amount}
-                          onChange={(e) =>
-                            setRefundNeeded((all) => ({ ...all, [bi.id]: { ...all[bi.id], amount: e.target.value } }))
-                          }
+                          type="date"
+                          className="form-control form-control-sm"
+                          value={state.returnDate}
+                          onChange={(e) => updateItemEdit(bi.id, { returnDate: e.target.value })}
                         />
-                      </label>
-                      <button
-                        type="button"
-                        className="btn-danger"
-                        disabled={removingId === bi.id}
-                        onClick={() => handleRemoveItem(bi)}
-                      >
-                        {removingId === bi.id ? "Removing…" : "Confirm Refund & Remove"}
-                      </button>{" "}
-                      <button type="button" className="btn-secondary" onClick={() => cancelRemoveItem(bi.id)}>
-                        Cancel
-                      </button>
-                    </span>
-                  ) : (
-                    <span>
-                      Remove this item?{" "}
-                      <button
-                        type="button"
-                        className="btn-danger"
-                        disabled={removingId === bi.id}
-                        onClick={() => handleRemoveItem(bi)}
-                      >
-                        {removingId === bi.id ? "Removing…" : "Yes, Remove"}
-                      </button>{" "}
-                      <button type="button" className="btn-secondary" onClick={() => cancelRemoveItem(bi.id)}>
-                        Cancel
-                      </button>
-                    </span>
-                  )
-                ) : (
-                  <button type="button" className="btn-danger" onClick={() => setConfirmingRemoveId(bi.id)}>
-                    Remove Item
-                  </button>
+                      </div>
+                    )}
+
+                    <div className="col-12 col-md-4">
+                      <label className="form-label fw-medium small">Price Charged (₹)</label>
+                      <input
+                        type="number"
+                        className="form-control form-control-sm"
+                        min={0}
+                        value={state.price}
+                        onChange={(e) => updateItemEdit(bi.id, { price: e.target.value })}
+                      />
+                    </div>
+
+                    {bi.type === "rental" && (
+                      <>
+                        <div className="col-12 col-md-4">
+                          <label className="form-label fw-medium small">Deposit Amount (₹)</label>
+                          <input
+                            type="number"
+                            className="form-control form-control-sm"
+                            min={0}
+                            value={state.depositAmount}
+                            onChange={(e) => updateItemEdit(bi.id, { depositAmount: e.target.value })}
+                          />
+                        </div>
+
+                        <div className="col-12 col-md-4 d-flex align-items-center mt-md-4">
+                          <div className="form-check">
+                            <input
+                              type="checkbox"
+                              className="form-check-input"
+                              id={`edit-dep-${bi.id}`}
+                              checked={state.depositCollected}
+                              onChange={(e) => updateItemEdit(bi.id, { depositCollected: e.target.checked })}
+                            />
+                            <label className="form-check-label small" htmlFor={`edit-dep-${bi.id}`}>
+                              Deposit Collected
+                            </label>
+                          </div>
+                        </div>
+                      </>
+                    )}
+
+                    {itemErrors[bi.id] && (
+                      <div className="col-12">
+                        <div className="alert alert-danger py-1 px-2 small mb-0">{itemErrors[bi.id]}</div>
+                      </div>
+                    )}
+
+                    <div className="col-12 d-flex justify-content-end gap-2 mt-2">
+                      {confirmingRemoveId === bi.id ? (
+                        <div className="p-2 bg-danger-subtle rounded border border-danger-subtle d-flex align-items-center gap-2">
+                          <span className="small text-danger">Remove this item?</span>
+                          <button
+                            type="button"
+                            className="btn btn-danger btn-sm"
+                            onClick={() => handleRemoveItem(bi)}
+                            disabled={deletingId === bi.id}
+                          >
+                            Yes, Remove
+                          </button>
+                          <button type="button" className="btn btn-light btn-sm" onClick={() => cancelRemoveItem(bi.id)}>
+                            Cancel
+                          </button>
+                        </div>
+                      ) : (
+                        <>
+                          <button
+                            type="button"
+                            className="btn btn-outline-danger btn-sm"
+                            onClick={() => setConfirmingRemoveId(bi.id)}
+                          >
+                            Remove Item
+                          </button>
+                          <button
+                            type="button"
+                            className="btn btn-primary btn-sm fw-semibold"
+                            onClick={() => handleSaveItem(bi)}
+                            disabled={savingItemId === bi.id}
+                          >
+                            {savingItemId === bi.id ? "Saving…" : "Save Item Edits"}
+                          </button>
+                        </>
+                      )}
+                    </div>
+                  </div>
                 )}
               </div>
-              {removeErrors[bi.id] && <p className="line-item-error">{removeErrors[bi.id]}</p>}
-            </div>
-          );
-        })}
+            );
+          })}
+        </div>
 
-        {showAddForm ? (
-          <form className="line-item-card" onSubmit={handleAddItem}>
-            <h3>Add Item</h3>
-            <div className="toggle-group">
-              <button
-                type="button"
-                className={draft.type === "rental" ? "toggle-btn active" : "toggle-btn"}
-                onClick={() => handleDraftTypeChange("rental")}
-              >
-                Rental
-              </button>
-              <button
-                type="button"
-                className={draft.type === "sale" ? "toggle-btn active" : "toggle-btn"}
-                onClick={() => handleDraftTypeChange("sale")}
-              >
-                Sale
-              </button>
-            </div>
+        {/* Add Item to Existing Booking */}
+        {!showAddForm ? (
+          <button
+            type="button"
+            className="btn btn-outline-primary btn-sm mb-4"
+            onClick={() => setShowAddForm(true)}
+          >
+            <i className="ti ti-plus me-1"></i> Add Another Item to this Booking
+          </button>
+        ) : (
+          <form className="p-3 border rounded bg-light mb-4" onSubmit={handleAddItem}>
+            <h6 className="fw-bold text-dark mb-3">Add Item to Booking</h6>
 
-            <label className="field-label">
-              Item
-              <select value={draft.itemId} onChange={(e) => handleDraftItemChange(e.target.value)}>
-                <option value="">Select an item…</option>
-                {items
-                  .filter((i) => i.tracking_type === "quantity" || i.status === "available")
-                  .map((i) => (
+            <div className="row g-3">
+              <div className="col-12 col-md-4">
+                <label className="form-label fw-medium small">Type</label>
+                <div className="btn-group w-100">
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${draft.type === "rental" ? "btn-primary" : "btn-outline-secondary"}`}
+                    onClick={() => handleDraftTypeChange("rental")}
+                  >
+                    Rental
+                  </button>
+                  <button
+                    type="button"
+                    className={`btn btn-sm ${draft.type === "sale" ? "btn-primary" : "btn-outline-secondary"}`}
+                    onClick={() => handleDraftTypeChange("sale")}
+                  >
+                    Sale
+                  </button>
+                </div>
+              </div>
+
+              <div className="col-12 col-md-8">
+                <label className="form-label fw-medium small">Select Item</label>
+                <select
+                  className="form-select form-select-sm"
+                  value={draft.itemId}
+                  onChange={(e) => handleDraftItemChange(e.target.value)}
+                >
+                  <option value="">Select item…</option>
+                  {items.map((i) => (
                     <option key={i.id} value={i.id}>
                       {i.item_code} — {i.name}
                     </option>
                   ))}
-              </select>
-            </label>
-
-            {selectedDraftItem()?.tracking_type === "quantity" && (
-              <label className="field-label">
-                Quantity
-                <input
-                  type="number"
-                  min={1}
-                  value={draft.quantityBooked}
-                  onChange={(e) => setDraft((d) => ({ ...d, quantityBooked: e.target.value }))}
-                />
-              </label>
-            )}
-
-            <p className="field-label">Additional Items</p>
-            <div className="add-custom-row">
-              <input
-                type="text"
-                placeholder="e.g. borrowed pouch"
-                value={draft.newAddon}
-                onChange={(e) => setDraft((d) => ({ ...d, newAddon: e.target.value }))}
-                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addDraftAddon())}
-              />
-              <button type="button" className="btn-secondary" onClick={addDraftAddon}>
-                Add
-              </button>
-            </div>
-            {draft.customAddons.length > 0 && (
-              <div className="chip-list">
-                {draft.customAddons.map((name) => (
-                  <span className="chip" key={name}>
-                    {name}
-                    <button type="button" onClick={() => removeDraftAddon(name)} aria-label={`Remove ${name}`}>
-                      ×
-                    </button>
-                  </span>
-                ))}
+                </select>
               </div>
-            )}
 
-            <label className="field-label">
-              {draft.type === "rental" ? "Pickup Date" : "Sale Date"}
-              <input type="date" value={draft.pickupDate} onChange={(e) => setDraft((d) => ({ ...d, pickupDate: e.target.value }))} />
-            </label>
-
-            {draft.type === "rental" && (
-              <label className="field-label">
-                Return Date
+              <div className="col-12 col-md-4">
+                <label className="form-label fw-medium small">Pickup Date</label>
                 <input
                   type="date"
-                  min={draft.pickupDate || undefined}
-                  value={draft.returnDate}
-                  onChange={(e) => setDraft((d) => ({ ...d, returnDate: e.target.value }))}
+                  className="form-control form-control-sm"
+                  value={draft.pickupDate}
+                  onChange={(e) => setDraft((d) => ({ ...d, pickupDate: e.target.value }))}
                 />
-              </label>
-            )}
+              </div>
 
-            <label className="field-label">
-              Price Charged (₹)
-              <input type="number" min={0} value={draft.price} onChange={(e) => setDraft((d) => ({ ...d, price: e.target.value }))} />
-            </label>
-
-            {draft.type === "rental" && (
-              <>
-                <label className="field-label">
-                  Security Deposit (₹)
+              {draft.type === "rental" && (
+                <div className="col-12 col-md-4">
+                  <label className="form-label fw-medium small">Return Date</label>
                   <input
-                    type="number"
-                    min={0}
-                    value={draft.depositAmount}
-                    onChange={(e) => setDraft((d) => ({ ...d, depositAmount: e.target.value }))}
+                    type="date"
+                    className="form-control form-control-sm"
+                    value={draft.returnDate}
+                    onChange={(e) => setDraft((d) => ({ ...d, returnDate: e.target.value }))}
                   />
-                </label>
-                <label className="field-label">
-                  <input
-                    type="checkbox"
-                    checked={draft.depositCollected}
-                    onChange={(e) => setDraft((d) => ({ ...d, depositCollected: e.target.checked }))}
-                  />{" "}
-                  Deposit collected
-                </label>
-              </>
+                </div>
+              )}
+
+              <div className="col-12 col-md-4">
+                <label className="form-label fw-medium small">Price (₹)</label>
+                <input
+                  type="number"
+                  className="form-control form-control-sm"
+                  min={0}
+                  value={draft.price}
+                  onChange={(e) => setDraft((d) => ({ ...d, price: e.target.value }))}
+                />
+              </div>
+            </div>
+
+            {addError && (
+              <div className="alert alert-danger py-1 px-2 small mt-2">{addError}</div>
             )}
 
-            {addError && <p className="wizard-error">{addError}</p>}
-
-            <div className="wizard-actions">
+            <div className="d-flex justify-content-end gap-2 mt-3">
               <button
                 type="button"
-                className="btn-secondary"
-                onClick={() => {
-                  setShowAddForm(false);
-                  setDraft(emptyDraft());
-                  setAddError(null);
-                }}
+                className="btn btn-outline-secondary btn-sm"
+                onClick={() => setShowAddForm(false)}
               >
                 Cancel
               </button>
-              <button type="submit" className="btn-primary" disabled={!canAddItem || addingItem}>
+              <button
+                type="submit"
+                className="btn btn-primary btn-sm fw-semibold"
+                disabled={addingItem || !canAddItem}
+              >
                 {addingItem ? "Adding…" : "Add Item"}
               </button>
             </div>
           </form>
-        ) : (
-          <div className="add-item-row">
-            <button type="button" className="btn-secondary" onClick={() => setShowAddForm(true)}>
-              + Add Item
-            </button>
-          </div>
         )}
 
-        {hasActiveItems && (
-          <div className="danger-zone">
-            <h2>Cancel Booking</h2>
-            <p className="wizard-hint">
-              Cancels every still-active item in this booking at once — booking history stays intact, nothing is deleted.
-            </p>
-            {confirmingCancelBooking ? (
-              <>
-                <label className="field-label">
-                  Refund Amount (₹)
+        {/* Cancel Whole Booking Section */}
+        <hr className="my-4" />
+        <div className="p-3 bg-danger-subtle border border-danger-subtle rounded">
+          <h6 className="fw-bold text-danger mb-1">Danger Zone: Cancel Entire Booking</h6>
+          <p className="text-muted small mb-2">Cancelling this booking releases all reserved items back into inventory.</p>
+
+          {!confirmingCancelBooking ? (
+            <button
+              type="button"
+              className="btn btn-danger btn-sm"
+              onClick={() => setConfirmingCancelBooking(true)}
+            >
+              Cancel Entire Booking
+            </button>
+          ) : (
+            <div className="mt-3 bg-white p-3 rounded border">
+              <span className="fw-bold text-danger d-block mb-2">Confirm Booking Cancellation?</span>
+              <div className="row g-2 mb-3">
+                <div className="col-12 col-md-6">
+                  <label className="form-label fw-medium small">Refund Amount to Record (₹)</label>
                   <input
                     type="number"
+                    className="form-control form-control-sm"
                     min={0}
                     value={cancelBookingRefund}
                     onChange={(e) => setCancelBookingRefund(e.target.value)}
                   />
-                </label>
-                <p className="wizard-hint">Pre-filled with the total already paid — edit if keeping part of it.</p>
-                {cancelBookingError && <p className="wizard-error">{cancelBookingError}</p>}
-                <div className="wizard-actions">
-                  <button type="button" className="btn-secondary" onClick={() => setConfirmingCancelBooking(false)}>
-                    Back
-                  </button>
-                  <button type="button" className="btn-danger" disabled={cancellingBooking} onClick={handleCancelBooking}>
-                    {cancellingBooking ? "Cancelling…" : "Confirm Cancel Booking"}
-                  </button>
                 </div>
-              </>
-            ) : (
-              <button type="button" className="btn-danger" onClick={() => setConfirmingCancelBooking(true)}>
-                Cancel Booking
-              </button>
-            )}
-          </div>
-        )}
+              </div>
+
+              {cancelBookingError && (
+                <div className="alert alert-danger py-1 px-2 small mb-2">{cancelBookingError}</div>
+              )}
+
+              <div className="d-flex gap-2">
+                <button
+                  type="button"
+                  className="btn btn-danger btn-sm"
+                  onClick={handleCancelBooking}
+                  disabled={cancellingBooking}
+                >
+                  {cancellingBooking ? "Cancelling…" : "Yes, Cancel Booking"}
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-light btn-sm"
+                  onClick={() => setConfirmingCancelBooking(false)}
+                >
+                  Keep Booking
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
       </div>
 
-      <div className="wizard-nav">
-        <button className="btn-secondary" onClick={onCancel}>
-          Back
-        </button>
-        <button className="btn-primary" onClick={onDone}>
-          Done
+      <div className="card-footer bg-white p-3 border-top d-flex justify-content-end">
+        <button type="button" className="btn btn-primary fw-semibold px-4" onClick={onDone}>
+          Done Editing
         </button>
       </div>
     </div>

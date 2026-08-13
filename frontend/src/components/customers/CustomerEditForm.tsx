@@ -64,70 +64,128 @@ export function CustomerEditForm({
   }
 
   return (
-    <div className="wizard-card">
-      <p className="wizard-progress">Editing {customer.name}</p>
-      <div className="wizard-step">
-        <h2>Edit Customer</h2>
-        <label className="field-label">
-          Name
-          <input type="text" value={form.name} onChange={(e) => update("name", e.target.value)} />
-        </label>
-        <label className="field-label">
-          Phone
-          <input type="tel" value={form.phone} onChange={(e) => update("phone", e.target.value)} />
-        </label>
-        <label className="field-label">
-          Alternate Phone
-          <input
-            type="tel"
-            value={form.phoneSecondary}
-            onChange={(e) => update("phoneSecondary", e.target.value)}
-            placeholder="Optional"
-          />
-        </label>
-        <label className="field-label">
-          Email
-          <input
-            type="email"
-            value={form.email}
-            onChange={(e) => update("email", e.target.value)}
-            placeholder="Optional"
-          />
-        </label>
-        <label className="field-label">
-          Address
-          <textarea value={form.address} onChange={(e) => update("address", e.target.value)} rows={2} />
-        </label>
-        <p className="field-label">Customer Type</p>
-        <div className="toggle-group">
-          {CUSTOMER_TYPES.map((t) => (
-            <button
-              type="button"
-              key={t}
-              className={form.customerType === t ? "toggle-btn active" : "toggle-btn"}
-              onClick={() => update("customerType", t)}
-            >
-              {CUSTOMER_TYPE_LABELS[t]}
-            </button>
-          ))}
-        </div>
-        <label className="field-label">
-          Notes
-          <textarea
-            value={form.notes}
-            onChange={(e) => update("notes", e.target.value)}
-            rows={2}
-            placeholder="Optional"
-          />
-        </label>
-        {error && <p className="wizard-error">{error}</p>}
+    <div className="card border-0 shadow-sm">
+      <div className="card-header bg-white p-4 border-bottom d-flex align-items-center justify-content-between">
+        <h5 className="fw-bold text-dark mb-0 d-flex align-items-center gap-2">
+          <i className="ti ti-edit text-primary"></i> Edit Customer: {customer.name}
+        </h5>
+        <button type="button" className="btn btn-outline-secondary btn-sm" onClick={onCancel}>
+          <i className="ti ti-x me-1"></i> Cancel
+        </button>
       </div>
-      <div className="wizard-nav">
-        <button className="btn-secondary" onClick={onCancel}>
+
+      <div className="card-body p-4">
+        <div className="row g-3">
+          <div className="col-12 col-md-6">
+            <label className="form-label fw-medium small">Full Name *</label>
+            <input
+              type="text"
+              className="form-control"
+              value={form.name}
+              onChange={(e) => update("name", e.target.value)}
+            />
+          </div>
+
+          <div className="col-12 col-md-6">
+            <label className="form-label fw-medium small">Primary Phone *</label>
+            <div className="input-group">
+              <span className="input-group-text bg-white">
+                <i className="ti ti-phone text-muted"></i>
+              </span>
+              <input
+                type="tel"
+                className="form-control"
+                value={form.phone}
+                onChange={(e) => update("phone", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="col-12 col-md-6">
+            <label className="form-label fw-medium small">Alternate Phone</label>
+            <div className="input-group">
+              <span className="input-group-text bg-white">
+                <i className="ti ti-device-mobile text-muted"></i>
+              </span>
+              <input
+                type="tel"
+                className="form-control"
+                value={form.phoneSecondary}
+                onChange={(e) => update("phoneSecondary", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="col-12 col-md-6">
+            <label className="form-label fw-medium small">Email Address</label>
+            <div className="input-group">
+              <span className="input-group-text bg-white">
+                <i className="ti ti-mail text-muted"></i>
+              </span>
+              <input
+                type="email"
+                className="form-control"
+                value={form.email}
+                onChange={(e) => update("email", e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="col-12">
+            <label className="form-label fw-medium small">Address *</label>
+            <textarea
+              className="form-control"
+              rows={2}
+              value={form.address}
+              onChange={(e) => update("address", e.target.value)}
+            />
+          </div>
+
+          <div className="col-12 col-md-6">
+            <label className="form-label fw-medium small">Customer Type</label>
+            <div className="btn-group w-100">
+              {CUSTOMER_TYPES.map((t) => (
+                <button
+                  type="button"
+                  key={t}
+                  className={`btn ${form.customerType === t ? "btn-primary" : "btn-outline-secondary"}`}
+                  onClick={() => update("customerType", t)}
+                >
+                  {CUSTOMER_TYPE_LABELS[t]}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="col-12">
+            <label className="form-label fw-medium small">Notes</label>
+            <textarea
+              className="form-control"
+              rows={2}
+              value={form.notes}
+              onChange={(e) => update("notes", e.target.value)}
+            />
+          </div>
+        </div>
+
+        {error && (
+          <div className="alert alert-danger py-2 px-3 small mt-3">
+            <i className="ti ti-alert-circle me-1"></i> {error}
+          </div>
+        )}
+      </div>
+
+      <div className="card-footer bg-white p-3 border-top d-flex justify-content-end gap-2">
+        <button type="button" className="btn btn-outline-secondary" onClick={onCancel}>
           Cancel
         </button>
-        <button className="btn-primary" onClick={handleSave} disabled={saving || !canSubmit}>
-          {saving ? "Saving…" : "Save Changes"}
+        <button
+          type="button"
+          className="btn btn-primary fw-semibold px-4"
+          onClick={handleSave}
+          disabled={saving || !canSubmit}
+        >
+          {saving ? "Saving Changes…" : "Save Changes"}
         </button>
       </div>
     </div>

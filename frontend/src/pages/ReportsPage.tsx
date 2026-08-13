@@ -1,6 +1,5 @@
 import { useEffect, useState } from "react";
 import { fetchReports, type ReportsResponse } from "../lib/reports";
-import "../styles/shared.css";
 
 export default function ReportsPage() {
   const [data, setData] = useState<ReportsResponse | null>(null);
@@ -10,8 +9,6 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  // First load: no from/to, so the backend picks "this month" (IST) for
-  // us — we only ever display what it resolved, never compute it here.
   useEffect(() => {
     fetchReports()
       .then((res) => {
@@ -47,161 +44,253 @@ export default function ReportsPage() {
     if (from && to) refresh(from, to, checked);
   }
 
-  if (loading && !data) return <div className="page">Loading…</div>;
-  if (error && !data) return <div className="page wizard-error">{error}</div>;
+  if (loading && !data) {
+    return (
+      <div className="d-flex align-items-center justify-content-center py-5">
+        <div className="spinner-border text-primary" role="status">
+          <span className="visually-hidden">Loading…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (error && !data) {
+    return (
+      <div className="alert alert-danger my-4 p-4 rounded-3 shadow-sm">
+        <i className="ti ti-alert-triangle fs-4 me-2"></i>
+        {error}
+      </div>
+    );
+  }
+
   if (!data) return null;
 
   const { summary, most_booked_items, repeat_customers, idle_inventory } = data;
 
   return (
-    <div className="page">
-      <h2>Reports</h2>
-
-      <div className="button-grid date-range-row">
-        <label className="field-label">
-          From
-          <input type="date" value={from ?? ""} onChange={(e) => handleFromChange(e.target.value)} />
-        </label>
-        <label className="field-label">
-          To
-          <input type="date" value={to ?? ""} onChange={(e) => handleToChange(e.target.value)} />
-        </label>
+    <div className="container-fluid p-0">
+      {/* Header */}
+      <div className="d-flex justify-content-between align-items-center mb-4 flex-wrap gap-2">
+        <div>
+          <h1 className="h3 mb-1 fw-semibold text-dark">Reports & Analytics</h1>
+          <p className="text-muted mb-0 small">Analyze revenue, top items, repeat customers, and idle inventory</p>
+        </div>
       </div>
 
-      {error && <p className="wizard-error">{error}</p>}
-      {loading && <p className="wizard-hint">Refreshing…</p>}
-
-      <div className="dashboard-section">
-        <h2>Bookings This Period</h2>
-        <div className="stat-grid">
-          <div className="stat-card">
-            <div className="stat-value">{summary.total_bookings}</div>
-            <div className="stat-label">Total bookings</div>
-          </div>
-          <div className="stat-card">
-            <div className="stat-value">
-              {summary.rental_count} / {summary.sale_count}
+      {/* Date Filter & Collabs Bar */}
+      <div className="card border-0 shadow-sm mb-4">
+        <div className="card-body p-3 d-flex align-items-center justify-content-between flex-wrap gap-3">
+          <div className="d-flex align-items-center gap-3 flex-wrap">
+            <div className="d-flex align-items-center gap-2">
+              <label className="form-label mb-0 fw-medium small text-muted">From:</label>
+              <input
+                type="date"
+                className="form-control form-control-sm"
+                value={from ?? ""}
+                onChange={(e) => handleFromChange(e.target.value)}
+              />
             </div>
-            <div className="stat-label">Rentals / Sales</div>
+            <div className="d-flex align-items-center gap-2">
+              <label className="form-label mb-0 fw-medium small text-muted">To:</label>
+              <input
+                type="date"
+                className="form-control form-control-sm"
+                value={to ?? ""}
+                onChange={(e) => handleToChange(e.target.value)}
+              />
+            </div>
+          </div>
+
+          <div className="form-check form-switch mb-0">
+            <input
+              type="checkbox"
+              className="form-check-input cursor-pointer"
+              id="collabSwitch"
+              checked={includeCollabs}
+              onChange={(e) => handleToggleCollabs(e.target.checked)}
+            />
+            <label className="form-check-label fw-medium small text-dark cursor-pointer" htmlFor="collabSwitch">
+              Include Influencer / MUA Collabs
+            </label>
           </div>
         </div>
-        <div className="stat-card stat-card-wide">
-          <div className="stat-value">₹{summary.total_revenue}</div>
-          <div className="stat-label">Total revenue (price charged)</div>
+      </div>
+
+      {error && (
+        <div className="alert alert-danger py-2 px-3 small mb-3">
+          <i className="ti ti-alert-circle me-1"></i> {error}
         </div>
-        <p className="wizard-hint">
-          Total bookings counts family transactions (one visit, however many items). Rentals/Sales counts
-          individual items — a visit with one rental and one sale in the same booking adds 1 to both.
-        </p>
+      )}
+
+      {/* Metric Cards */}
+      <div className="row g-3 mb-4">
+        <div className="col-12 col-sm-6 col-md-4">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body p-3 d-flex align-items-center justify-content-between">
+              <div>
+                <span className="text-muted small text-uppercase fw-semibold">Total Revenue</span>
+                <h2 className="mb-0 mt-1 fw-bold text-success">₹{summary.total_revenue.toLocaleString("en-IN")}</h2>
+              </div>
+              <div className="icon-shape rounded-circle bg-success-subtle text-success p-3">
+                <i className="ti ti-currency-rupee fs-3"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-12 col-sm-6 col-md-4">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body p-3 d-flex align-items-center justify-content-between">
+              <div>
+                <span className="text-muted small text-uppercase fw-semibold">Total Bookings</span>
+                <h2 className="mb-0 mt-1 fw-bold text-dark">{summary.total_bookings}</h2>
+              </div>
+              <div className="icon-shape rounded-circle bg-primary-subtle text-primary p-3">
+                <i className="ti ti-calendar-stats fs-3"></i>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <div className="col-12 col-sm-6 col-md-4">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-body p-3 d-flex align-items-center justify-content-between">
+              <div>
+                <span className="text-muted small text-uppercase fw-semibold">Rentals / Sales</span>
+                <h2 className="mb-0 mt-1 fw-bold text-dark">
+                  {summary.rental_count} <span className="text-muted fs-5">/</span> {summary.sale_count}
+                </h2>
+              </div>
+              <div className="icon-shape rounded-circle bg-warning-subtle text-warning p-3">
+                <i className="ti ti-tag fs-3"></i>
+              </div>
+            </div>
+          </div>
+        </div>
       </div>
 
-      <label className="field-label checkbox-row">
-        <input
-          type="checkbox"
-          checked={includeCollabs}
-          onChange={(e) => handleToggleCollabs(e.target.checked)}
-        />
-        Include influencer/MUA collabs
-      </label>
-      <p className="wizard-hint">
-        Applies to Most-Booked Items and Repeat Customers only — revenue and idle inventory always include
-        everything.
-      </p>
-
-      <div className="dashboard-section">
-        <h2>Most-Booked Items</h2>
-        {most_booked_items.length === 0 ? (
-          <div className="empty-state">
-            <h3>No bookings in this period</h3>
-            <p>Try a wider date range.</p>
+      {/* Reports Tables Grid */}
+      <div className="row g-4 mb-4">
+        {/* Most Booked Items */}
+        <div className="col-12 col-lg-6">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-header bg-white py-3 border-bottom">
+              <h5 className="mb-0 fw-semibold text-dark d-flex align-items-center gap-2">
+                <i className="ti ti-trophy text-warning"></i> Most-Booked Items
+              </h5>
+            </div>
+            <div className="table-responsive">
+              {most_booked_items.length === 0 ? (
+                <div className="text-center py-4 text-muted small">No bookings in this period.</div>
+              ) : (
+                <table className="table align-middle text-nowrap table-hover mb-0">
+                  <thead className="table-light">
+                    <tr className="small text-muted text-uppercase">
+                      <th>Code</th>
+                      <th>Item Name</th>
+                      <th className="text-end">Bookings</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {most_booked_items.map((i) => (
+                      <tr key={i.item_id}>
+                        <td>
+                          <span className="badge bg-light text-dark border font-monospace">{i.item_code}</span>
+                        </td>
+                        <td className="fw-semibold text-dark">{i.name}</td>
+                        <td className="text-end font-monospace fw-bold text-primary">{i.booking_count}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
           </div>
-        ) : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
+        </div>
+
+        {/* Repeat Customers */}
+        <div className="col-12 col-lg-6">
+          <div className="card border-0 shadow-sm h-100">
+            <div className="card-header bg-white py-3 border-bottom">
+              <h5 className="mb-0 fw-semibold text-dark d-flex align-items-center gap-2">
+                <i className="ti ti-users text-primary"></i> Repeat Customers
+              </h5>
+            </div>
+            <div className="table-responsive">
+              {repeat_customers.length === 0 ? (
+                <div className="text-center py-4 text-muted small">No repeat customers in this period yet.</div>
+              ) : (
+                <table className="table align-middle text-nowrap table-hover mb-0">
+                  <thead className="table-light">
+                    <tr className="small text-muted text-uppercase">
+                      <th>Customer</th>
+                      <th>Bookings</th>
+                      <th className="text-end">Total Spend</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {repeat_customers.map((c) => (
+                      <tr key={c.customer_id}>
+                        <td>
+                          <div className="fw-semibold text-dark">{c.name}</div>
+                          <span className="text-muted fs-7">{c.phone}</span>
+                        </td>
+                        <td className="font-monospace fw-semibold">{c.booking_count}</td>
+                        <td className="text-end font-monospace fw-bold text-success">
+                          ₹{c.total_spend.toLocaleString("en-IN")}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              )}
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Idle Inventory Table */}
+      <div className="card border-0 shadow-sm">
+        <div className="card-header bg-white py-3 border-bottom d-flex align-items-center justify-content-between">
+          <div>
+            <h5 className="mb-0 fw-semibold text-dark d-flex align-items-center gap-2">
+              <i className="ti ti-clock-pause text-muted"></i> Idle Inventory (No booking in last 90 days)
+            </h5>
+          </div>
+          <span className="badge bg-secondary-subtle text-secondary rounded-pill px-3 py-1">
+            {idle_inventory.length} items
+          </span>
+        </div>
+        <div className="table-responsive">
+          {idle_inventory.length === 0 ? (
+            <div className="text-center py-4 text-muted small">
+              <i className="ti ti-sparkles text-success fs-3 d-block mb-1"></i> Every active item has been booked in the last 90 days!
+            </div>
+          ) : (
+            <table className="table align-middle text-nowrap table-hover mb-0">
+              <thead className="table-light">
+                <tr className="small text-muted text-uppercase">
                   <th>Code</th>
-                  <th>Name</th>
-                  <th>Bookings</th>
-                </tr>
-              </thead>
-              <tbody>
-                {most_booked_items.map((i) => (
-                  <tr key={i.item_id}>
-                    <td data-label="Code">{i.item_code}</td>
-                    <td data-label="Name">{i.name}</td>
-                    <td data-label="Bookings">{i.booking_count}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div className="dashboard-section">
-        <h2>Repeat Customers</h2>
-        {repeat_customers.length === 0 ? (
-          <div className="empty-state">
-            <h3>No repeat customers yet</h3>
-            <p>Customers with more than one booking will show up here.</p>
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Name</th>
-                  <th>Phone</th>
-                  <th>Bookings</th>
-                  <th>Total Spend</th>
-                </tr>
-              </thead>
-              <tbody>
-                {repeat_customers.map((c) => (
-                  <tr key={c.customer_id}>
-                    <td data-label="Name">{c.name}</td>
-                    <td data-label="Phone">{c.phone}</td>
-                    <td data-label="Bookings">{c.booking_count}</td>
-                    <td data-label="Total Spend">₹{c.total_spend}</td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        )}
-      </div>
-
-      <div className="dashboard-section">
-        <h2>Idle Inventory</h2>
-        <p className="wizard-hint">Active items with no booking in the last 90 days.</p>
-        {idle_inventory.length === 0 ? (
-          <div className="empty-state">
-            <h3>Nothing idle</h3>
-            <p>Every active item has moved in the last 90 days.</p>
-          </div>
-        ) : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Code</th>
-                  <th>Name</th>
+                  <th>Item Name</th>
                   <th>Category</th>
                 </tr>
               </thead>
               <tbody>
                 {idle_inventory.map((i) => (
                   <tr key={i.id}>
-                    <td data-label="Code">{i.item_code}</td>
-                    <td data-label="Name">{i.name}</td>
-                    <td data-label="Category">{i.category}</td>
+                    <td>
+                      <span className="badge bg-light text-dark border font-monospace">{i.item_code}</span>
+                    </td>
+                    <td className="fw-semibold text-dark">{i.name}</td>
+                    <td>
+                      <span className="badge bg-secondary-subtle text-secondary">{i.category}</span>
+                    </td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
-        )}
+          )}
+        </div>
       </div>
     </div>
   );

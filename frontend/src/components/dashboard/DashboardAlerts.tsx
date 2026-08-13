@@ -4,12 +4,6 @@ import type { DashboardSummary } from "../../lib/dashboard";
 
 type AlertKind = "payment" | "items";
 
-// Scoped per browser + user (not per device/session) via localStorage,
-// keyed off the server's own IST "today" (summary.today) rather than
-// anything computed from new Date() here — see CLAUDE.md's rule against
-// frontend-computed business dates. This is a UI nicety (don't nag on a
-// page opened dozens of times a day), not business logic, but the day
-// boundary should still agree with the shop's actual day.
 function dismissedKey(kind: AlertKind, userId: string) {
   return `ngj_dashboard_alert_dismissed:${kind}:${userId}`;
 }
@@ -25,19 +19,9 @@ function wasDismissedToday(kind: AlertKind, userId: string, today: string): bool
 function markDismissed(kind: AlertKind, userId: string, today: string) {
   try {
     localStorage.setItem(dismissedKey(kind, userId), today);
-  } catch {
-    // Private browsing / storage disabled — worst case the popup just
-    // shows again next load, a harmless degrade rather than a crash.
-  }
+  } catch {}
 }
 
-// Two dismissible on-load popups summarizing data the Dashboard page below
-// already renders in full — "Payment Due" (outstanding balance across
-// active bookings) and "Item Due" (today's returns + overdue rentals,
-// flagging next-customer-waiting urgency the same way the Overdue Rentals
-// section does). Shown at most once per IST day per user; silent entirely
-// when nothing's due. "View Details" scrolls to the existing section
-// instead of duplicating its data here.
 export function DashboardAlerts({ summary, userId }: { summary: DashboardSummary; userId: string | null }) {
   const [queue, setQueue] = useState<AlertKind[] | null>(null);
 
@@ -54,10 +38,6 @@ export function DashboardAlerts({ summary, userId }: { summary: DashboardSummary
       candidates.push("items");
     }
     setQueue(candidates);
-    // Deliberately runs once, on mount only — re-deriving this later in the
-    // same session (e.g. if summary is refetched) would undo a dismissal
-    // the operator already acted on.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   function dismiss(kind: AlertKind) {
@@ -67,8 +47,6 @@ export function DashboardAlerts({ summary, userId }: { summary: DashboardSummary
 
   function viewDetails(kind: AlertKind, anchorId: string) {
     dismiss(kind);
-    // Let the modal unmount first so the scroll target is measured against
-    // the final, popup-free layout.
     requestAnimationFrame(() => {
       document.getElementById(anchorId)?.scrollIntoView({ behavior: "smooth", block: "start" });
     });
@@ -81,22 +59,27 @@ export function DashboardAlerts({ summary, userId }: { summary: DashboardSummary
     const n = summary.outstanding_balance_count;
     return (
       <Modal onClose={() => dismiss("payment")}>
-        <div className="wizard-card alert-modal">
-          <h2>Payment Due</h2>
-          <p>
-            <strong>
-              {n} active booking{n === 1 ? "" : "s"}
-            </strong>{" "}
-            with money still owed — <strong>₹{summary.outstanding_balance}</strong> outstanding in total.
+        <div className="modal-header border-bottom py-3">
+          <h5 className="modal-title fw-bold text-dark d-flex align-items-center gap-2">
+            <i className="ti ti-receipt-refund text-warning"></i> Payment Due Reminder
+          </h5>
+          <button type="button" className="btn-close" onClick={() => dismiss("payment")}></button>
+        </div>
+        <div className="modal-body p-4">
+          <p className="fs-6 text-dark mb-2">
+            You have <strong>{n} active booking{n === 1 ? "" : "s"}</strong> with money still owed.
           </p>
-          <div className="wizard-actions">
-            <button type="button" className="btn-secondary" onClick={() => dismiss("payment")}>
-              Dismiss
-            </button>
-            <button type="button" className="btn-primary" onClick={() => viewDetails("payment", "outstanding-balance-section")}>
-              View Details
-            </button>
+          <div className="alert alert-warning py-2 px-3 fw-bold fs-5 text-warning mb-0">
+            Total Outstanding: ₹{summary.outstanding_balance.toLocaleString("en-IN")}
           </div>
+        </div>
+        <div className="modal-footer border-top bg-light p-3">
+          <button type="button" className="btn btn-outline-secondary" onClick={() => dismiss("payment")}>
+            Dismiss
+          </button>
+          <button type="button" className="btn btn-primary" onClick={() => viewDetails("payment", "outstanding-balance-section")}>
+            View Details
+          </button>
         </div>
       </Modal>
     );
@@ -106,30 +89,30 @@ export function DashboardAlerts({ summary, userId }: { summary: DashboardSummary
   const urgentCount = summary.overdue.filter((b) => b.next_customer_waiting).length;
   return (
     <Modal onClose={() => dismiss("items")}>
-      <div className="wizard-card alert-modal">
-        <h2>Item Due</h2>
-        <p>
-          <strong>
-            {itemsDueCount} item{itemsDueCount === 1 ? "" : "s"}
-          </strong>{" "}
-          due back today or overdue
-          {summary.overdue.length > 0 && (
-            <>
-              {" "}
-              ({summary.overdue.length} overdue
-              {urgentCount > 0 ? `, ${urgentCount} with the next customer waiting` : ""})
-            </>
-          )}
-          .
+      <div className="modal-header border-bottom py-3">
+        <h5 className="modal-title fw-bold text-dark d-flex align-items-center gap-2">
+          <i className="ti ti-calendar-event text-danger"></i> Rental Items Due Reminder
+        </h5>
+        <button type="button" className="btn-close" onClick={() => dismiss("items")}></button>
+      </div>
+      <div className="modal-body p-4">
+        <p className="fs-6 text-dark mb-2">
+          There are <strong>{itemsDueCount} item{itemsDueCount === 1 ? "" : "s"}</strong> due back today or overdue.
         </p>
-        <div className="wizard-actions">
-          <button type="button" className="btn-secondary" onClick={() => dismiss("items")}>
-            Dismiss
-          </button>
-          <button type="button" className="btn-primary" onClick={() => viewDetails("items", "items-due-section")}>
-            View Details
-          </button>
-        </div>
+        {summary.overdue.length > 0 && (
+          <div className="alert alert-danger py-2 px-3 small mb-0">
+            <i className="ti ti-alert-triangle me-1"></i> {summary.overdue.length} items overdue
+            {urgentCount > 0 ? ` (${urgentCount} next customer waiting)` : ""}
+          </div>
+        )}
+      </div>
+      <div className="modal-footer border-top bg-light p-3">
+        <button type="button" className="btn btn-outline-secondary" onClick={() => dismiss("items")}>
+          Dismiss
+        </button>
+        <button type="button" className="btn btn-primary" onClick={() => viewDetails("items", "items-due-section")}>
+          View Details
+        </button>
       </div>
     </Modal>
   );

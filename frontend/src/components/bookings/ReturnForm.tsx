@@ -8,9 +8,6 @@ interface ChargeDraft {
   amount: string;
 }
 
-// Scoped to a single line item (§8 decision D) — booking is passed only for
-// display context (booking_code, customer name) and to build the request
-// URL; the return itself only ever affects this one booking_items row.
 export function ReturnForm({
   booking,
   item,
@@ -20,27 +17,16 @@ export function ReturnForm({
   item: BookingItem;
   onCancel: () => void;
 }) {
-  // Combined from two sources: the item's own components template (only
-  // for set items — items.components itself is never touched here) and
-  // this line item's own custom_addons (free-text extras added at booking
-  // time, regardless of item type). Either alone, both together, or
-  // neither all produce a sensible checklist.
   const componentNames = item.items?.item_type === "set" ? item.items.components ?? [] : [];
   const addonNames = item.custom_addons ?? [];
   const checklistNames = [...componentNames, ...addonNames];
   const [checklist, setChecklist] = useState<Record<string, boolean>>(
     Object.fromEntries(checklistNames.map((name) => [name, false])),
   );
-  // Lost-and-found: an offer to charge for it, per unchecked component —
-  // keyed the same way as checklist, description pre-filled from the
-  // component name but editable (e.g. "Earrings" -> "1 lost earring").
   const [charges, setCharges] = useState<Record<string, ChargeDraft>>(
     Object.fromEntries(checklistNames.map((name) => [name, { enabled: false, description: name, amount: "" }])),
   );
   const [returnNotes, setReturnNotes] = useState("");
-  // Left blank on purpose — the backend defaults to today in IST when this
-  // is omitted, rather than the frontend computing "today" itself (which
-  // would use the viewer's local timezone; see CLAUDE.md).
   const [actualReturnDate, setActualReturnDate] = useState("");
   const [depositRefunded, setDepositRefunded] = useState(false);
   const [depositRefundDate, setDepositRefundDate] = useState("");
@@ -51,8 +37,6 @@ export function ReturnForm({
   function toggleComponent(name: string) {
     setChecklist((c) => {
       const next = { ...c, [name]: !c[name] };
-      // Checking a component back off cancels any pending charge for it —
-      // nothing to charge for once it's confirmed present.
       if (next[name]) setCharges((all) => ({ ...all, [name]: { ...all[name], enabled: false } }));
       return next;
     });
@@ -93,18 +77,23 @@ export function ReturnForm({
 
   if (result) {
     return (
-      <div className="wizard-card wizard-success">
-        <p className="success-check">✓ Marked Returned</p>
-        <p className="success-code">{booking.booking_code}</p>
-        <p>{item.items?.item_code} — {item.items?.name}</p>
+      <div className="card border-0 shadow-sm text-center p-5">
+        <div className="avatar avatar-xl rounded-circle bg-success-subtle text-success mx-auto d-flex align-items-center justify-content-center mb-3">
+          <i className="ti ti-check fs-1"></i>
+        </div>
+        <h4 className="fw-bold text-dark mb-1">Item Returned Successfully!</h4>
+        <p className="text-muted mb-2">
+          Booking: <span className="badge bg-light text-dark border font-monospace me-2">{booking.booking_code}</span>
+          Item: <span className="fw-semibold text-dark">{item.items?.name}</span>
+        </p>
         {result.warning && (
-          <div className="found-panel">
-            <p>{result.warning}</p>
+          <div className="alert alert-warning py-2 px-3 small d-inline-block mb-3">
+            <i className="ti ti-alert-triangle me-1"></i> {result.warning}
           </div>
         )}
-        <div className="wizard-actions">
-          <button className="btn-primary" onClick={onCancel}>
-            Back to Bookings
+        <div className="d-flex justify-content-center gap-2 mt-2">
+          <button className="btn btn-primary" onClick={onCancel}>
+            <i className="ti ti-arrow-left me-1"></i> Back to Bookings
           </button>
         </div>
       </div>
@@ -112,48 +101,97 @@ export function ReturnForm({
   }
 
   return (
-    <form className="wizard-card" onSubmit={handleSubmit}>
-      <div className="wizard-step">
-        <h2>Process Return — {booking.booking_code}</h2>
-        <p className="wizard-hint">
-          {item.items?.item_code} — {item.items?.name} · {booking.customers?.name}
-        </p>
+    <form className="card border-0 shadow-sm" onSubmit={handleSubmit}>
+      <div className="card-header bg-white p-4 border-bottom">
+        <div className="d-flex align-items-center justify-content-between">
+          <div>
+            <h5 className="fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+              <i className="ti ti-corner-up-left text-warning"></i> Process Item Return
+            </h5>
+            <span className="badge bg-light text-dark border font-monospace me-2">{booking.booking_code}</span>
+            <span className="text-muted small">Customer: {booking.customers?.name}</span>
+          </div>
+          <button type="button" className="btn btn-outline-secondary btn-sm" onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      </div>
 
+      <div className="card-body p-4">
+        <div className="p-3 bg-light rounded border mb-4">
+          <strong className="text-dark fs-6 d-block mb-1">Returning Item:</strong>
+          <span className="badge bg-white text-dark border font-monospace me-2">{item.items?.item_code}</span>
+          <span className="fw-semibold text-dark">{item.items?.name}</span>
+        </div>
+
+        {/* Checklist Section */}
         {checklistNames.length > 0 && (
-          <>
-            <p className="field-label">Return Checklist</p>
-            <div className="checklist">
+          <div className="mb-4">
+            <h6 className="fw-bold text-dark mb-3">
+              <i className="ti ti-list-check me-1 text-primary"></i> Return Parts Checklist
+            </h6>
+
+            <div className="d-flex flex-column gap-2 mb-3">
               {checklistNames.map((name) => (
-                <div key={name} className="checklist-row">
-                  <label className="checklist-item">
-                    <input type="checkbox" checked={checklist[name] ?? false} onChange={() => toggleComponent(name)} />
-                    {name}
-                  </label>
+                <div className="p-3 border rounded bg-white" key={name}>
+                  <div className="form-check d-flex align-items-center justify-content-between">
+                    <div>
+                      <input
+                        type="checkbox"
+                        className="form-check-input me-2"
+                        id={`check-${name}`}
+                        checked={checklist[name] ?? false}
+                        onChange={() => toggleComponent(name)}
+                      />
+                      <label className="form-check-label fw-medium text-dark cursor-pointer" htmlFor={`check-${name}`}>
+                        {name}
+                      </label>
+                    </div>
+
+                    {!checklist[name] && (
+                      <span className="badge bg-danger-subtle text-danger">Part Missing / Not Checked</span>
+                    )}
+                  </div>
+
                   {!checklist[name] && (
-                    <div className="lost-and-found">
-                      <label className="checklist-item">
+                    <div className="mt-3 pt-3 border-top bg-light p-3 rounded">
+                      <div className="form-check mb-2">
                         <input
                           type="checkbox"
+                          className="form-check-input"
+                          id={`charge-enable-${name}`}
                           checked={charges[name]?.enabled ?? false}
                           onChange={(e) => updateCharge(name, { enabled: e.target.checked })}
                         />
-                        Charge for this
-                      </label>
+                        <label className="form-check-label fw-semibold text-danger small" htmlFor={`charge-enable-${name}`}>
+                          Charge Customer for Missing/Damaged Part
+                        </label>
+                      </div>
+
                       {charges[name]?.enabled && (
-                        <div className="lost-and-found-fields">
-                          <input
-                            type="text"
-                            value={charges[name].description}
-                            onChange={(e) => updateCharge(name, { description: e.target.value })}
-                            placeholder="Description"
-                          />
-                          <input
-                            type="number"
-                            min={0}
-                            value={charges[name].amount}
-                            onChange={(e) => updateCharge(name, { amount: e.target.value })}
-                            placeholder="Amount (₹)"
-                          />
+                        <div className="row g-2 mt-1">
+                          <div className="col-12 col-md-7">
+                            <input
+                              type="text"
+                              className="form-control form-control-sm"
+                              value={charges[name].description}
+                              onChange={(e) => updateCharge(name, { description: e.target.value })}
+                              placeholder="Charge description (e.g. 1 Lost Earring)"
+                            />
+                          </div>
+                          <div className="col-12 col-md-5">
+                            <div className="input-group input-group-sm">
+                              <span className="input-group-text bg-white">₹</span>
+                              <input
+                                type="number"
+                                className="form-control"
+                                min={0}
+                                value={charges[name].amount}
+                                onChange={(e) => updateCharge(name, { amount: e.target.value })}
+                                placeholder="Amount"
+                              />
+                            </div>
+                          </div>
                         </div>
                       )}
                     </div>
@@ -161,60 +199,81 @@ export function ReturnForm({
                 </div>
               ))}
             </div>
-          </>
+          </div>
         )}
 
-        <label className="field-label">
-          Actual Return Date
-          <input
-            type="date"
-            value={actualReturnDate}
-            onChange={(e) => setActualReturnDate(e.target.value)}
-          />
-        </label>
-        <p className="wizard-hint">Leave blank to use today.</p>
+        {/* Date & Notes */}
+        <div className="row g-3">
+          <div className="col-12 col-md-6">
+            <label className="form-label fw-medium small">Actual Return Date</label>
+            <input
+              type="date"
+              className="form-control"
+              value={actualReturnDate}
+              onChange={(e) => setActualReturnDate(e.target.value)}
+            />
+            <span className="text-muted fs-7">Leave blank to use today's date.</span>
+          </div>
 
-        <label className="field-label">
-          Return Notes
-          <textarea
-            value={returnNotes}
-            onChange={(e) => setReturnNotes(e.target.value)}
-            rows={2}
-            placeholder="Optional"
-          />
-        </label>
+          <div className="col-12 col-md-6">
+            <label className="form-label fw-medium small">Return Condition / Notes</label>
+            <textarea
+              className="form-control"
+              rows={2}
+              value={returnNotes}
+              onChange={(e) => setReturnNotes(e.target.value)}
+              placeholder="Optional notes on item condition upon return..."
+            />
+          </div>
 
-        {item.deposit_collected && (
-          <>
-            <label className="field-label">
-              <input
-                type="checkbox"
-                checked={depositRefunded}
-                onChange={(e) => setDepositRefunded(e.target.checked)}
-              />{" "}
-              Deposit refunded
-            </label>
-            {depositRefunded && (
-              <label className="field-label">
-                Refund Date
+          {item.deposit_collected && (
+            <div className="col-12">
+              <hr />
+              <h6 className="fw-bold text-dark mb-3">
+                <i className="ti ti-shield-check me-1 text-primary"></i> Security Deposit Refund
+              </h6>
+
+              <div className="form-check mb-2">
                 <input
-                  type="date"
-                  value={depositRefundDate}
-                  onChange={(e) => setDepositRefundDate(e.target.value)}
+                  type="checkbox"
+                  className="form-check-input"
+                  id="depRefundCheck"
+                  checked={depositRefunded}
+                  onChange={(e) => setDepositRefunded(e.target.checked)}
                 />
-              </label>
-            )}
-          </>
-        )}
+                <label className="form-check-label fw-medium text-dark" htmlFor="depRefundCheck">
+                  Security Deposit Refunded to Customer (₹{item.deposit_amount})
+                </label>
+              </div>
 
-        {error && <p className="wizard-error">{error}</p>}
+              {depositRefunded && (
+                <div className="col-12 col-md-6 mt-2">
+                  <label className="form-label fw-medium small">Refund Date</label>
+                  <input
+                    type="date"
+                    className="form-control"
+                    value={depositRefundDate}
+                    onChange={(e) => setDepositRefundDate(e.target.value)}
+                  />
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {error && (
+          <div className="alert alert-danger py-2 px-3 small mt-3">
+            <i className="ti ti-alert-circle me-1"></i> {error}
+          </div>
+        )}
       </div>
-      <div className="wizard-nav">
-        <button type="button" className="btn-secondary" onClick={onCancel}>
+
+      <div className="card-footer bg-white p-3 border-top d-flex justify-content-end gap-2">
+        <button type="button" className="btn btn-outline-secondary" onClick={onCancel}>
           Cancel
         </button>
-        <button type="submit" className="btn-primary" disabled={saving}>
-          {saving ? "Saving…" : "Mark Returned"}
+        <button type="submit" className="btn btn-warning fw-semibold px-4" disabled={saving}>
+          {saving ? "Processing…" : "Confirm Return"}
         </button>
       </div>
     </form>
