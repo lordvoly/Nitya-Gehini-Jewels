@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Rebuild of the v1 Airtable + static HTML system as a real backend + database.
 Full context and rationale: `PROJECT_PLAN_V2.md` (keep it in sync if the plan changes).
 
-## Current status (2026-08-12)
+## Current status (2026-08-13)
 
 **Done:** Auth (login/logout, protected routes, `/api/me` role scaffold — not yet used
 to gate anything). Items, end to end, including edit/delete: backend
@@ -667,16 +667,44 @@ amount showed the "Enter an amount greater than 0" client-side error and made no
 request. Test row deleted directly via Supabase after; no real data existed in
 `expenses` to disturb.
 
-**Next step — Phase 2 (bookkeeping), continued:** Payments and Expenses are now both
-done (see above). Per `PROJECT_PLAN_V2.md` §5, still remaining:
-- **P&L by period** and **outstanding dues report** — neither exists yet in any form
-  (not even scaffolded backend routes). Reports' existing date-range-picker pattern
-  (`istMonthRange()`, resolved-range-echoed-back-in-response) is the template to reuse
-  rather than reinvent.
-- **GST invoice generation (PDF)** — blocked on real input, not a coding task yet: per
-  `PROJECT_PLAN_V2.md` §6, the actual HSN code(s) and GST rate(s) still need
-  confirming with the family's CA. Don't guess a value here — `bookings.hsn_code`/
-  `tax_rate` stay nullable/configurable until that's answered.
+P&L and Outstanding Dues, new session (2026-08-13) — both landed on the existing
+Reports page as two new sections rather than a separate page, reusing its
+date-range-picker pattern instead of reinventing it. Backend: `GET /api/reports`
+gained `pnl` (`revenue` reuses `summary.total_revenue` — same `periodItems`, same
+cancelled-excluded rule, no second query needed; `expenses` sums the `expenses` table
+over the same `[from, to]` range by `date`; `net`; `by_category` breakdown) and
+`outstanding_dues` (every booking with `booking_financials.balance_due > 0`, sorted
+descending, joined to `booking_code`/customer name via the usual
+batch-fetch-and-merge pattern since `booking_financials` is a view with no real FK).
+`outstanding_dues`, like `repeat_customers`, is deliberately a current-state snapshot
+— **not** scoped to the report's own date range, since a booking made last month that
+still owes money is exactly what this section exists to surface. Frontend: two new
+`dashboard-section`s on `ReportsPage.tsx` — P&L (stat tiles + category table, hidden
+when empty rather than rendering an empty table) and Outstanding Dues (table linking
+each row to `BookingDetail` via the existing `?booking=<id>` pattern).
+
+Verified live against real Supabase data, not just typechecked: hand-computed
+revenue/expenses/outstanding-dues directly via Supabase queries for the current IST
+month before ever loading the page, then confirmed the rendered Reports page matched
+exactly — ₹14 revenue (3 real `booking_items` rows), ₹0 expenses, ₹14 net, and three
+real outstanding bookings (`RNT-0001`/Kritika Bhatia/₹3500, `Page 123`/Test customer
+1/₹12, `124`/Aryan Batheja/₹2) in the correct descending order. Clicked through
+`RNT-0001`'s Outstanding Dues link and confirmed `BookingDetail` shows the same
+₹3500 balance due. No test data was created or needed for this task — the real data
+already present was enough to exercise every code path (a non-zero revenue booking, a
+zero-expense month, and multiple outstanding balances).
+
+**GST invoices — descoped for now, not a blocker.** Per explicit direction
+(2026-08-13): invoice generation, when it's built, will be a **plain invoice with no
+GST section** — the CA's HSN code/GST rate confirmation (`PROJECT_PLAN_V2.md` §6)
+only matters if/when a GST section gets added later, and isn't something to wait on
+or build toward right now. `bookings.hsn_code`/`tax_rate` stay nullable/unused in the
+meantime; don't treat this as a blocked task on the roadmap — it simply isn't in
+scope yet.
+
+**Next step — Phase 2 (bookkeeping):** Payments, Expenses, P&L, and Outstanding Dues
+are all done (see above) — Phase 2 is functionally complete pending only invoice
+generation, which per the above is intentionally not yet scoped/started.
 
 ## Tech stack
 
@@ -842,6 +870,9 @@ Don't build ahead of the current phase without checking in.
 
 ## Open questions (not something to guess at)
 
-Current HSN code(s) and GST rate(s) for `bookings.hsn_code`/`tax_rate` need
-confirmation from the family's CA — see `PROJECT_PLAN_V2.md` §6. Don't hardcode a
-guessed value; leave these configurable/nullable until confirmed.
+Current HSN code(s) and GST rate(s) for `bookings.hsn_code`/`tax_rate` would need
+confirmation from the family's CA before a GST section could be added to invoices —
+see `PROJECT_PLAN_V2.md` §6. This is **not currently blocking anything**: per the
+2026-08-13 decision recorded above, invoice generation is scoped as a plain invoice
+with no GST section for now, so there's nothing to wait on here. Don't hardcode a
+guessed HSN/rate value if GST support is ever added later.

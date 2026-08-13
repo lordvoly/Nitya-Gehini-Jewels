@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { fetchReports, type ReportsResponse } from "../lib/reports";
 import "../styles/shared.css";
 
@@ -51,7 +52,7 @@ export default function ReportsPage() {
   if (error && !data) return <div className="page wizard-error">{error}</div>;
   if (!data) return null;
 
-  const { summary, most_booked_items, repeat_customers, idle_inventory } = data;
+  const { summary, most_booked_items, repeat_customers, idle_inventory, pnl, outstanding_dues } = data;
 
   return (
     <div className="page">
@@ -93,6 +94,44 @@ export default function ReportsPage() {
           Total bookings counts family transactions (one visit, however many items). Rentals/Sales counts
           individual items — a visit with one rental and one sale in the same booking adds 1 to both.
         </p>
+      </div>
+
+      <div className="dashboard-section">
+        <h2>Profit &amp; Loss</h2>
+        <div className="stat-grid">
+          <div className="stat-card">
+            <div className="stat-value">₹{pnl.revenue}</div>
+            <div className="stat-label">Revenue</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value">₹{pnl.expenses}</div>
+            <div className="stat-label">Expenses</div>
+          </div>
+        </div>
+        <div className="stat-card stat-card-wide">
+          <div className="stat-value">₹{pnl.net}</div>
+          <div className="stat-label">Net (revenue − expenses)</div>
+        </div>
+        {pnl.by_category.length > 0 && (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Category</th>
+                  <th>Amount</th>
+                </tr>
+              </thead>
+              <tbody>
+                {pnl.by_category.map((c) => (
+                  <tr key={c.category}>
+                    <td data-label="Category">{c.category}</td>
+                    <td data-label="Amount">₹{c.amount}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
       </div>
 
       <label className="field-label checkbox-row">
@@ -196,6 +235,42 @@ export default function ReportsPage() {
                     <td data-label="Code">{i.item_code}</td>
                     <td data-label="Name">{i.name}</td>
                     <td data-label="Category">{i.category}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </div>
+
+      <div className="dashboard-section">
+        <h2>Outstanding Dues</h2>
+        <p className="wizard-hint">
+          Every booking still owed money, regardless of when it was made — not scoped to the date range above.
+        </p>
+        {outstanding_dues.length === 0 ? (
+          <div className="empty-state">
+            <h3>Nothing outstanding</h3>
+            <p>Every booking is fully paid.</p>
+          </div>
+        ) : (
+          <div className="table-wrap">
+            <table className="data-table">
+              <thead>
+                <tr>
+                  <th>Booking</th>
+                  <th>Customer</th>
+                  <th>Balance Due</th>
+                </tr>
+              </thead>
+              <tbody>
+                {outstanding_dues.map((d) => (
+                  <tr key={d.booking_id}>
+                    <td data-label="Booking">
+                      <Link to={`/bookings?booking=${d.booking_id}`}>{d.booking_code}</Link>
+                    </td>
+                    <td data-label="Customer">{d.customer_name}</td>
+                    <td data-label="Balance Due">₹{d.balance_due}</td>
                   </tr>
                 ))}
               </tbody>

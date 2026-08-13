@@ -122,6 +122,73 @@ reportsRouter.get("/", async (req, res) => {
   const recentlyBookedIds = new Set((recentBookingItems ?? []).map((b) => b.item_id));
   const idle_inventory = (activeItems ?? []).filter((i) => !recentlyBookedIds.has(i.id));
 
+  // P&L — revenue reuses summary.total_revenue (same periodItems, same
+  // cancelled-excluded rule) rather than a second query. Expenses are
+  // scoped to the same [from, to] range by expenses.date, unlike
+  // repeat_customers/idle_inventory/outstanding_dues below which are
+  // deliberately all-time/current-state.
+  const { data: periodExpenses, error: expensesError } = await supabase
+    .from("expenses")
+    .select("category, amount")
+    .gte("date", from)
+    .lte("date", to);
+  if (expensesError) return res.status(500).json({ error: expensesError.message });
+
+  const categoryTotals = new Map<string, number>();
+  for (const e of periodExpenses ?? []) {
+    categoryTotals.set(e.category, (categoryTotals.get(e.category) ?? 0) + Number(e.amount));
+  }
+  const expenses_total = [...categoryTotals.values()].reduce((sum, v) => sum + v, 0);
+  const pnl = {
+    revenue: summary.total_revenue,
+    expenses: expenses_total,
+    net: summary.total_revenue - expenses_total,
+    by_category: [...categoryTotals.entries()]
+      .map(([category, amount]) => ({ category, amount }))
+      .sort((a, b) => b.amount - a.amount),
+  };
+
+  // Outstanding dues — a current-state snapshot, not scoped to [from, to]:
+  // every booking still owed money, regardless of when it was created.
+  // booking_financials has no real FK to bookings (it's a view, same
+  // embed-doesn't-work-on-views constraint hit everywhere else in this
+  // app), so batch-fetch bookings/customers and merge rather than embed.
+  const { data: duefinancials, error: duefinancialsError } = await supabase
+    .from("booking_financials")
+    .select("booking_id, balance_due")
+    .gt("balance_due", 0)
+    .order("balance_due", { ascending: false });
+  if (duefinancialsError) return res.status(500).json({ error: duefinancialsError.message });
+
+  const dueBookingIds = (duefinancials ?? []).map((d) => d.booking_id);
+  const { data: dueBookings, error: dueBookingsError } = dueBookingIds.length
+    ? await supabase.from("bookings").select("id, booking_code, customer_id").in("id", dueBookingIds)
+    : { data: [], error: null };
+  if (dueBookingsError) return res.status(500).json({ error: dueBookingsError.message });
+
+  const dueBookingsById = new Map((dueBookings ?? []).map((b) => [b.id, b]));
+  const dueCustomerIds = [...new Set((dueBookings ?? []).map((b) => b.customer_id))];
+  const { data: dueCustomers, error: dueCustomersError } = dueCustomerIds.length
+    ? await supabase.from("customers").select("id, name").in("id", dueCustomerIds)
+    : { data: [], error: null };
+  if (dueCustomersError) return res.status(500).json({ error: dueCustomersError.message });
+  const dueCustomersById = new Map((dueCustomers ?? []).map((c) => [c.id, c]));
+
+  const outstanding_dues = (duefinancials ?? [])
+    .map((d) => {
+      const booking = dueBookingsById.get(d.booking_id);
+      const customer = booking ? dueCustomersById.get(booking.customer_id) : undefined;
+      return {
+        booking_id: d.booking_id,
+        booking_code: booking?.booking_code ?? "—",
+        customer_name: customer?.name ?? "—",
+        balance_due: Number(d.balance_due),
+      };
+    })
+    // duefinancials is already balance_due-desc from the query, but that
+    // order isn't guaranteed to survive the map above, so re-sort explicitly.
+    .sort((a, b) => b.balance_due - a.balance_due);
+
   res.json({
     period: { from, to },
     include_collabs: includeCollabs,
@@ -129,5 +196,7 @@ reportsRouter.get("/", async (req, res) => {
     most_booked_items,
     repeat_customers,
     idle_inventory,
+    pnl,
+    outstanding_dues,
   });
 });
