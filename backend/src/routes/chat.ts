@@ -51,3 +51,52 @@ chatRouter.post("/", async (req, res) => {
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
   }
 });
+
+const SUGGESTIONS_SYSTEM_PROMPT = `Based on the conversation so far, suggest 2-3 short, natural
+follow-up questions the user might want to ask next. Ground them specifically in what was just
+discussed (the same item, customer, date range, etc.) — never generic questions unrelated to the
+conversation.`;
+
+// POST /api/chat/suggestions — a second, small call after the main reply, not
+// part of the tool-use loop above: no tool access, forced to call
+// suggest_questions so the response is reliably structured rather than
+// prose to parse. Body: { messages } — the same conversation (including the
+// reply just shown) sent to POST /.
+chatRouter.post("/suggestions", async (req, res) => {
+  try {
+    const messages: Anthropic.MessageParam[] = req.body.messages;
+
+    const response = await anthropic.messages.create({
+      model: "claude-haiku-4-5",
+      max_tokens: 300,
+      system: SUGGESTIONS_SYSTEM_PROMPT,
+      tools: [
+        {
+          name: "suggest_questions",
+          description: "Return 2-3 short follow-up questions grounded in the conversation so far.",
+          input_schema: {
+            type: "object" as const,
+            properties: {
+              questions: {
+                type: "array",
+                items: { type: "string" },
+                minItems: 2,
+                maxItems: 3,
+              },
+            },
+            required: ["questions"],
+          },
+        },
+      ],
+      tool_choice: { type: "tool", name: "suggest_questions" },
+      messages,
+    });
+
+    const toolUse = response.content.find((block) => block.type === "tool_use");
+    const input = toolUse?.type === "tool_use" ? (toolUse.input as { questions?: unknown }) : undefined;
+    const questions = Array.isArray(input?.questions) ? input.questions.filter((q): q is string => typeof q === "string") : [];
+    res.json({ questions });
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});

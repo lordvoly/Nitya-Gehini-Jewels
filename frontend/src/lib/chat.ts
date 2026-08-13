@@ -41,3 +41,18 @@ export function sendChatMessage(messages: ChatMessage[]) {
     body: JSON.stringify({ messages }),
   });
 }
+
+export interface ChatSuggestionsReply {
+  questions: string[];
+}
+
+// POST /api/chat/suggestions — a second, small call fired after each reply,
+// same { messages } shape as sendChatMessage (including the reply just
+// shown), returning 2-3 short follow-up questions grounded in that
+// conversation rather than the fixed starter questions repeating.
+export function fetchChatSuggestions(messages: ChatMessage[]) {
+  return apiFetch<ChatSuggestionsReply>("/api/chat/suggestions", {
+    method: "POST",
+    body: JSON.stringify({ messages }),
+  });
+}

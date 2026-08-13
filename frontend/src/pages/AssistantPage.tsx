@@ -1,12 +1,11 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
-import { sendChatMessage, extractText, type ChatMessage } from "../lib/chat";
+import { sendChatMessage, fetchChatSuggestions, extractText, type ChatMessage } from "../lib/chat";
 import "../styles/shared.css";
 
 // Real item name (NGJ-0001, Peacock Bridal Set) and a mix of tool coverage
 // (item lookup, overdue, hypothetical-date availability, upcoming returns)
-// — see backend/src/tools/index.ts. Tapping one only fills the input
-// (doesn't auto-send), so a first-time user can still see/edit before
-// sending.
+// — see backend/src/tools/index.ts. Tapping one sends immediately (same as
+// a per-reply suggestion chip below) rather than just filling the input.
 const STARTER_QUESTIONS = [
   "Where is the Peacock Bridal Set?",
   "What's overdue this week?",
@@ -32,19 +31,39 @@ export default function AssistantPage() {
   const [input, setInput] = useState("");
   const [sending, setSending] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  // Follow-up chips for the most recent reply only — cleared the instant a
+  // new turn starts (typed, starter-tap, or suggestion-tap), so a stale set
+  // can never linger under a newer reply.
+  const [suggestions, setSuggestions] = useState<string[]>([]);
   const bottomRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Guards against a slow suggestions fetch from an earlier turn resolving
+  // after a newer turn has already started and applying stale chips.
+  const suggestionsRequestRef = useRef(0);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, sending]);
+  }, [messages, sending, suggestions]);
+
+  function fetchSuggestionsFor(convo: ChatMessage[]) {
+    const requestId = ++suggestionsRequestRef.current;
+    fetchChatSuggestions(convo)
+      .then((res) => {
+        if (suggestionsRequestRef.current === requestId) setSuggestions(res.questions);
+      })
+      // Non-critical: a failed suggestions call should never surface as a
+      // user-facing error or disrupt the main chat flow, just show none.
+      .catch(() => {});
+  }
 
   async function runTurn(convo: ChatMessage[]) {
     setSending(true);
     setError(null);
     try {
       const reply = await sendChatMessage(convo);
-      setMessages([...convo, { role: "assistant", content: reply.message.content }]);
+      const updated: ChatMessage[] = [...convo, { role: "assistant", content: reply.message.content }];
+      setMessages(updated);
+      fetchSuggestionsFor(updated);
     } catch (e) {
       setError(e instanceof Error ? e.message : "Something went wrong — please try again.");
     } finally {
@@ -52,19 +71,23 @@ export default function AssistantPage() {
     }
   }
 
-  function handleSubmit(e: FormEvent) {
-    e.preventDefault();
-    const trimmed = input.trim();
+  // Shared by the input form, starter-question taps, and suggestion-chip
+  // taps — all three are just different ways to submit the same message,
+  // typing included, so none of them get special-cased behavior.
+  function sendMessage(text: string) {
+    const trimmed = text.trim();
     if (!trimmed || sending) return;
+    suggestionsRequestRef.current++; // invalidate any in-flight suggestions fetch
+    setSuggestions([]);
     const next: ChatMessage[] = [...messages, { role: "user", content: trimmed }];
     setMessages(next);
     setInput("");
     runTurn(next);
   }
 
-  function handleStarterTap(question: string) {
-    setInput(question);
-    inputRef.current?.focus();
+  function handleSubmit(e: FormEvent) {
+    e.preventDefault();
+    sendMessage(input);
   }
 
   function handleRetry() {
@@ -81,7 +104,7 @@ export default function AssistantPage() {
           <p className="chat-empty-hint">Not sure what to ask? Try one of these:</p>
           <div className="chat-starters">
             {STARTER_QUESTIONS.map((q) => (
-              <button key={q} type="button" className="chat-starter-btn" onClick={() => handleStarterTap(q)}>
+              <button key={q} type="button" className="chat-starter-btn" onClick={() => sendMessage(q)}>
                 {q}
               </button>
             ))}
@@ -99,6 +122,15 @@ export default function AssistantPage() {
               <span />
               <span />
               <span />
+            </div>
+          )}
+          {!sending && suggestions.length > 0 && (
+            <div className="chat-suggestions">
+              {suggestions.map((q) => (
+                <button key={q} type="button" className="chat-suggestion-chip" onClick={() => sendMessage(q)}>
+                  {q}
+                </button>
+              ))}
             </div>
           )}
           <div ref={bottomRef} />
