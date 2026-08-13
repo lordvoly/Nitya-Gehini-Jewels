@@ -930,6 +930,71 @@ its own topically-relevant chips (customer/rental-history follow-ups, not item
 ones) — confirming the suggestions endpoint responds to *whatever* was just
 discussed, not a hardcoded topic.
 
+8 new AI assistant tools, new session (2026-08-13) — all read-only, all reusing
+already-tested query logic rather than reimplementing it. Required a real refactor
+first: the query logic already backing Reports (`GET /api/reports`), Dashboard
+(`GET /api/dashboard/summary`), Item Charges, and Booking Detail was extracted into
+shared functions — new `backend/src/lib/reportsData.ts`
+(`getPeriodBookingItems`/`summarizeBookingItems`/`rankMostBookedItems`/
+`getIdleInventory`/`getExpensesForPeriod`/`getFinancialSummary`/`getOutstandingDues`),
+new `backend/src/lib/dashboardData.ts` (`getDailyBriefingData`), plus newly-exported
+`getItemCharges()` (`routes/itemCharges.ts`), `getBookingDetail()`
+(`routes/bookings.ts`), and `getPaymentsForBooking()` (`routes/payments.ts`). The
+original routes were rewritten to call these same functions instead of inline logic
+— identical behavior, not a rewrite of what they compute, verified by running every
+extracted function directly and diffing against previously-verified real figures
+(all matched byte-for-byte: ₹14 revenue, ₹3514 outstanding across the same 3
+bookings, same idle items, same most-booked ranking). The new tools
+(`backend/src/tools/index.ts`) then call these exact functions: `get_financial_summary`,
+`get_outstanding_dues`, `get_outstanding_charges`, `get_popular_items`,
+`get_idle_inventory`, `get_daily_briefing`, `get_booking_by_code` (resolves
+`booking_code` → id, then calls `getBookingDetail` + `getPaymentsForBooking`
+together — payment history was never part of `GET /api/bookings/:id`'s own
+response, so this tool is the first caller to combine both). The chat system prompt
+(`backend/src/routes/chat.ts`) gained a per-tool routing guide so the model reaches
+for the right one.
+
+**`get_customer_summary` — confirmed missing, built here.** The task asked to
+confirm this was built in "the previous task"; it wasn't — that session's own
+CLAUDE.md entry (just above) documents the model honestly saying "I don't have a
+tool for that" when asked "How many customers do we have?", and grep confirmed no
+such tool existed in `tools/index.ts`. Added now: total count, breakdown by
+`customer_type`, full list.
+
+Verified live through the real chat page (not by calling tool functions directly),
+each cross-checked against a fresh direct Supabase query first: "How much did we
+make this month?" → ₹14 revenue / ₹1.1 expenses / ₹12.9 net, exact match.
+"Who owes us money?" → the same 3 bookings/amounts as `get_outstanding_dues`, same
+order. "Any items customers still owe us money for?" — tested against a genuine
+non-empty case (a throwaway `ZZTEST` lost-item charge created for this, ₹750 missing
+earring), correctly surfaced with every field right, then cleaned up. "What's our
+most popular set?" → test set 2 (2 bookings) then test set 1 (1 booking), exact
+match. "What hasn't been booked in a while?" → Peacock Bridal Set + "L", exact
+match. "Catch me up on today" → no returns due, no overdue, 3 customers owing
+₹3,514 total, exact match to `get_daily_briefing`. "What's the status of RNT-0001?"
+(no `BK-0001` currently exists — a real code was used instead, per the task's own
+"real or throwaway" allowance) → every field matched a direct `getBookingDetail` +
+`getPaymentsForBooking` call exactly, including the full 9-piece component list.
+
+**A real finding, not glossed over:** testing `get_customer_summary` with "How many
+customers do we have?" in a long-running conversation (8+ exchanges deep) returned a
+hallucinated answer — "5 customers" including a fabricated "NGJ-0007" and a
+same-session `ZZTEST` customer that had *already been deleted* before that question
+was even asked. Direct verification proved the tool itself returned correct data
+(`total_count: 4`, real names only) — the model's answer just didn't accurately
+relay it. Re-asked the identical question in a **fresh** conversation and got a
+fully correct, well-reasoned answer (4 customers, correct names/phones, even a
+correct aside about the two same-named "Aryan Batheja" entries). Most likely cause:
+the deleted `ZZTEST` customer's name had appeared earlier in that same long
+conversation (from an earlier `get_outstanding_charges` answer), and the model
+blended that stale conversation context into this tool's fresh result rather than
+reporting the tool's actual output. This is a real characteristic of a long
+conversation with a small/fast model, not a bug in the tool or its query — but
+flagged here rather than left undiscovered, since it's exactly the "grounded, not
+just plausible-sounding" failure mode this task's own verification step existed to
+catch. No code changes made in response; worth knowing about, not necessarily worth
+solving pre-emptively for a shop-floor tool used in short, focused sessions.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.
