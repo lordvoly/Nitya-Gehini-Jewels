@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Routes, Route, NavLink, Link } from "react-router-dom";
-import { Home, Calendar, Gem, Users, Sparkles, Menu, BarChart3, Wallet, AlertCircle } from "lucide-react";
+import { Home, Calendar, Gem, Users, Sparkles, Menu, BarChart3, Wallet, AlertCircle, Settings } from "lucide-react";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import ItemsPage from "./pages/ItemsPage";
@@ -10,6 +10,8 @@ import ReportsPage from "./pages/ReportsPage";
 import ExpensesPage from "./pages/ExpensesPage";
 import ChargesPage from "./pages/ChargesPage";
 import AssistantPage from "./pages/AssistantPage";
+import SettingsPage from "./pages/SettingsPage";
+import ReceiptPage from "./pages/ReceiptPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { Modal } from "./components/common/Modal";
 import { useAuth } from "./lib/auth";
@@ -18,7 +20,9 @@ import "./styles/shared.css";
 
 // Desktop keeps every page directly reachable in one row — no space
 // constraint there, so no need to split anything into a "more" bucket.
-const TABS = [
+// Settings is appended conditionally (admin only) inside the component,
+// not listed here statically.
+const BASE_TABS = [
   { to: "/", label: "Dashboard" },
   { to: "/items", label: "Items" },
   { to: "/customers", label: "Customers" },
@@ -45,16 +49,20 @@ const MOBILE_PRIMARY_TABS = [
 // opened from a header icon rather than the bottom bar, so the bottom bar
 // stays an even 2-2 split around the FAB. Charges isn't named in the
 // original split (Reports/Expenses) but leaving it unreachable on mobile
-// would be a real regression, so it lives here too.
-const MOBILE_MORE_ITEMS = [
+// would be a real regression, so it lives here too. Settings is appended
+// conditionally (admin only) inside the component.
+const BASE_MOBILE_MORE_ITEMS = [
   { to: "/reports", label: "Reports", Icon: BarChart3 },
   { to: "/expenses", label: "Expenses", Icon: Wallet },
   { to: "/charges", label: "Charges", Icon: AlertCircle },
 ];
 
 export default function App() {
-  const { session } = useAuth();
+  const { session, profile } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
+  const isAdmin = profile?.role === "admin";
+  const TABS = isAdmin ? [...BASE_TABS, { to: "/settings", label: "Settings" }] : BASE_TABS;
+  const MOBILE_MORE_ITEMS = isAdmin ? [...BASE_MOBILE_MORE_ITEMS, { to: "/settings", label: "Settings", Icon: Settings }] : BASE_MOBILE_MORE_ITEMS;
 
   useEffect(() => {
     if (!moreOpen) return;
@@ -154,6 +162,22 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <AssistantPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/settings"
+            element={
+              <ProtectedRoute>
+                <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/receipt/:bookingId"
+            element={
+              <ProtectedRoute>
+                <ReceiptPage />
               </ProtectedRoute>
             }
           />

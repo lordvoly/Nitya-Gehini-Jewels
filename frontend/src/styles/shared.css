@@ -1439,3 +1439,99 @@ a {
   min-height: var(--tap);
   padding: 0 22px;
 }
+
+/* ── Printable receipt ─────────────────────────────────────────────────── */
+
+.receipt-page {
+  max-width: 480px;
+}
+
+.receipt-header {
+  text-align: center;
+  margin-bottom: 18px;
+  padding-bottom: 14px;
+  border-bottom: 1.5px solid var(--line);
+}
+
+.receipt-shop-name {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 21px;
+  font-weight: 600;
+  color: var(--wine);
+}
+
+.receipt-shop-line {
+  font-size: 13px;
+  color: var(--ink-soft);
+  margin-top: 2px;
+}
+
+.receipt-meta {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+  margin-bottom: 18px;
+  font-size: 14px;
+}
+
+.receipt-meta-right {
+  text-align: right;
+}
+
+.receipt-items {
+  margin-bottom: 18px;
+}
+
+.receipt-totals {
+  margin-left: auto;
+  max-width: 260px;
+  padding-top: 10px;
+  border-top: 1.5px solid var(--line);
+}
+
+.receipt-totals-row {
+  display: flex;
+  justify-content: space-between;
+  padding: 4px 0;
+  font-size: 14px;
+}
+
+.receipt-totals-balance {
+  font-weight: 700;
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  padding-top: 8px;
+}
+
+.receipt-qr {
+  text-align: center;
+  margin-top: 28px;
+}
+
+.receipt-qr img {
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 8px;
+}
+
+/* Print media hides all app chrome — header, both nav shapes, and any
+   explicitly-marked .no-print controls (the Print button itself) — leaving
+   only the receipt content, same idea across every printable view this app
+   ever grows. */
+@media print {
+  .app-header,
+  .app-tabbar,
+  .mobile-tabbar,
+  .no-print {
+    display: none !important;
+  }
+
+  .app-content {
+    padding-bottom: 0;
+  }
+
+  body {
+    background: #fff;
+  }
+}

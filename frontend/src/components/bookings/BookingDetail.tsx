@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
 import { fetchBooking, type Booking, type BookingItem } from "../../lib/bookings";
 import {
   fetchPayments,
@@ -235,9 +236,14 @@ export function BookingDetail({
           Back
         </button>
         {booking && (
-          <button className="btn-primary" onClick={onEdit}>
-            Edit Booking
-          </button>
+          <>
+            <Link to={`/receipt/${booking.id}`} target="_blank" className="btn-secondary">
+              Print/Download Receipt
+            </Link>
+            <button className="btn-primary" onClick={onEdit}>
+              Edit Booking
+            </button>
+          </>
         )}
       </div>
     </div>

@@ -198,7 +198,9 @@ Claude calls these tools, gets real data back from Postgres, and answers in plai
 ### Phase 4 — Nice to Haves (backlog, revisit after Phase 1–3 are solid)
 - Printed QR/barcode labels using the `item_code` already in the schema
 - WhatsApp return reminders
-- Printable receipts/invoices
+- ~~Printable receipts/invoices~~ — done 2026-08-13, see CLAUDE.md. Plain document
+  (no GST section), booking-detail QR code, not item-label QR codes — the bullet
+  above (per-item labels) is still backlog, this was the per-booking receipt only.
 - Analytics dashboard
 - Bulk customer import
 

@@ -702,9 +702,84 @@ or build toward right now. `bookings.hsn_code`/`tax_rate` stay nullable/unused i
 meantime; don't treat this as a blocked task on the roadmap — it simply isn't in
 scope yet.
 
-**Next step — Phase 2 (bookkeeping):** Payments, Expenses, P&L, and Outstanding Dues
-are all done (see above) — Phase 2 is functionally complete pending only invoice
-generation, which per the above is intentionally not yet scoped/started.
+Invoice/receipt generation with QR code, new session (2026-08-13) — closes out Phase
+2's last item. Plain document, deliberately no GST section anywhere (not a
+placeholder — see the GST descoping note above).
+
+**`shop_settings`** (`supabase/migrations/20260813120000_shop_settings.sql`) — a true
+singleton table (`id boolean primary key default true`, `check (id = true)`, one row
+pre-seeded by the migration) holding `name`/`address`/`phone` for the receipt header.
+`GET /api/shop-settings` is open to any authenticated user (a receipt can be printed
+by either role); `PATCH` is admin-only via `requireRole("admin")` — the **first real
+use** of the role scaffolding that existed since Phase 1 but was never actually
+wired to gate anything until now. New `SettingsPage.tsx` (admin-only; a non-admin
+gets a plain "Admins only" message, both client-side and enforced again server-side)
+shows a "fill this in before real use" prompt whenever address/phone are empty — not
+triggered in practice here since real shop details were provided directly during
+this session rather than left as the empty defaults.
+
+**Receipt** (`ReceiptPage.tsx`, new route `/receipt/:bookingId`, opened via a new
+"Print/Download Receipt" link on `BookingDetail` with `target="_blank"`) — shop
+details, customer name/phone, `booking_code` + creation date, every `booking_item`
+listed individually (not just the first), total/paid/balance from the same
+`fetchBooking()` call `BookingDetail` already uses (no new backend endpoint needed
+for the money figures). "Download" is just the browser's own print dialog's
+Save-as-PDF destination — first icon-library-style dependency added for this:
+`qrcode` (client-side `QRCode.toDataURL()`), generating a QR that encodes
+`${window.location.origin}/bookings?booking=<id>` — the exact same deep-link URL
+`BookingDetail` itself already lives at, not a new route. A new `@media print` block
+in `shared.css` hides `.app-header`/`.app-tabbar`/`.mobile-tabbar`/`.no-print` so the
+printed/saved output is just the receipt, no app chrome.
+
+**Real bug found and fixed along the way, not assumed away:** the task's own request
+to "verify rather than assume" the login-redirect-back behavior paid off —
+`LoginPage.tsx`'s submit handler had always hardcoded `navigate("/")` on success,
+completely ignoring `location.state.from` that `ProtectedRoute` sets. The "already
+signed in" early-return branch *did* read `state.from` correctly, but only helps a
+visitor who lands on `/login` while already authenticated; the real login-submission
+path never went through it, since navigating away unmounts `LoginPage` before that
+reactive branch ever gets a chance to run. Confirmed live before fixing: a genuinely
+logged-out visit to a booking deep link correctly bounced to `/login` with the right
+`state.from`, but logging in landed on Dashboard, not the booking. Fixed by having
+the submit handler navigate to `from` directly. A second, related gap surfaced
+*during* that same verification: the first fix used `from.pathname` only, dropping
+`from.search` — which silently breaks exactly the QR-scan case this feature exists
+for, since the booking id lives in `?booking=<id>`, not the path. Fixed by
+recombining `pathname + search` (factored into a shared `resolveFrom()` helper used
+by both the early-return branch and the submit handler, so this can't drift apart
+between the two again).
+
+**Verification note — a genuine capability gap, not something skipped:** applying
+`20260813120000_shop_settings.sql` to production required the user to run it via the
+Supabase SQL editor directly — no Supabase CLI project link and no direct Postgres
+connection string exist in this environment (`backend/.env` only has the REST URL +
+service-role key, which can't execute DDL). Once applied, everything else was
+verified live end-to-end, including creating (and afterward fully deleting) a
+throwaway `ZZTEST` admin account and a throwaway `ZZTEST` operator account — same
+established pattern as the refund-infrastructure session — to test both roles
+without touching the real accounts: a real multi-item booking already in production
+("Page 123" / Test customer 1, 2 items) rendered its receipt with every field
+byte-matched against direct Supabase queries beforehand (₹12 total / ₹0 paid / ₹12
+balance, both items listed individually); the QR image was decoded (not just
+assumed correct) via `jsQR` against the actual rendered PNG pixels and confirmed to
+equal the exact expected deep-link URL; the print stylesheet's chrome-hiding rule
+was confirmed present in the loaded stylesheet; the admin-only settings gate was
+confirmed both ways — a real 403 from the backend on a direct API call as the
+operator account (not just a hidden button), and a successful GET/PATCH as admin,
+including a live save-and-revert round-trip cross-checked against Supabase directly
+each time. The login-redirect fix was verified fully logged-out through a real
+sign-in with the throwaway accounts, landing on the exact booking both times (once
+per role). **Not verified by Claude, and not possible to verify this way:**
+physically scanning the QR code with a real phone camera — that specific check
+needs to happen against the *deployed* production URL (a localhost QR isn't
+reachable from a phone) and needs an actual physical device, which isn't something
+Claude has access to. Everything mechanically checkable about the QR (its exact
+decoded payload, the URL it points to, that URL's own correctness both logged-in and
+logged-out) was verified as above; the physical scan itself is on the user to do
+once this is live.
+
+**Next step — Phase 2 (bookkeeping):** now fully complete — Payments, Expenses, P&L,
+Outstanding Dues, and invoice/receipt generation are all done.
 
 Mobile nav restructure, new session (2026-08-13, revised twice more the same
 session after live feedback on each iteration) — repeated tab-bar overflow (clipped
@@ -871,7 +946,7 @@ pattern — its SQL lives in `supabase/proposed/20260811_booking_items_restructu
 (run by hand against production as a one-time sequence, `01_schema_additive.sql`
 through the destructive `03_schema_cutover.sql`, not as a numbered migration) — plus
 `20260812130000_refund_infrastructure.sql` for the payments/item_charges additions
-after that. Seven tables:
+and `20260813120000_shop_settings.sql` after that. Eight tables:
 
 - **items** — inventory. `item_type` (`set`/`single`) determines whether `components`
   is used; `tracking_type` (`unique`/`quantity`) determines whether the item is a single
@@ -896,9 +971,12 @@ after that. Seven tables:
   separate ledger.
 - **item_charges** — lost/damaged-item charges raised at return time
   (`booking_item_id` FK), resolved via a linked `refund`-type `payments` row.
-- **expenses** — for the P&L/bookkeeping views (Phase 2, still unbuilt on the
-  frontend).
-- **users** — mirrors `auth.users`, adds `role` (`admin`/`operator`).
+- **expenses** — for the P&L/bookkeeping views (Phase 2).
+- **shop_settings** — true singleton (`id boolean primary key`, always `true`, one
+  pre-seeded row). `name`/`address`/`phone` shown on printed receipts; editable via
+  the admin-only Settings screen.
+- **users** — mirrors `auth.users`, adds `role` (`admin`/`operator`) — as of this
+  session, actually enforced somewhere (`shop_settings` PATCH), not just scaffolded.
 
 ## Request flow / architecture
 

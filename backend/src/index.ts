@@ -10,6 +10,7 @@ import { expensesRouter } from "./routes/expenses.js";
 import { chatRouter } from "./routes/chat.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { reportsRouter } from "./routes/reports.js";
+import { shopSettingsRouter } from "./routes/shopSettings.js";
 import { requireAuth, type AuthedRequest } from "./middleware/auth.js";
 
 const app = express();
@@ -45,6 +46,7 @@ app.use("/api/expenses", requireAuth, expensesRouter);
 app.use("/api/chat", requireAuth, chatRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/reports", requireAuth, reportsRouter);
+app.use("/api/shop-settings", requireAuth, shopSettingsRouter);
 
 app.listen(port, () => {
   console.log(`NGJ backend listening on :${port}`);
