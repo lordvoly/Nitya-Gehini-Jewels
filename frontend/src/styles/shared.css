@@ -166,14 +166,14 @@ a {
   border-top-color: var(--wine);
 }
 
-/* ── Mobile nav (icon+label bar + FAB + header "more") ───────────────────
+/* ── Mobile nav (icon+label bar + header "more") ─────────────────────────
    Desktop keeps .app-tabbar above, unchanged, as the only nav — these are
    hidden by default and only switched on below 640px, where .app-tabbar is
    switched off instead. Two full nav implementations rather than one
    adaptive one, same reasoning as .data-table's card breakpoint: the
-   icon-bar/FAB shape and the plain labeled row are different enough
-   patterns that reshaping one CSS structure into the other would be more
-   fragile than just swapping which one renders. */
+   icon-bar shape and the plain labeled row are different enough patterns
+   that reshaping one CSS structure into the other would be more fragile
+   than just swapping which one renders. */
 
 .mobile-tabbar {
   display: none;
@@ -181,22 +181,16 @@ a {
   bottom: 0;
   left: 0;
   right: 0;
-  height: 64px;
+  height: 68px;
   align-items: center;
-  justify-content: space-between;
+  /* Even gaps across the full bar width rather than two tightly-packed
+     groups — each of the 5 items gets equal breathing room either side. */
+  justify-content: space-evenly;
   background: var(--surface);
   border-top: 1px solid var(--line);
-  padding: 0 14px;
+  padding: 0 6px;
   padding-bottom: env(safe-area-inset-bottom, 0);
   z-index: 50;
-}
-
-/* Exactly two icons per group, either side of the centered FAB — a real
-   2-2 split, not padded with an extra item to compensate for an odd count. */
-.mobile-tabbar-group {
-  display: flex;
-  align-items: center;
-  gap: 6px;
 }
 
 .mobile-tab-icon {
@@ -204,9 +198,10 @@ a {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  gap: 2px;
-  width: 54px;
-  min-height: 50px;
+  gap: 3px;
+  min-width: 54px;
+  min-height: var(--tap);
+  padding: 4px 2px;
   border-radius: var(--radius);
   color: var(--ink-soft);
   text-decoration: none;
@@ -222,28 +217,21 @@ a {
   color: var(--wine);
 }
 
-/* Standard raised-center FAB: the two icon groups above hug the left/right
-   edges (see .mobile-tabbar-group), leaving the true horizontal center
-   clear for this to float over without covering a tap target. */
-.mobile-fab {
-  display: none;
-  position: fixed;
-  left: 50%;
-  bottom: 34px;
-  transform: translateX(-50%);
-  width: 58px;
-  height: 58px;
+/* Ask sits inline as the row's middle item, same baseline as the other 4
+   — stays visually distinct via the wine circular badge + sparkle icon,
+   not by floating above the row. */
+.mobile-tab-ask-badge {
+  display: flex;
   align-items: center;
   justify-content: center;
+  width: 34px;
+  height: 34px;
   border-radius: 50%;
   background: var(--wine);
   color: #fff;
-  text-decoration: none;
-  box-shadow: 0 4px 14px rgba(43, 33, 41, 0.35);
-  z-index: 60;
 }
 
-.mobile-fab:active {
+.mobile-tab-ask.active .mobile-tab-ask-badge {
   background: var(--wine-strong);
 }
 
@@ -293,18 +281,14 @@ a {
     display: flex;
   }
 
-  .mobile-fab {
-    display: flex;
-  }
-
   .mobile-more-btn {
     display: flex;
   }
 
   .app-content {
-    /* Bar height + how far the FAB pokes above it + breathing room, so the
-       FAB never sits over the last real bit of scrollable page content. */
-    padding-bottom: 122px;
+    /* Bar height + breathing room, so the last bit of scrollable page
+       content never sits under the fixed bottom bar. */
+    padding-bottom: 92px;
   }
 }
 

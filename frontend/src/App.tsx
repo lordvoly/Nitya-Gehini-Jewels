@@ -31,9 +31,9 @@ const TABS = [
 
 // Mobile's primary bar only has room for the 4 highest-frequency
 // destinations (icon + small label — icon-only risked an unsure tap for a
-// less technical user) — everything else moves to the FAB (Assistant) or
-// the header's "More" sheet. Exactly 2 + 2 either side of the FAB, no odd
-// item padded in to compensate.
+// less technical user) — everything else moves to Ask (rendered inline as
+// the row's middle item, see below) or the header's "More" sheet. Exactly
+// 2 + 2 either side of Ask, no odd item padded in to compensate.
 const MOBILE_PRIMARY_TABS = [
   { to: "/", label: "Dashboard", Icon: Home },
   { to: "/bookings", label: "Bookings", Icon: Calendar },
@@ -173,37 +173,37 @@ export default function App() {
       {session && (
         <>
           <nav className="mobile-tabbar">
-            <div className="mobile-tabbar-group">
-              {MOBILE_PRIMARY_TABS.slice(0, 2).map((tab) => (
-                <NavLink
-                  key={tab.to}
-                  to={tab.to}
-                  end={tab.to === "/"}
-                  className={({ isActive }) => (isActive ? "mobile-tab-icon active" : "mobile-tab-icon")}
-                >
-                  <tab.Icon size={22} strokeWidth={2} aria-hidden="true" />
-                  <span>{tab.label}</span>
-                </NavLink>
-              ))}
-            </div>
-            <div className="mobile-tabbar-group">
-              {MOBILE_PRIMARY_TABS.slice(2).map((tab) => (
-                <NavLink
-                  key={tab.to}
-                  to={tab.to}
-                  end={tab.to === "/"}
-                  className={({ isActive }) => (isActive ? "mobile-tab-icon active" : "mobile-tab-icon")}
-                >
-                  <tab.Icon size={22} strokeWidth={2} aria-hidden="true" />
-                  <span>{tab.label}</span>
-                </NavLink>
-              ))}
-            </div>
-          </nav>
+            {MOBILE_PRIMARY_TABS.slice(0, 2).map((tab) => (
+              <NavLink
+                key={tab.to}
+                to={tab.to}
+                end={tab.to === "/"}
+                className={({ isActive }) => (isActive ? "mobile-tab-icon active" : "mobile-tab-icon")}
+              >
+                <tab.Icon size={22} strokeWidth={2} aria-hidden="true" />
+                <span>{tab.label}</span>
+              </NavLink>
+            ))}
 
-          <Link to="/assistant" className="mobile-fab" aria-label="Ask the Assistant">
-            <Sparkles size={26} strokeWidth={2} aria-hidden="true" />
-          </Link>
+            <NavLink to="/assistant" className={({ isActive }) => (isActive ? "mobile-tab-icon mobile-tab-ask active" : "mobile-tab-icon mobile-tab-ask")}>
+              <span className="mobile-tab-ask-badge">
+                <Sparkles size={20} strokeWidth={2} aria-hidden="true" />
+              </span>
+              <span>Ask</span>
+            </NavLink>
+
+            {MOBILE_PRIMARY_TABS.slice(2).map((tab) => (
+              <NavLink
+                key={tab.to}
+                to={tab.to}
+                end={tab.to === "/"}
+                className={({ isActive }) => (isActive ? "mobile-tab-icon active" : "mobile-tab-icon")}
+              >
+                <tab.Icon size={22} strokeWidth={2} aria-hidden="true" />
+                <span>{tab.label}</span>
+              </NavLink>
+            ))}
+          </nav>
 
           {moreOpen && (
             <Modal onClose={() => setMoreOpen(false)}>
