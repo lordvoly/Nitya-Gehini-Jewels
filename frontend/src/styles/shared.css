@@ -145,6 +145,137 @@ a {
   border-top-color: var(--wine);
 }
 
+/* ── Mobile nav (icon bar + FAB + "more" sheet) ──────────────────────────
+   Desktop keeps .app-tabbar above, unchanged, as the only nav — these are
+   hidden by default and only switched on below 640px, where .app-tabbar is
+   switched off instead. Two full nav implementations rather than one
+   adaptive one, same reasoning as .data-table's card breakpoint: the
+   icon-bar/FAB/sheet shape and the plain labeled row are different enough
+   patterns that reshaping one CSS structure into the other would be more
+   fragile than just swapping which one renders. */
+
+.mobile-tabbar {
+  display: none;
+  position: fixed;
+  bottom: 0;
+  left: 0;
+  right: 0;
+  height: 60px;
+  align-items: center;
+  justify-content: space-between;
+  background: var(--surface);
+  border-top: 1px solid var(--line);
+  padding: 0 10px;
+  padding-bottom: env(safe-area-inset-bottom, 0);
+  z-index: 50;
+}
+
+.mobile-tabbar-group {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.mobile-tab-icon {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 46px;
+  height: 46px;
+  border-radius: var(--radius);
+  color: var(--ink-soft);
+  text-decoration: none;
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+.mobile-tab-icon.active {
+  color: var(--wine);
+}
+
+/* Standard raised-center FAB: the two icon groups above hug the left/right
+   edges (see .mobile-tabbar-group), leaving the true horizontal center
+   clear for this to float over without covering a tap target. */
+.mobile-fab {
+  display: none;
+  position: fixed;
+  left: 50%;
+  bottom: 30px;
+  transform: translateX(-50%);
+  width: 58px;
+  height: 58px;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: var(--wine);
+  color: #fff;
+  text-decoration: none;
+  box-shadow: 0 4px 14px rgba(43, 33, 41, 0.35);
+  z-index: 60;
+}
+
+.mobile-fab:active {
+  background: var(--wine-strong);
+}
+
+.more-menu {
+  padding: 20px;
+}
+
+.more-menu h3 {
+  margin: 0 0 12px;
+}
+
+.more-menu-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.more-menu-item {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  min-height: var(--tap);
+  padding: 10px 12px;
+  border-radius: var(--radius);
+  color: var(--ink);
+  text-decoration: none;
+  font-weight: 600;
+  font-size: 15px;
+}
+
+.more-menu-item:hover,
+.more-menu-item:active {
+  background: var(--wine-soft);
+}
+
+.more-menu-close {
+  width: 100%;
+  margin-top: 14px;
+}
+
+@media (max-width: 640px) {
+  .app-tabbar {
+    display: none;
+  }
+
+  .mobile-tabbar {
+    display: flex;
+  }
+
+  .mobile-fab {
+    display: flex;
+  }
+
+  .app-content {
+    /* Bar height + how far the FAB pokes above it + breathing room, so the
+       FAB never sits over the last real bit of scrollable page content. */
+    padding-bottom: 116px;
+  }
+}
+
 /* ── Page layout ──────────────────────────────────────────────────────── */
 
 .page {
