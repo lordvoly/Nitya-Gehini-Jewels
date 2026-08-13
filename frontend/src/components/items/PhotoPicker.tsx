@@ -6,6 +6,7 @@ export function PhotoPicker({
   onChange,
   hint = "Optional — you can add these later.",
   onUploadingChange,
+  uploadFn = uploadItemPhoto,
 }: {
   photos: string[];
   onChange: (photos: string[]) => void;
@@ -13,6 +14,11 @@ export function PhotoPicker({
   // Fires with the current in-flight upload count — lets a parent (e.g. a
   // "Save" button) block submission until photos have finished uploading.
   onUploadingChange?: (count: number) => void;
+  // Defaults to item-photo upload (the original/only caller); pass a
+  // different one to point this same picker+preview UI at another upload
+  // endpoint entirely (e.g. the profile panel's own photo, a different
+  // Storage bucket) without duplicating any of this component.
+  uploadFn?: (file: File) => Promise<string>;
 }) {
   const [uploadingCount, setUploadingCount] = useState(0);
   const [error, setError] = useState<string | null>(null);
@@ -32,7 +38,7 @@ export function PhotoPicker({
     let current = photos;
     for (const file of Array.from(files)) {
       try {
-        const url = await uploadItemPhoto(file);
+        const url = await uploadFn(file);
         current = [...current, url];
         onChange(current);
       } catch {

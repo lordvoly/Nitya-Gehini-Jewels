@@ -2,7 +2,7 @@ import type { NextFunction, Request, Response } from "express";
 import { supabase } from "../lib/supabase.js";
 
 export interface AuthedRequest extends Request {
-  user?: { id: string; role: "admin" | "operator"; name: string; email: string };
+  user?: { id: string; role: "admin" | "operator"; name: string; email: string; photo_url: string | null };
 }
 
 /**
@@ -24,7 +24,7 @@ export async function requireAuth(req: AuthedRequest, res: Response, next: NextF
 
   const { data: profile, error: profileError } = await supabase
     .from("users")
-    .select("id, role, name, email")
+    .select("id, role, name, email, photo_url")
     .eq("id", authData.user.id)
     .single();
 

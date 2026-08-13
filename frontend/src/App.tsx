@@ -14,6 +14,8 @@ import SettingsPage from "./pages/SettingsPage";
 import ReceiptPage from "./pages/ReceiptPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { Modal } from "./components/common/Modal";
+import { Avatar } from "./components/common/Avatar";
+import { ProfilePanel } from "./components/common/ProfilePanel";
 import { useAuth } from "./lib/auth";
 import { supabase } from "./lib/supabase";
 import "./styles/shared.css";
@@ -60,6 +62,7 @@ const BASE_MOBILE_MORE_ITEMS = [
 export default function App() {
   const { session, profile } = useAuth();
   const [moreOpen, setMoreOpen] = useState(false);
+  const [profileOpen, setProfileOpen] = useState(false);
   const isAdmin = profile?.role === "admin";
   const TABS = isAdmin ? [...BASE_TABS, { to: "/settings", label: "Settings" }] : BASE_TABS;
   const MOBILE_MORE_ITEMS = isAdmin ? [...BASE_MOBILE_MORE_ITEMS, { to: "/settings", label: "Settings", Icon: Settings }] : BASE_MOBILE_MORE_ITEMS;
@@ -91,12 +94,21 @@ export default function App() {
             >
               <Menu size={22} strokeWidth={2} aria-hidden="true" />
             </button>
+            <button type="button" className="avatar-btn" aria-label="Your profile" onClick={() => setProfileOpen(true)}>
+              <Avatar name={profile?.name} photoUrl={profile?.photo_url} />
+            </button>
             <button className="btn-secondary" onClick={() => supabase.auth.signOut()}>
               Log Out
             </button>
           </div>
         )}
       </header>
+
+      {profileOpen && (
+        <Modal onClose={() => setProfileOpen(false)}>
+          <ProfilePanel onClose={() => setProfileOpen(false)} />
+        </Modal>
+      )}
 
       <main className={session ? "app-content" : undefined}>
         <Routes>

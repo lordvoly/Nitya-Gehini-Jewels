@@ -995,6 +995,81 @@ just plausible-sounding" failure mode this task's own verification step existed 
 catch. No code changes made in response; worth knowing about, not necessarily worth
 solving pre-emptively for a shop-floor tool used in short, focused sessions.
 
+User profile (avatar + self-service panel) and favicon/manifest, new session
+(2026-08-13). Two independent changes shipped together.
+
+**Profile**: a small circular wine/ivory avatar next to Log Out (`Avatar.tsx`,
+initials from `name` — first+last word for a multi-word name, first two letters
+otherwise — or the uploaded photo once one exists, same circular treatment either
+way). Clicking it opens `ProfilePanel.tsx` in the existing `Modal`. New
+`users.photo_url` column (`supabase/migrations/20260813150000_user_profile_photo.sql`)
+and a new public `profile-photos` Storage bucket — created directly via
+`supabase.storage.createBucket()` in a throwaway script, since bucket creation is a
+Storage API call the service-role key can do without needing DDL access (unlike the
+column migration itself, which still needed the user to run it — no Postgres
+connection string or CLI link exists in this environment, same recurring gap noted
+in earlier sessions). New `routes/me.ts` replaces the old inline `GET /api/me`:
+`GET /` unchanged in shape (now includes `photo_url`); `PATCH /` and `POST /photo`
+are both **structurally** scoped to `req.user.id` from the verified token — neither
+route accepts an `:id` or trusts any `id`/`role` field in the request body, so
+there's no way to target or promote via this endpoint at all, not just a checked
+rule. `PhotoPicker` (previously hardcoded to item-photo upload) gained an optional
+`uploadFn` prop, defaulting to the original `uploadItemPhoto` so every existing
+caller is unaffected, letting the profile panel point the exact same picker+preview
+UI at `/api/me/photo` instead of duplicating it. Photo upload auto-saves immediately
+(no separate "Save" step, unlike Display Name) since PhotoPicker's own upload action
+already completes the one meaningful step; removing the photo (the picker's own ×
+button) required extending `PATCH /api/me` to accept an explicit `photo_url: null`
+to clear it, since that path has no upload to piggyback on. Password change goes
+straight through Supabase Auth from the frontend (no backend route) —
+`signInWithPassword` first to confirm the current password actually matches (Auth's
+plain `updateUser({ password })` alone would accept the change on session validity
+alone, no proof of the old password), then `updateUser({ password: new })` only if
+that succeeds.
+
+Verified live (locally — this feature needs no `ANTHROPIC_API_KEY`, so no
+production deploy was needed just to test it) with two throwaway accounts, deleted
+after along with the uploaded test photo: display name edit persisted and updated
+the header avatar immediately via a new `refreshProfile()` on `useAuth()`; photo
+upload updated the avatar everywhere it appears (header + panel) in the same render,
+confirmed against a real Storage URL directly in Supabase; password change correctly
+rejected a wrong current password first, then succeeded with the real one — logged
+out and back in with the *new* password to confirm the actual credential changed,
+not just a client-side success message. Cross-account isolation confirmed two ways:
+visually (the second throwaway account's panel showed only its own name/email/role,
+completely separate from the first), and directly at the API level — a raw
+`PATCH /api/me` call with `role: "admin"` and a different user's `id` deliberately
+injected into the body came back `200` with the name change applied but `role`
+still `"operator"` and `id` still the caller's own, confirming the injection
+attempt was fully ignored rather than merely unused by the UI.
+
+**Favicon/manifest**: the tab icon and "Add to Home Screen" icon were the same
+underlying gap (no icons existed at all) so both were fixed together. Generated an
+"NGJ" wine-on-ivory monogram (bold sans-serif, not the site's serif Fraunces —
+deliberately, since a delicate serif blurs at 16×16 in a way a bold sans doesn't)
+via an in-browser `<canvas>` render at 512×512, downloaded as the one real file that
+successfully came through (Chrome silently blocks a page firing several
+auto-downloads back-to-back — only the first of four `a[download]` clicks actually
+produced a file), then resized to 192/180/32/16px with `sharp` (installed in the
+session scratch directory only, not added to the app's own dependencies) rather than
+re-fighting the browser for the rest. `frontend/public/` gained
+`favicon-16x16.png`/`favicon-32x32.png`/`apple-touch-icon.png` (180×180, what iOS
+actually uses)/`icon-192.png`/`icon-512.png`, plus `manifest.webmanifest`
+referencing the two larger ones for Android; `index.html` links all of it, plus a
+`theme-color` meta tag matching the wine token.
+
+Verified live: every icon `<link>` and the manifest's own two icon references were
+fetched directly and confirmed `200` with the correct `image/png` /
+`application/manifest+json` content types, and the manifest JSON itself parses with
+the expected name/short_name/colors. **Not verified by Claude, and not possible to
+verify this way:** the actual rendered favicon glyph in a real browser tab, and what
+iOS/Android "Add to Home Screen" produces on a real device — screenshots taken
+through this browser-automation tooling capture page content only, never the
+browser's own chrome (tab strip, etc.), so there's no way to visually confirm a
+favicon through it even though the underlying files and links are proven correct.
+Same category of gap as the QR-code phone-scan verification earlier — needs the
+user's own eyes/device once live.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.

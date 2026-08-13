@@ -1,4 +1,4 @@
-import { createContext, useContext, useEffect, useState, type ReactNode } from "react";
+import { createContext, useCallback, useContext, useEffect, useState, type ReactNode } from "react";
 import type { Session } from "@supabase/supabase-js";
 import { supabase } from "./supabase";
 import { apiFetch } from "./api";
@@ -8,6 +8,7 @@ export interface UserProfile {
   role: "admin" | "operator";
   name: string;
   email: string;
+  photo_url: string | null;
 }
 
 interface AuthContextValue {
@@ -17,13 +18,21 @@ interface AuthContextValue {
   // logged-in refresh will flash a redirect to /login before the session
   // loads back in.
   loading: boolean;
-  // The caller's own app profile (role/name/email), fetched once a session
-  // exists. Not used to gate anything today — kept available so role-based
-  // UI (e.g. admin-only reports) is a small change later, not a rewrite.
+  // The caller's own app profile (role/name/email/photo_url), fetched once
+  // a session exists.
   profile: UserProfile | null;
+  // Re-fetches /api/me — called after the profile panel changes the display
+  // name or photo, so the header avatar (and anywhere else profile shows up)
+  // updates immediately without needing a full page reload.
+  refreshProfile: () => Promise<void>;
 }
 
-const AuthContext = createContext<AuthContextValue>({ session: null, loading: true, profile: null });
+const AuthContext = createContext<AuthContextValue>({
+  session: null,
+  loading: true,
+  profile: null,
+  refreshProfile: async () => {},
+});
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
@@ -46,15 +55,23 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return () => subscription.unsubscribe();
   }, []);
 
+  const refreshProfile = useCallback(async () => {
+    try {
+      setProfile(await apiFetch<UserProfile>("/api/me"));
+    } catch {
+      setProfile(null);
+    }
+  }, []);
+
   useEffect(() => {
     if (!session) {
       setProfile(null);
       return;
     }
-    apiFetch<UserProfile>("/api/me").then(setProfile).catch(() => setProfile(null));
-  }, [session]);
+    refreshProfile();
+  }, [session, refreshProfile]);
 
-  return <AuthContext.Provider value={{ session, loading, profile }}>{children}</AuthContext.Provider>;
+  return <AuthContext.Provider value={{ session, loading, profile, refreshProfile }}>{children}</AuthContext.Provider>;
 }
 
 export function useAuth() {

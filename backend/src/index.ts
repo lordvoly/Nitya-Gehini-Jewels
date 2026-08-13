@@ -11,7 +11,8 @@ import { chatRouter } from "./routes/chat.js";
 import { dashboardRouter } from "./routes/dashboard.js";
 import { reportsRouter } from "./routes/reports.js";
 import { shopSettingsRouter } from "./routes/shopSettings.js";
-import { requireAuth, type AuthedRequest } from "./middleware/auth.js";
+import { meRouter } from "./routes/me.js";
+import { requireAuth } from "./middleware/auth.js";
 
 const app = express();
 const port = process.env.PORT ?? 4000;
@@ -30,12 +31,9 @@ app.use(express.json());
 
 app.get("/health", (_req, res) => res.json({ ok: true }));
 
-// Returns the caller's own app profile (id, role, name, email). Not used to
-// gate anything yet — exists so role-based UI (e.g. admin-only reports) is a
-// small change later rather than a rewrite. See CLAUDE.md.
-app.get("/api/me", requireAuth, (req: AuthedRequest, res) => {
-  res.json(req.user);
-});
+// /api/me — the caller's own app profile, and the self-service profile
+// panel's edit/photo-upload endpoints. See routes/me.ts.
+app.use("/api/me", requireAuth, meRouter);
 
 app.use("/api/items", requireAuth, itemsRouter);
 app.use("/api/customers", requireAuth, customersRouter);
