@@ -30,10 +30,17 @@ export default function DashboardPage() {
       <DashboardAlerts summary={summary} userId={session?.user.id ?? null} />
 
       <div className="stat-grid">
-        <Link to="/items?filter=active" className="stat-card">
-          <div className="stat-value">{stats.total_active_items}</div>
-          <div className="stat-label">Active items</div>
-        </Link>
+        <div className="stat-card">
+          <Link to="/items?filter=active" className="stat-card-link">
+            <div className="stat-value">{stats.items_in_catalog}</div>
+            <div className="stat-label">Items in Catalog</div>
+          </Link>
+          {stats.items_retired > 0 && (
+            <Link to="/items?filter=retired" className="stat-subnote">
+              ({stats.items_retired} retired)
+            </Link>
+          )}
+        </div>
         <Link to="/items?filter=out" className="stat-card">
           <div className="stat-value">{stats.items_out}</div>
           <div className="stat-label">Items out</div>

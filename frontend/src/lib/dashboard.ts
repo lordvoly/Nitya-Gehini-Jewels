@@ -43,7 +43,8 @@ export interface OverdueBookingItem {
 }
 
 export interface DashboardStats {
-  total_active_items: number;
+  items_in_catalog: number;
+  items_retired: number;
   items_out: number;
   total_customers: number;
   bookings_this_week: number;

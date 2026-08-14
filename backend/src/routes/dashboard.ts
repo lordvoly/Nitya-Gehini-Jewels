@@ -48,17 +48,27 @@ dashboardRouter.get("/summary", async (_req, res) => {
     const briefing = await getDailyBriefingData();
 
     const [
-      { count: total_active_items, error: activeItemsError },
+      { count: items_in_catalog, error: catalogItemsError },
+      { count: items_retired, error: retiredItemsError },
       availability,
       { count: total_customers, error: customersError },
       bookings_this_week,
     ] = await Promise.all([
-      supabase.from("items").select("*", { count: "exact", head: true }).neq("status", "sold"),
+      // Real bug fixed here: this used to be `neq("status", "sold")` with
+      // no is_active filter at all, so retiring an item never moved it out
+      // of this count. is_active is the actual "retired or not" signal —
+      // status is a separate axis (available/sold/etc) — so both are
+      // checked: is_active=true (not retired) and status != 'sold' (a sold
+      // unique item isn't meaningfully "in catalog" anymore either, even
+      // though it's never been retired).
+      supabase.from("items").select("*", { count: "exact", head: true }).eq("is_active", true).neq("status", "sold"),
+      supabase.from("items").select("*", { count: "exact", head: true }).eq("is_active", false),
       getItemAvailability(),
       supabase.from("customers").select("*", { count: "exact", head: true }),
       getBookingsThisWeekCount(),
     ]);
-    if (activeItemsError) throw activeItemsError;
+    if (catalogItemsError) throw catalogItemsError;
+    if (retiredItemsError) throw retiredItemsError;
     if (customersError) throw customersError;
     const items_out = availability.currentlyOut.size;
 
@@ -72,7 +82,12 @@ dashboardRouter.get("/summary", async (_req, res) => {
       outstanding_balance: briefing.outstanding_balance,
       outstanding_balance_count: briefing.outstanding_balance_count,
       stats: {
-        total_active_items: total_active_items ?? 0,
+        // Renamed from total_active_items — "active" was already the exact
+        // word used for an individual item's own status pill, and that
+        // collision is what let this stat's real bug (no is_active filter)
+        // go unnoticed.
+        items_in_catalog: items_in_catalog ?? 0,
+        items_retired: items_retired ?? 0,
         items_out,
         total_customers: total_customers ?? 0,
         bookings_this_week,
