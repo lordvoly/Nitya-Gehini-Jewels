@@ -135,8 +135,23 @@ export function BookingDetail({
                         {bi.deposit_collected ? (bi.deposit_refunded ? " (refunded)" : " (collected)") : " (not collected)"}
                       </li>
                     )}
-                    {bi.custom_addons.length > 0 && <li>Additional items: {bi.custom_addons.join(", ")}</li>}
                   </ul>
+
+                  {bi.custom_addons.length > 0 && (
+                    <>
+                      <p className="field-label">Additional Items</p>
+                      <div className="checklist">
+                        {bi.custom_addons.map((name) => (
+                          <div key={name} className="checklist-row">
+                            <span className="checklist-item checklist-item-static">
+                              <span className="checklist-dot" aria-hidden="true" />
+                              {name}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </>
+                  )}
 
                   {/* Only meaningful for a unique item — there's a real physical
                       hand-off between consecutive bookings. A quantity item can

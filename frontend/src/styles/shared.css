@@ -538,6 +538,13 @@ a {
 .review-list li {
   padding: 8px 0;
   border-bottom: 1px solid var(--line);
+  /* A single free-text value with no spaces (e.g. an operator typing
+     several add-ons run together as one entry, "A+B+C+D") won't wrap at
+     all by default — the browser only breaks at whitespace — and just
+     overflows the container horizontally on a narrow screen instead.
+     Applied to the class, not one instance, since anything rendered in
+     this list (item names, codes, free text) can hit the same case. */
+  overflow-wrap: break-word;
 }
 
 .wizard-error {
@@ -994,6 +1001,13 @@ a {
   gap: 10px;
   min-height: var(--tap);
   font-size: 15px;
+  /* Flex items don't shrink below their content's natural width by
+     default — a long unspaced value (free-text add-ons, item names) would
+     push the row wider instead of wrapping. min-width: 0 lets it actually
+     shrink to the row's width so overflow-wrap can do its job; same fix
+     shape as the bottom-tab-bar overflow fix elsewhere in this file. */
+  min-width: 0;
+  overflow-wrap: break-word;
 }
 
 .checklist-row {

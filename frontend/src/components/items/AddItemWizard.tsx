@@ -375,12 +375,32 @@ export function AddItemWizard({
               {form.item_type === "set" ? "Set" : "Single"} · {form.tracking_type === "quantity" ? "Stock count" : "One of a kind"}
               {form.tracking_type === "quantity" && ` (${form.quantityOnHand || 0} on hand)`}
             </li>
-            {form.item_type === "set" && <li>Components: {form.components.join(", ") || "none"}</li>}
             <li>
               Rental: {form.rentalPrice ? `₹${form.rentalPrice}` : "—"} · Sale: {form.salePrice ? `₹${form.salePrice}` : "—"}
             </li>
             <li>{form.photos.length} photo(s)</li>
           </ul>
+
+          {form.item_type === "set" && (
+            <>
+              <p className="field-label">Components</p>
+              {form.components.length > 0 ? (
+                <div className="checklist">
+                  {form.components.map((name) => (
+                    <div key={name} className="checklist-row">
+                      <span className="checklist-item checklist-item-static">
+                        <span className="checklist-dot" aria-hidden="true" />
+                        {name}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="wizard-hint">None added.</p>
+              )}
+            </>
+          )}
+
           {error && <p className="wizard-error">{error}</p>}
           <button className="btn-primary btn-save" onClick={handleSave} disabled={saving || uploadingCount > 0}>
             {saving ? "Saving…" : uploadingCount > 0 ? "Waiting for photos…" : "Save Item"}
