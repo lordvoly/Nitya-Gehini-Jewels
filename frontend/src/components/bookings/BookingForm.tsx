@@ -322,6 +322,25 @@ export function BookingForm() {
                 </label>
               )}
 
+              {selected?.item_type === "set" && selected.components && selected.components.length > 0 && (
+                <>
+                  <p className="field-label">Components</p>
+                  <p className="wizard-hint">
+                    What's included in this set — checked off for real at return, not here.
+                  </p>
+                  <div className="checklist">
+                    {selected.components.map((name) => (
+                      <div key={name} className="checklist-row">
+                        <span className="checklist-item checklist-item-static">
+                          <span className="checklist-dot" aria-hidden="true" />
+                          {name}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                </>
+              )}
+
               <p className="field-label">Additional Items</p>
               <p className="wizard-hint">
                 Extra items for this line only — doesn't change the item's own components.

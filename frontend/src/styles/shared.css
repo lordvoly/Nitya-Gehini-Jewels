@@ -1001,6 +1001,25 @@ a {
   padding-bottom: 6px;
 }
 
+/* BookingForm's read-only preview of a Set item's components — same
+   .checklist/.checklist-row layout as ReturnForm's real (checkable) one
+   for visual consistency, but a plain dot instead of a checkbox input:
+   nothing here is ever checked off, only previewed, so it shouldn't look
+   interactive. */
+.checklist-item-static {
+  color: var(--ink-soft);
+  min-height: auto;
+  padding: 4px 0;
+}
+
+.checklist-dot {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ink-soft);
+  flex-shrink: 0;
+}
+
 .lost-and-found {
   margin-left: 28px;
   margin-top: 2px;
