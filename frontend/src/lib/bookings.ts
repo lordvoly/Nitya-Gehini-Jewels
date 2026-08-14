@@ -109,6 +109,11 @@ export interface NewBooking {
   tax_rate?: number | null;
   advance_amount?: number;
   advance_method?: PaymentMethod | null;
+  // Left blank on purpose defaults to today in IST server-side (see
+  // ReturnForm's actual_return_date for the same pattern) — the advance is
+  // often actually paid on a different day than when the booking gets
+  // entered.
+  advance_date?: string | null;
   items: NewBookingItem[];
   // Defaults to server-generated (BK-000N) when omitted/empty — an
   // explicit non-empty value is validated for uniqueness instead, same

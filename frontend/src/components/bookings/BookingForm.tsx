@@ -56,6 +56,10 @@ export function BookingForm() {
   const [lineItems, setLineItems] = useState<LineItemDraft[]>([]);
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [advanceMethod, setAdvanceMethod] = useState<PaymentMethod>("cash");
+  // Left blank on purpose — the backend defaults to today in IST when this
+  // is omitted, same pattern as ReturnForm's actual_return_date, rather
+  // than the frontend computing "today" itself.
+  const [advanceDate, setAdvanceDate] = useState("");
   const [gstApplicable, setGstApplicable] = useState(false);
   const [gstInvoiceNumber, setGstInvoiceNumber] = useState("");
   const [hsnCode, setHsnCode] = useState("");
@@ -148,6 +152,7 @@ export function BookingForm() {
         tax_rate: gstApplicable ? toNumberOrNull(taxRate) : null,
         advance_amount: toNumberOrNull(advanceAmount) ?? 0,
         advance_method: (toNumberOrNull(advanceAmount) ?? 0) > 0 ? advanceMethod : null,
+        advance_date: (toNumberOrNull(advanceAmount) ?? 0) > 0 ? advanceDate || null : null,
         items: lineItems.map((r) => {
           const selected = selectedItemFor(r);
           return {
@@ -186,6 +191,7 @@ export function BookingForm() {
     setLineItems([]);
     setAdvanceAmount("");
     setAdvanceMethod("cash");
+    setAdvanceDate("");
     setGstApplicable(false);
     setGstInvoiceNumber("");
     setHsnCode("");
@@ -206,7 +212,8 @@ export function BookingForm() {
         </p>
         {(toNumberOrNull(advanceAmount) ?? 0) > 0 && (
           <p className="wizard-hint">
-            Advance of ₹{advanceAmount} ({PAYMENT_METHOD_LABELS[advanceMethod]}) recorded.
+            Advance of ₹{advanceAmount} ({PAYMENT_METHOD_LABELS[advanceMethod]}) recorded
+            {advanceDate ? ` for ${formatDateDisplay(advanceDate)}` : ""}.
           </p>
         )}
         {saved.warning && (
@@ -442,16 +449,23 @@ export function BookingForm() {
               />
             </label>
             {(toNumberOrNull(advanceAmount) ?? 0) > 0 && (
-              <label className="field-label">
-                Payment Method
-                <select value={advanceMethod} onChange={(e) => setAdvanceMethod(e.target.value as PaymentMethod)}>
-                  {PAYMENT_METHODS.map((m) => (
-                    <option key={m} value={m}>
-                      {PAYMENT_METHOD_LABELS[m]}
-                    </option>
-                  ))}
-                </select>
-              </label>
+              <>
+                <label className="field-label">
+                  Payment Method
+                  <select value={advanceMethod} onChange={(e) => setAdvanceMethod(e.target.value as PaymentMethod)}>
+                    {PAYMENT_METHODS.map((m) => (
+                      <option key={m} value={m}>
+                        {PAYMENT_METHOD_LABELS[m]}
+                      </option>
+                    ))}
+                  </select>
+                </label>
+                <label className="field-label">
+                  Advance Paid On
+                  <input type="date" value={advanceDate} onChange={(e) => setAdvanceDate(e.target.value)} />
+                </label>
+                <p className="wizard-hint">Leave blank to use today.</p>
+              </>
             )}
 
             <label className="field-label">

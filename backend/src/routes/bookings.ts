@@ -409,6 +409,7 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
     tax_rate,
     advance_amount,
     advance_method,
+    advance_date,
     items,
     booking_code: requestedBookingCode,
   } = req.body ?? {};
@@ -518,7 +519,11 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
           booking_id: (data as { id: string }).id,
           amount: advanceAmount,
           method: advance_method,
-          payment_date: istToday(),
+          // Same left-blank-on-purpose default as actual_return_date below
+          // — the advance was often actually paid on a different day than
+          // when the booking gets entered, so this is editable rather than
+          // silently forced to "now".
+          payment_date: advance_date || istToday(),
           recorded_by: req.user?.id ?? null,
         });
         if (paymentError) {
