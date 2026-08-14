@@ -6,7 +6,7 @@ import type { Customer } from "../lib/customers";
 import "../styles/shared.css";
 
 export default function CustomersPage() {
-  const [view, setView] = useState<"add" | "list">("add");
+  const [view, setView] = useState<"add" | "list">("list");
   const [result, setResult] = useState<{ customer: Customer; wasExisting: boolean } | null>(null);
   const [editingCustomer, setEditingCustomer] = useState<Customer | null>(null);
 

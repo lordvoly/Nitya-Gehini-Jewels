@@ -1,15 +1,24 @@
 import { useCallback, useEffect, useState } from "react";
+import { useSearchParams } from "react-router-dom";
 import { AddItemWizard } from "../components/items/AddItemWizard";
 import { ItemEditForm } from "../components/items/ItemEditForm";
-import { ItemsList } from "../components/items/ItemsList";
+import { ItemsList, type ItemsFilter } from "../components/items/ItemsList";
 import { deleteItem, fetchItems, reactivateItem, retireItem, type Item } from "../lib/items";
 import "../styles/shared.css";
 
 export default function ItemsPage() {
-  const [view, setView] = useState<"add" | "list">("add");
+  const [searchParams] = useSearchParams();
+  const [view, setView] = useState<"add" | "list">("list");
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(false);
   const [editingItem, setEditingItem] = useState<Item | null>(null);
+
+  // Deep link from elsewhere (e.g. the Dashboard's "Active items" card):
+  // /items?filter=active. Read once on mount, same as BookingsPage's
+  // ?booking= pattern — only meant to set the list's initial filter, not
+  // fight the user if they change it afterward.
+  const filterParam = searchParams.get("filter");
+  const initialFilter: ItemsFilter = filterParam === "active" || filterParam === "retired" ? filterParam : "all";
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -85,6 +94,7 @@ export default function ItemsPage() {
           onDelete={handleDelete}
           onRetire={handleRetire}
           onReactivate={handleReactivate}
+          initialFilter={initialFilter}
         />
       )}
     </div>

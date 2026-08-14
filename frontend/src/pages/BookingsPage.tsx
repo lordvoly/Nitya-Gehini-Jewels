@@ -10,7 +10,7 @@ import "../styles/shared.css";
 
 export default function BookingsPage() {
   const [searchParams] = useSearchParams();
-  const [view, setView] = useState<"add" | "list">("add");
+  const [view, setView] = useState<"add" | "list">("list");
   const [returningItem, setReturningItem] = useState<{ booking: Booking; item: BookingItem } | null>(null);
   const [viewingBookingId, setViewingBookingId] = useState<string | null>(null);
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);

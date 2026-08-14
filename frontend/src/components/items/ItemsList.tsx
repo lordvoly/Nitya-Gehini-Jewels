@@ -3,7 +3,8 @@ import type { Item } from "../../lib/items";
 import { itemStatusPill } from "../../lib/statusPill";
 import { PhotoLightbox } from "./PhotoLightbox";
 
-type Filter = "all" | "active" | "retired";
+export type ItemsFilter = "all" | "active" | "retired";
+type Filter = ItemsFilter;
 
 const EMPTY_COPY: Record<Filter, { title: string; hint: string }> = {
   all: { title: "No items yet", hint: "Add your first one to get started." },
@@ -19,6 +20,7 @@ export function ItemsList({
   onDelete,
   onRetire,
   onReactivate,
+  initialFilter = "all",
 }: {
   items: Item[];
   loading: boolean;
@@ -27,8 +29,9 @@ export function ItemsList({
   onDelete: (item: Item) => Promise<void>;
   onRetire: (item: Item) => Promise<void>;
   onReactivate: (item: Item) => Promise<void>;
+  initialFilter?: ItemsFilter;
 }) {
-  const [filter, setFilter] = useState<Filter>("all");
+  const [filter, setFilter] = useState<Filter>(initialFilter);
   const [search, setSearch] = useState("");
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);

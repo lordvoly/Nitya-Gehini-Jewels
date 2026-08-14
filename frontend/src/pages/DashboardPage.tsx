@@ -30,7 +30,7 @@ export default function DashboardPage() {
       <DashboardAlerts summary={summary} userId={session?.user.id ?? null} />
 
       <div className="stat-grid">
-        <Link to="/items" className="stat-card">
+        <Link to="/items?filter=active" className="stat-card">
           <div className="stat-value">{stats.total_active_items}</div>
           <div className="stat-label">Active items</div>
         </Link>
