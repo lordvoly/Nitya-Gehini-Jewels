@@ -34,7 +34,7 @@ export default function DashboardPage() {
           <div className="stat-value">{stats.total_active_items}</div>
           <div className="stat-label">Active items</div>
         </Link>
-        <Link to="/items" className="stat-card">
+        <Link to="/items?filter=out" className="stat-card">
           <div className="stat-value">{stats.items_out}</div>
           <div className="stat-label">Items out</div>
         </Link>

@@ -35,6 +35,13 @@ export interface Item {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  // Computed live from active rental booking_items, never stored (a unique
+  // item's own `status` is deliberately never flipped for rentals — see
+  // backend/src/lib/itemsData.ts). Only GET /api/items (the list) includes
+  // it; single-item write responses (create/update/retire/reactivate) don't
+  // recompute it, so treat a missing value as "not out" rather than as an
+  // authoritative false.
+  currently_out?: boolean;
 }
 
 export interface NewItem {

@@ -1,8 +1,8 @@
 import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
 import { istWeekStart } from "../lib/dates.js";
-import { ACTIVE_STATUSES } from "./bookings.js";
 import { getDailyBriefingData } from "../lib/dashboardData.js";
+import { getCurrentlyOutItemIds } from "../lib/itemsData.js";
 
 export const dashboardRouter = Router();
 
@@ -49,23 +49,18 @@ dashboardRouter.get("/summary", async (_req, res) => {
 
     const [
       { count: total_active_items, error: activeItemsError },
-      { data: itemsOutRows, error: itemsOutError },
+      currentlyOutIds,
       { count: total_customers, error: customersError },
       bookings_this_week,
     ] = await Promise.all([
       supabase.from("items").select("*", { count: "exact", head: true }).neq("status", "sold"),
-      // items_out — bundled fix (§8 decision 3): a unique item's status is
-      // deliberately never flipped to 'rented_out' on rental creation, so
-      // count(status='rented_out') has always silently read 0. Recomputed
-      // here from booking_items directly instead.
-      supabase.from("booking_items").select("item_id").eq("type", "rental").in("status", ACTIVE_STATUSES),
+      getCurrentlyOutItemIds(),
       supabase.from("customers").select("*", { count: "exact", head: true }),
       getBookingsThisWeekCount(),
     ]);
     if (activeItemsError) throw activeItemsError;
-    if (itemsOutError) throw itemsOutError;
     if (customersError) throw customersError;
-    const items_out = new Set((itemsOutRows ?? []).map((r) => r.item_id)).size;
+    const items_out = currentlyOutIds.size;
 
     res.json({
       // Server IST date, echoed back so the frontend never has to compute

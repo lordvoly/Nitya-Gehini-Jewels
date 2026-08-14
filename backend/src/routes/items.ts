@@ -1,6 +1,7 @@
 import { Router } from "express";
 import multer from "multer";
 import { supabase } from "../lib/supabase.js";
+import { getCurrentlyOutItemIds } from "../lib/itemsData.js";
 
 export const itemsRouter = Router();
 
@@ -19,7 +20,11 @@ itemsRouter.get("/", async (req, res) => {
   if (req.query.active_only === "true") query = query.eq("is_active", true);
   const { data, error } = await query;
   if (error) return res.status(500).json({ error: error.message });
-  res.json(data);
+  // currently_out is computed, never stored — same live query as
+  // dashboard.ts's items_out stat (see lib/itemsData.ts), merged in here so
+  // the Items list filter reflects the exact same truth.
+  const outIds = await getCurrentlyOutItemIds();
+  res.json((data ?? []).map((item) => ({ ...item, currently_out: outIds.has(item.id) })));
 });
 
 // GET /api/items/next-code — the suggested next auto-generated code, to

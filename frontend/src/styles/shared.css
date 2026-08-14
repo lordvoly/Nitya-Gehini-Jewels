@@ -818,6 +818,16 @@ a {
   white-space: nowrap;
 }
 
+/* For table cells that stack more than one pill (e.g. Items' status +
+   "Out" badge) — keeps them on one line with even spacing instead of
+   wrapping awkwardly. */
+.pill-group {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
 .pill::before {
   content: "";
   width: 7px;

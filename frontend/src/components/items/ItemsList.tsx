@@ -3,13 +3,14 @@ import type { Item } from "../../lib/items";
 import { itemStatusPill } from "../../lib/statusPill";
 import { PhotoLightbox } from "./PhotoLightbox";
 
-export type ItemsFilter = "all" | "active" | "retired";
+export type ItemsFilter = "all" | "active" | "retired" | "out";
 type Filter = ItemsFilter;
 
 const EMPTY_COPY: Record<Filter, { title: string; hint: string }> = {
   all: { title: "No items yet", hint: "Add your first one to get started." },
   active: { title: "No active items", hint: "Everything's retired, or nothing's been added yet." },
   retired: { title: "No retired items", hint: "Retired pieces will show up here." },
+  out: { title: "Nothing currently out", hint: "Items with an active rental will show up here." },
 };
 
 export function ItemsList({
@@ -43,6 +44,7 @@ export function ItemsList({
     let result = items;
     if (filter === "active") result = result.filter((i) => i.is_active);
     if (filter === "retired") result = result.filter((i) => !i.is_active);
+    if (filter === "out") result = result.filter((i) => i.currently_out);
 
     const term = search.trim().toLowerCase();
     if (term) {
@@ -129,6 +131,9 @@ export function ItemsList({
         >
           Retired
         </button>
+        <button className={filter === "out" ? "toggle-btn active" : "toggle-btn"} onClick={() => setFilter("out")}>
+          Currently Out
+        </button>
       </div>
 
       {actionError && <p className="wizard-error">{actionError}</p>}
@@ -190,11 +195,14 @@ export function ItemsList({
                       {item.tracking_type === "quantity" ? `Qty ${item.quantity_on_hand ?? 0}` : "Unique"}
                     </td>
                     <td data-label="Status">
-                      {!item.is_active ? (
-                        <span className="pill pill-neutral">Retired</span>
-                      ) : (
-                        <span className={`pill ${pill.className}`}>{pill.label}</span>
-                      )}
+                      <span className="pill-group">
+                        {!item.is_active ? (
+                          <span className="pill pill-neutral">Retired</span>
+                        ) : (
+                          <span className={`pill ${pill.className}`}>{pill.label}</span>
+                        )}
+                        {item.currently_out && <span className="pill pill-active">Out</span>}
+                      </span>
                     </td>
                     <td data-label="Rental">{item.rental_price != null ? `₹${item.rental_price}` : "—"}</td>
                     <td data-label="Sale">{item.sale_price != null ? `₹${item.sale_price}` : "—"}</td>

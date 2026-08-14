@@ -18,7 +18,8 @@ export default function ItemsPage() {
   // ?booking= pattern — only meant to set the list's initial filter, not
   // fight the user if they change it afterward.
   const filterParam = searchParams.get("filter");
-  const initialFilter: ItemsFilter = filterParam === "active" || filterParam === "retired" ? filterParam : "all";
+  const initialFilter: ItemsFilter =
+    filterParam === "active" || filterParam === "retired" || filterParam === "out" ? filterParam : "all";
 
   const refresh = useCallback(async () => {
     setLoading(true);
@@ -40,12 +41,16 @@ export default function ItemsPage() {
 
   async function handleRetire(item: Item) {
     const updated = await retireItem(item.id);
-    setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+    // Spread onto the existing row rather than replacing it outright — the
+    // retire/reactivate/edit endpoints don't recompute currently_out (that's
+    // only done by the list endpoint), so a full replace would silently
+    // drop it until the next refresh.
+    setItems((prev) => prev.map((i) => (i.id === updated.id ? { ...i, ...updated } : i)));
   }
 
   async function handleReactivate(item: Item) {
     const updated = await reactivateItem(item.id);
-    setItems((prev) => prev.map((i) => (i.id === updated.id ? updated : i)));
+    setItems((prev) => prev.map((i) => (i.id === updated.id ? { ...i, ...updated } : i)));
   }
 
   return (
@@ -76,7 +81,7 @@ export default function ItemsPage() {
           item={editingItem}
           onCancel={() => setEditingItem(null)}
           onSaved={(saved) => {
-            setItems((prev) => prev.map((i) => (i.id === saved.id ? saved : i)));
+            setItems((prev) => prev.map((i) => (i.id === saved.id ? { ...i, ...saved } : i)));
             setEditingItem(null);
           }}
         />
