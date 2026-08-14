@@ -6,6 +6,32 @@ import { getDailyBriefingData } from "../lib/dashboardData.js";
 
 export const dashboardRouter = Router();
 
+// bookings_this_week must exclude cancelled bookings, same as every other
+// figure in the app (Reports, P&L, booking_financials) — a booking's
+// cancelled-ness is booking_status.computed_status ('cancelled' when every
+// one of its booking_items is itself cancelled), not a column on bookings
+// itself, and booking_status is a view with no real FK to join through —
+// same two-queries-plus-merge pattern used everywhere else for it.
+async function getBookingsThisWeekCount(): Promise<number> {
+  const { data: weekBookings, error: bookingsError } = await supabase
+    .from("bookings")
+    .select("id")
+    .gte("created_at", istWeekStart());
+  if (bookingsError) throw bookingsError;
+  const ids = (weekBookings ?? []).map((b) => b.id);
+  if (ids.length === 0) return 0;
+
+  const { data: statuses, error: statusError } = await supabase
+    .from("booking_status")
+    .select("booking_id, computed_status")
+    .in("booking_id", ids);
+  if (statusError) throw statusError;
+  const cancelledIds = new Set(
+    (statuses ?? []).filter((s) => s.computed_status === "cancelled").map((s) => s.booking_id)
+  );
+  return ids.filter((id) => !cancelledIds.has(id)).length;
+}
+
 // GET /api/dashboard/summary — read-only status snapshot for the dashboard.
 // Composes existing tables/views rather than reimplementing any of the
 // booking/conflict/financial logic that already lives in bookings.ts — this
@@ -25,7 +51,7 @@ dashboardRouter.get("/summary", async (_req, res) => {
       { count: total_active_items, error: activeItemsError },
       { data: itemsOutRows, error: itemsOutError },
       { count: total_customers, error: customersError },
-      { count: bookings_this_week, error: bookingsWeekError },
+      bookings_this_week,
     ] = await Promise.all([
       supabase.from("items").select("*", { count: "exact", head: true }).neq("status", "sold"),
       // items_out — bundled fix (§8 decision 3): a unique item's status is
@@ -34,15 +60,11 @@ dashboardRouter.get("/summary", async (_req, res) => {
       // here from booking_items directly instead.
       supabase.from("booking_items").select("item_id").eq("type", "rental").in("status", ACTIVE_STATUSES),
       supabase.from("customers").select("*", { count: "exact", head: true }),
-      // bookings_this_week — no change needed: already queries the parent
-      // bookings table directly by created_at, which is family-grain by
-      // construction now that the old per-item columns are gone.
-      supabase.from("bookings").select("*", { count: "exact", head: true }).gte("created_at", istWeekStart()),
+      getBookingsThisWeekCount(),
     ]);
     if (activeItemsError) throw activeItemsError;
     if (itemsOutError) throw itemsOutError;
     if (customersError) throw customersError;
-    if (bookingsWeekError) throw bookingsWeekError;
     const items_out = new Set((itemsOutRows ?? []).map((r) => r.item_id)).size;
 
     res.json({
@@ -58,7 +80,7 @@ dashboardRouter.get("/summary", async (_req, res) => {
         total_active_items: total_active_items ?? 0,
         items_out,
         total_customers: total_customers ?? 0,
-        bookings_this_week: bookings_this_week ?? 0,
+        bookings_this_week,
       },
     });
   } catch (err) {
