@@ -14,12 +14,18 @@ export default function BookingsPage() {
   const [returningItem, setReturningItem] = useState<{ booking: Booking; item: BookingItem } | null>(null);
   const [viewingBookingId, setViewingBookingId] = useState<string | null>(null);
   const [editingBookingId, setEditingBookingId] = useState<string | null>(null);
+  const [filterItemId, setFilterItemId] = useState<string | null>(null);
 
   // Deep link from elsewhere (e.g. the Dashboard) straight into a specific
-  // booking's detail view: /bookings?booking=<id>.
+  // booking's detail view: /bookings?booking=<id>. Or from the Items list's
+  // "Out"/"Booked" badges, into that item's current bookings:
+  // /bookings?item=<id>. Read once on mount, same as everywhere else this
+  // pattern is used.
   useEffect(() => {
-    const id = searchParams.get("booking");
-    if (id) setViewingBookingId(id);
+    const bookingId = searchParams.get("booking");
+    if (bookingId) setViewingBookingId(bookingId);
+    const itemId = searchParams.get("item");
+    if (itemId) setFilterItemId(itemId);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -27,6 +33,7 @@ export default function BookingsPage() {
     setReturningItem(null);
     setViewingBookingId(null);
     setEditingBookingId(null);
+    setFilterItemId(null);
     setView(next);
   }
 
@@ -79,6 +86,8 @@ export default function BookingsPage() {
           onProcessReturn={(booking, item) => setReturningItem({ booking, item })}
           onViewDetail={setViewingBookingId}
           onEditBooking={setEditingBookingId}
+          filterItemId={filterItemId}
+          onClearItemFilter={() => setFilterItemId(null)}
         />
       )}
     </div>

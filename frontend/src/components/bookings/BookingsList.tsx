@@ -11,10 +11,17 @@ export function BookingsList({
   onProcessReturn,
   onViewDetail,
   onEditBooking,
+  filterItemId = null,
+  onClearItemFilter,
 }: {
   onProcessReturn: (booking: Booking, item: BookingItem) => void;
   onViewDetail: (bookingId: string) => void;
   onEditBooking: (bookingId: string) => void;
+  // Deep link from the Items list's "Out"/"Booked" badges: show only this
+  // item's currently active bookings (the ones actually behind that badge),
+  // not its full history. See BookingsPage's ?item=<id> handling.
+  filterItemId?: string | null;
+  onClearItemFilter?: () => void;
 }) {
   const [term, setTerm] = useState("");
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -22,42 +29,80 @@ export function BookingsList({
 
   // Same debounced, cancelled-flag-guarded search as CustomersList: a
   // 300ms pause before the request fires, and a newer search's response
-  // can't be clobbered by an older one landing late.
+  // can't be clobbered by an older one landing late. When filterItemId is
+  // set, search is bypassed entirely — the item filter takes over.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
-    const handle = setTimeout(() => {
-      fetchBookings(term ? { search: term } : undefined)
-        .then((data) => {
-          if (!cancelled) setBookings(data);
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false);
-        });
-    }, 300);
+    const handle = setTimeout(
+      () => {
+        const params = filterItemId ? { item_id: filterItemId } : term ? { search: term } : undefined;
+        fetchBookings(params)
+          .then((data) => {
+            if (cancelled) return;
+            // The backend filter returns every booking that has ever
+            // included this item, any status — narrow to the ones actually
+            // still active for this item, matching what the badge meant.
+            const filtered = filterItemId
+              ? data.filter((b) =>
+                  b.booking_items.some(
+                    (bi) => bi.item_id === filterItemId && (bi.status === "booked" || bi.status === "out"),
+                  ),
+                )
+              : data;
+            setBookings(filtered);
+          })
+          .finally(() => {
+            if (!cancelled) setLoading(false);
+          });
+      },
+      filterItemId ? 0 : 300,
+    );
     return () => {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [term]);
+  }, [term, filterItemId]);
 
   return (
     <div>
-      <input
-        className="search-input"
-        type="text"
-        placeholder="Search by booking code or customer…"
-        value={term}
-        onChange={(e) => setTerm(e.target.value)}
-      />
+      {filterItemId ? (
+        <div className="found-panel">
+          <p>
+            Showing this item's current bookings only.{" "}
+            <button type="button" className="btn-secondary" onClick={onClearItemFilter}>
+              Show All Bookings
+            </button>
+          </p>
+        </div>
+      ) : (
+        <input
+          className="search-input"
+          type="text"
+          placeholder="Search by booking code or customer…"
+          value={term}
+          onChange={(e) => setTerm(e.target.value)}
+        />
+      )}
       <div className="list-header">
-        <h2>{term ? `Results (${bookings.length})` : `All Bookings (${bookings.length})`}</h2>
-        {loading && <span className="wizard-hint">Searching…</span>}
+        <h2>
+          {filterItemId
+            ? `Current Bookings (${bookings.length})`
+            : term
+              ? `Results (${bookings.length})`
+              : `All Bookings (${bookings.length})`}
+        </h2>
+        {loading && <span className="wizard-hint">{filterItemId ? "Loading…" : "Searching…"}</span>}
       </div>
 
       {bookings.length === 0 && !loading && (
         <div className="empty-state">
-          {term ? (
+          {filterItemId ? (
+            <>
+              <h3>Nothing currently booked</h3>
+              <p>This item has no active bookings right now.</p>
+            </>
+          ) : term ? (
             <>
               <h3>No bookings match</h3>
               <p>Nothing found for "{term}" — check the spelling or try just the booking code.</p>

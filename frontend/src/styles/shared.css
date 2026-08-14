@@ -828,6 +828,23 @@ a {
   flex-wrap: wrap;
 }
 
+/* A pill that's also a link (e.g. Items' "Out"/"Booked" badges, which
+   chain through to that item's current bookings) — same look, but with a
+   visible tappable cue instead of default anchor underlining. */
+.pill-link {
+  text-decoration: none;
+  cursor: pointer;
+  transition: box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.pill-link:hover {
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.15);
+}
+
+.pill-link:active {
+  transform: scale(0.96);
+}
+
 .pill::before {
   content: "";
   width: 7px;

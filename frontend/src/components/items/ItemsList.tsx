@@ -1,4 +1,5 @@
 import { useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import type { Item } from "../../lib/items";
 import { itemStatusPill } from "../../lib/statusPill";
 import { PhotoLightbox } from "./PhotoLightbox";
@@ -201,7 +202,16 @@ export function ItemsList({
                         ) : (
                           <span className={`pill ${pill.className}`}>{pill.label}</span>
                         )}
-                        {item.currently_out && <span className="pill pill-active">Out</span>}
+                        {item.currently_out && (
+                          <Link to={`/bookings?item=${item.id}`} className="pill pill-attention pill-link">
+                            Out
+                          </Link>
+                        )}
+                        {item.currently_booked && (
+                          <Link to={`/bookings?item=${item.id}`} className="pill pill-active pill-link">
+                            Booked
+                          </Link>
+                        )}
                       </span>
                     </td>
                     <td data-label="Rental">{item.rental_price != null ? `₹${item.rental_price}` : "—"}</td>

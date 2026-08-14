@@ -2,7 +2,7 @@ import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
 import { istWeekStart } from "../lib/dates.js";
 import { getDailyBriefingData } from "../lib/dashboardData.js";
-import { getCurrentlyOutItemIds } from "../lib/itemsData.js";
+import { getItemAvailability } from "../lib/itemsData.js";
 
 export const dashboardRouter = Router();
 
@@ -49,18 +49,18 @@ dashboardRouter.get("/summary", async (_req, res) => {
 
     const [
       { count: total_active_items, error: activeItemsError },
-      currentlyOutIds,
+      availability,
       { count: total_customers, error: customersError },
       bookings_this_week,
     ] = await Promise.all([
       supabase.from("items").select("*", { count: "exact", head: true }).neq("status", "sold"),
-      getCurrentlyOutItemIds(),
+      getItemAvailability(),
       supabase.from("customers").select("*", { count: "exact", head: true }),
       getBookingsThisWeekCount(),
     ]);
     if (activeItemsError) throw activeItemsError;
     if (customersError) throw customersError;
-    const items_out = currentlyOutIds.size;
+    const items_out = availability.currentlyOut.size;
 
     res.json({
       // Server IST date, echoed back so the frontend never has to compute

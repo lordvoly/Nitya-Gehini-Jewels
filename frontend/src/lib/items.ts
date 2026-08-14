@@ -38,10 +38,14 @@ export interface Item {
   // Computed live from active rental booking_items, never stored (a unique
   // item's own `status` is deliberately never flipped for rentals — see
   // backend/src/lib/itemsData.ts). Only GET /api/items (the list) includes
-  // it; single-item write responses (create/update/retire/reactivate) don't
-  // recompute it, so treat a missing value as "not out" rather than as an
-  // authoritative false.
+  // these; single-item write responses (create/update/retire/reactivate)
+  // don't recompute them, so treat a missing value as "false" rather than
+  // as an authoritative answer. Mutually exclusive per active rental:
+  // currently_out means pickup day has already arrived (physically out
+  // today); currently_booked means it's reserved but pickup hasn't
+  // happened yet. An item with more than one active rental could show both.
   currently_out?: boolean;
+  currently_booked?: boolean;
 }
 
 export interface NewItem {
