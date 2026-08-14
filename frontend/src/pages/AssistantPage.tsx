@@ -2,15 +2,17 @@ import { useEffect, useRef, useState, type FormEvent } from "react";
 import { sendChatMessage, fetchChatSuggestions, extractText, type ChatMessage } from "../lib/chat";
 import "../styles/shared.css";
 
-// Real item name (NGJ-0001, Peacock Bridal Set) and a mix of tool coverage
-// (item lookup, overdue, hypothetical-date availability, upcoming returns)
-// — see backend/src/tools/index.ts. Tapping one sends immediately (same as
-// a per-reply suggestion chip below) rather than just filling the input.
+// Deliberately item-agnostic — an earlier set named a specific real item
+// ("Peacock Bridal Set") twice, which goes stale as inventory changes (sold,
+// renamed, retired). These instead cover a mix of tools (daily briefing,
+// overdue, outstanding dues, most-booked items) — see
+// backend/src/tools/index.ts. Tapping one sends immediately (same as a
+// per-reply suggestion chip below) rather than just filling the input.
 const STARTER_QUESTIONS = [
-  "Where is the Peacock Bridal Set?",
+  "Catch me up on today",
   "What's overdue this week?",
-  "Is the Peacock Bridal Set free next weekend?",
-  "What's due back in the next 3 days?",
+  "Who owes us money?",
+  "What's our most popular set?",
 ];
 
 // The model's replies commonly use **bold** for emphasis (item names, key
