@@ -1,9 +1,10 @@
 import { useEffect, useState } from "react";
-import { Link } from "react-router-dom";
+import { Link, useLocation } from "react-router-dom";
 import { fetchReports, type ReportsResponse } from "../lib/reports";
 import "../styles/shared.css";
 
 export default function ReportsPage() {
+  const location = useLocation();
   const [data, setData] = useState<ReportsResponse | null>(null);
   const [from, setFrom] = useState<string | null>(null);
   const [to, setTo] = useState<string | null>(null);
@@ -23,6 +24,14 @@ export default function ReportsPage() {
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load reports"))
       .finally(() => setLoading(false));
   }, []);
+
+  // Deep-link support for Dashboard's "Outstanding balance" card
+  // (/reports#outstanding-dues-section) — scroll only after data has
+  // rendered, since the target section doesn't exist in the DOM until then.
+  useEffect(() => {
+    if (!data || !location.hash) return;
+    document.getElementById(location.hash.slice(1))?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }, [data, location.hash]);
 
   function refresh(nextFrom: string, nextTo: string, nextIncludeCollabs: boolean) {
     setLoading(true);
@@ -243,7 +252,7 @@ export default function ReportsPage() {
         )}
       </div>
 
-      <div className="dashboard-section">
+      <div id="outstanding-dues-section" className="dashboard-section">
         <h2>Outstanding Dues</h2>
         <p className="wizard-hint">
           Every booking still owed money, regardless of when it was made — not scoped to the date range above.

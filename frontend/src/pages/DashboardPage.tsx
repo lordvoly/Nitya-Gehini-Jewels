@@ -48,9 +48,11 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      <div id="outstanding-balance-section" className="stat-card stat-card-wide">
-        <div className="stat-value">₹{outstanding_balance}</div>
-        <div className="stat-label">Outstanding balance (active bookings)</div>
+      <div id="outstanding-balance-section">
+        <Link to="/reports#outstanding-dues-section" className="stat-card stat-card-wide">
+          <div className="stat-value">₹{outstanding_balance}</div>
+          <div className="stat-label">Outstanding balance (active bookings)</div>
+        </Link>
       </div>
 
       <div id="items-due-section">

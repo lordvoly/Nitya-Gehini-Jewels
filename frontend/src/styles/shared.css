@@ -1028,6 +1028,17 @@ a {
   text-align: center;
   text-decoration: none;
   color: inherit;
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+a.stat-card:hover {
+  border-color: var(--gold);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+a.stat-card:active {
+  transform: scale(0.98);
+  background: var(--ivory);
 }
 
 .stat-card-wide {
@@ -1062,6 +1073,22 @@ a {
   text-decoration: none;
   color: inherit;
   margin-bottom: 8px;
+}
+
+.dashboard-link .found-panel,
+.dashboard-link .overdue-panel {
+  transition: border-color 0.15s ease, box-shadow 0.15s ease, transform 0.1s ease;
+}
+
+.dashboard-link:hover .found-panel,
+.dashboard-link:hover .overdue-panel {
+  border-color: var(--gold);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.dashboard-link:active .found-panel,
+.dashboard-link:active .overdue-panel {
+  transform: scale(0.98);
 }
 
 .overdue-panel {
