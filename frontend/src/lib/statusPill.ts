@@ -12,7 +12,7 @@ export interface PillInfo {
 export function itemStatusPill(status: ItemStatus): PillInfo {
   switch (status) {
     case "available":
-      return { className: "pill-good", label: "Available" };
+      return { className: "pill-good", label: "Active" };
     case "rented_out":
       return { className: "pill-active", label: "Rented Out" };
     case "sold":

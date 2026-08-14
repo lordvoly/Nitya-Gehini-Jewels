@@ -11,6 +11,7 @@ import {
   type TrackingType,
 } from "../../lib/items";
 import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
+import { itemStatusPill } from "../../lib/statusPill";
 import { PhotoPicker } from "./PhotoPicker";
 
 const COMMON_COMPONENTS = ["Necklace", "Earrings", "Tika", "Bangles", "Maang Tikka", "Ring"];
@@ -275,7 +276,7 @@ export function ItemEditForm({
           <select value={form.status} onChange={(e) => update("status", e.target.value as ItemStatus)}>
             {ITEM_STATUSES.map((s) => (
               <option key={s} value={s}>
-                {s.replace("_", " ")}
+                {itemStatusPill(s).label}
               </option>
             ))}
           </select>
