@@ -555,6 +555,7 @@ a {
 
 .wizard-nav {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   gap: 8px;
   margin-top: 20px;
