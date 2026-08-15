@@ -1001,11 +1001,18 @@ a {
   gap: 10px;
   min-height: var(--tap);
   font-size: 15px;
-  /* Flex items don't shrink below their content's natural width by
-     default — a long unspaced value (free-text add-ons, item names) would
-     push the row wider instead of wrapping. min-width: 0 lets it actually
-     shrink to the row's width so overflow-wrap can do its job; same fix
-     shape as the bottom-tab-bar overflow fix elsewhere in this file. */
+}
+
+/* The item/add-on name itself, as its own flex item rather than a bare
+   text node — a flex item's default min-width is auto (its content's
+   unbroken width), which forces the flex container wider instead of
+   wrapping a long unspaced value (free-text add-ons, item names). Putting
+   min-width: 0 on the flex CONTAINER (.checklist-item) doesn't fix this —
+   it has to be on the flex ITEM that's actually too wide. Same fix shape
+   as the bottom-tab-bar overflow fix elsewhere in this file, just at the
+   right level this time. Used by ReturnForm's real checklist too, so this
+   also closes the identical latent bug there for the same long value. */
+.checklist-item-text {
   min-width: 0;
   overflow-wrap: break-word;
 }

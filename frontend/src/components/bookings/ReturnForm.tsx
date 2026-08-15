@@ -127,7 +127,7 @@ export function ReturnForm({
                 <div key={name} className="checklist-row">
                   <label className="checklist-item">
                     <input type="checkbox" checked={checklist[name] ?? false} onChange={() => toggleComponent(name)} />
-                    {name}
+                    <span className="checklist-item-text">{name}</span>
                   </label>
                   {!checklist[name] && (
                     <div className="lost-and-found">

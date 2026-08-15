@@ -145,7 +145,7 @@ export function BookingDetail({
                           <div key={name} className="checklist-row">
                             <span className="checklist-item checklist-item-static">
                               <span className="checklist-dot" aria-hidden="true" />
-                              {name}
+                              <span className="checklist-item-text">{name}</span>
                             </span>
                           </div>
                         ))}
