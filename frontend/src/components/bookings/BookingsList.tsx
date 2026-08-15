@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { Link } from "react-router-dom";
 import { fetchBookings, type Booking, type BookingItem } from "../../lib/bookings";
 import { bookingItemStatusPill, bookingComputedStatusPill } from "../../lib/statusPill";
 import { formatDateDisplay } from "../../lib/dates";
@@ -13,15 +14,26 @@ export function BookingsList({
   onEditBooking,
   filterItemId = null,
   onClearItemFilter,
+  filterCustomerId = null,
+  readOnly = false,
 }: {
-  onProcessReturn: (booking: Booking, item: BookingItem) => void;
+  onProcessReturn?: (booking: Booking, item: BookingItem) => void;
   onViewDetail: (bookingId: string) => void;
-  onEditBooking: (bookingId: string) => void;
+  onEditBooking?: (bookingId: string) => void;
   // Deep link from the Items list's "Out"/"Booked" badges: show only this
   // item's currently active bookings (the ones actually behind that badge),
   // not its full history. See BookingsPage's ?item=<id> handling.
   filterItemId?: string | null;
   onClearItemFilter?: () => void;
+  // Embedded on a customer's own detail page (CustomerDetail.tsx): show
+  // only this customer's bookings — full history, unlike filterItemId,
+  // since this is a record of everything rather than a live "what's
+  // behind this badge" narrowing.
+  filterCustomerId?: string | null;
+  // The customer page embeds this as "view history, click through" — no
+  // Process Return / Edit Booking actions inline (that's booking-detail
+  // territory), only View, so booking management isn't duplicated here.
+  readOnly?: boolean;
 }) {
   const [term, setTerm] = useState("");
   const [bookings, setBookings] = useState<Booking[]>([]);
@@ -29,20 +41,29 @@ export function BookingsList({
 
   // Same debounced, cancelled-flag-guarded search as CustomersList: a
   // 300ms pause before the request fires, and a newer search's response
-  // can't be clobbered by an older one landing late. When filterItemId is
-  // set, search is bypassed entirely — the item filter takes over.
+  // can't be clobbered by an older one landing late. When filterItemId or
+  // filterCustomerId is set, search is bypassed entirely — the filter
+  // takes over.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     const handle = setTimeout(
       () => {
-        const params = filterItemId ? { item_id: filterItemId } : term ? { search: term } : undefined;
+        const params = filterItemId
+          ? { item_id: filterItemId }
+          : filterCustomerId
+            ? { customer_id: filterCustomerId }
+            : term
+              ? { search: term }
+              : undefined;
         fetchBookings(params)
           .then((data) => {
             if (cancelled) return;
             // The backend filter returns every booking that has ever
             // included this item, any status — narrow to the ones actually
             // still active for this item, matching what the badge meant.
+            // filterCustomerId gets no such narrowing — a customer's page
+            // is meant to show their full history, not just what's active.
             const filtered = filterItemId
               ? data.filter((b) =>
                   b.booking_items.some(
@@ -56,13 +77,13 @@ export function BookingsList({
             if (!cancelled) setLoading(false);
           });
       },
-      filterItemId ? 0 : 300,
+      filterItemId || filterCustomerId ? 0 : 300,
     );
     return () => {
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [term, filterItemId]);
+  }, [term, filterItemId, filterCustomerId]);
 
   return (
     <div>
@@ -75,7 +96,7 @@ export function BookingsList({
             </button>
           </p>
         </div>
-      ) : (
+      ) : filterCustomerId ? null : (
         <input
           className="search-input"
           type="text"
@@ -88,11 +109,13 @@ export function BookingsList({
         <h2>
           {filterItemId
             ? `Current Bookings (${bookings.length})`
-            : term
-              ? `Results (${bookings.length})`
-              : `All Bookings (${bookings.length})`}
+            : filterCustomerId
+              ? `Bookings (${bookings.length})`
+              : term
+                ? `Results (${bookings.length})`
+                : `All Bookings (${bookings.length})`}
         </h2>
-        {loading && <span className="wizard-hint">{filterItemId ? "Loading…" : "Searching…"}</span>}
+        {loading && <span className="wizard-hint">{filterItemId || filterCustomerId ? "Loading…" : "Searching…"}</span>}
       </div>
 
       {bookings.length === 0 && !loading && (
@@ -101,6 +124,11 @@ export function BookingsList({
             <>
               <h3>Nothing currently booked</h3>
               <p>This item has no active bookings right now.</p>
+            </>
+          ) : filterCustomerId ? (
+            <>
+              <h3>No bookings yet</h3>
+              <p>This customer hasn't booked anything yet.</p>
             </>
           ) : term ? (
             <>
@@ -123,7 +151,19 @@ export function BookingsList({
             <div className="booking-card-header">
               <div>
                 <p className="booking-card-title">{b.booking_code}</p>
-                <p className="booking-card-customer">{b.customers?.name ?? "—"}</p>
+                <p className="booking-card-customer">
+                  {b.customers?.name ? (
+                    // No link on a customer's own page for their own name —
+                    // it'd just point back at the page already showing.
+                    b.customer_id === filterCustomerId ? (
+                      b.customers.name
+                    ) : (
+                      <Link to={`/customers?customer=${b.customer_id}`}>{b.customers.name}</Link>
+                    )
+                  ) : (
+                    "—"
+                  )}
+                </p>
               </div>
               <div className="booking-card-status">
                 <span className={`pill ${statusPill.className}`}>{statusPill.label}</span>
@@ -170,7 +210,7 @@ export function BookingsList({
                     </div>
                     <div className="booking-card-item-actions">
                       <span className={`pill ${itemPill.className}`}>{itemPill.label}</span>
-                      {canReturn && (
+                      {!readOnly && canReturn && onProcessReturn && (
                         <button className="btn-secondary" onClick={() => onProcessReturn(b, bi)}>
                           Process Return
                         </button>
@@ -185,9 +225,11 @@ export function BookingsList({
               <button className="btn-secondary" onClick={() => onViewDetail(b.id)}>
                 View
               </button>
-              <button className="btn-secondary" onClick={() => onEditBooking(b.id)}>
-                Edit
-              </button>
+              {!readOnly && onEditBooking && (
+                <button className="btn-secondary" onClick={() => onEditBooking(b.id)}>
+                  Edit
+                </button>
+              )}
             </div>
           </div>
         );

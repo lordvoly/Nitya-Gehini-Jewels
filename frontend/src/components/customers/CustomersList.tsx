@@ -1,7 +1,13 @@
 import { useEffect, useState } from "react";
 import { CUSTOMER_TYPE_LABELS, deleteCustomer, fetchCustomers, type Customer } from "../../lib/customers";
 
-export function CustomersList({ onEdit }: { onEdit: (customer: Customer) => void }) {
+export function CustomersList({
+  onEdit,
+  onView,
+}: {
+  onEdit: (customer: Customer) => void;
+  onView: (customer: Customer) => void;
+}) {
   const [term, setTerm] = useState("");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
@@ -92,7 +98,11 @@ export function CustomersList({ onEdit }: { onEdit: (customer: Customer) => void
             <tbody>
               {customers.map((c) => (
                 <tr key={c.id}>
-                  <td data-label="Name">{c.name}</td>
+                  <td data-label="Name">
+                    <button type="button" className="link-button" onClick={() => onView(c)}>
+                      {c.name}
+                    </button>
+                  </td>
                   <td data-label="Phone">{c.phone}</td>
                   <td data-label="Email">{c.email ?? "—"}</td>
                   <td data-label="Address">{c.address}</td>

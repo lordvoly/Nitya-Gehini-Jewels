@@ -91,7 +91,11 @@ export function BookingDetail({
         {error && <p className="wizard-error">{error}</p>}
         {booking && statusPill && (
           <>
-            <p className="wizard-hint">{booking.customers?.name}</p>
+            <p className="wizard-hint">
+              {booking.customers?.name && (
+                <Link to={`/customers?customer=${booking.customer_id}`}>{booking.customers.name}</Link>
+              )}
+            </p>
             <ul className="review-list">
               <li>
                 Status: <span className={`pill ${statusPill.className}`}>{statusPill.label}</span>

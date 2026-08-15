@@ -1302,11 +1302,13 @@ a.stat-card:active {
   margin-top: 2px;
 }
 
-.booking-card-item-next-link {
+.booking-card-item-next-link,
+.link-button {
   background: none;
   border: none;
   padding: 0;
   font: inherit;
+  color: inherit;
   text-align: left;
   cursor: pointer;
   text-decoration: underline;
@@ -1315,7 +1317,9 @@ a.stat-card:active {
 }
 
 .booking-card-item-next-link:hover,
-.booking-card-item-next-link:focus-visible {
+.booking-card-item-next-link:focus-visible,
+.link-button:hover,
+.link-button:focus-visible {
   text-decoration-color: currentColor;
 }
 
