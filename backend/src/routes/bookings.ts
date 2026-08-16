@@ -316,8 +316,18 @@ interface ItemConflict {
 // (for add-item); create_booking_with_items also re-validates internally as
 // a second, transaction-safe layer for the small race window this pre-check
 // alone can't close.
+// excludeBookingItemId: when re-checking an existing booking_item being
+// edited (PATCH /:bookingId/items/:itemId), that row is still sitting in the
+// DB with its old dates/quantity during this check and would otherwise count
+// against itself — for a unique item that's a false "overlapping booking"
+// against its own current row, for a quantity item it's the row's own
+// quantity double-counted as "already reserved". Applied as a query-level
+// .neq() on every query below (not just the unique-item branch) so both
+// tracking types get the same self-exclusion; omitted entirely (undefined)
+// on creation/add-item calls, where there is no existing row to exclude.
 async function checkItemConflict(
   input: NewBookingItemInput,
+  excludeBookingItemId?: string,
 ): Promise<{ error: string; conflicts?: unknown[] } | null> {
   const { data: item, error: itemError } = await supabase.from("items").select("*").eq("id", input.item_id).single();
   if (itemError || !item) return { error: "Item not found" };
@@ -329,7 +339,7 @@ async function checkItemConflict(
       return { error: `This item isn't available right now (status: ${item.status})` };
     }
     if (input.type === "rental") {
-      const { data: conflicts, error: conflictError } = await supabase
+      let query = supabase
         .from("booking_items")
         .select("*, bookings(booking_code, customers(name))")
         .eq("item_id", input.item_id)
@@ -337,24 +347,28 @@ async function checkItemConflict(
         .in("status", ACTIVE_STATUSES)
         .lt("pickup_date", input.return_date as string)
         .gt("return_date", input.pickup_date);
+      if (excludeBookingItemId) query = query.neq("id", excludeBookingItemId);
+      const { data: conflicts, error: conflictError } = await query;
       if (conflictError) throw conflictError;
       if (conflicts && conflicts.length > 0) {
         return { error: "This item is already booked for an overlapping date range", conflicts };
       }
     }
   } else {
-    const { data: activeSales, error: salesError } = await supabase
+    let salesQuery = supabase
       .from("booking_items")
       .select("quantity_booked")
       .eq("item_id", input.item_id)
       .eq("type", "sale")
       .in("status", ACTIVE_STATUSES);
+    if (excludeBookingItemId) salesQuery = salesQuery.neq("id", excludeBookingItemId);
+    const { data: activeSales, error: salesError } = await salesQuery;
     if (salesError) throw salesError;
     const alreadySold = sumQuantity(activeSales);
 
     let alreadyReservedForDates = 0;
     if (input.type === "rental") {
-      const { data: overlappingRentals, error: rentalError } = await supabase
+      let rentalQuery = supabase
         .from("booking_items")
         .select("quantity_booked")
         .eq("item_id", input.item_id)
@@ -362,6 +376,8 @@ async function checkItemConflict(
         .in("status", ACTIVE_STATUSES)
         .lt("pickup_date", input.return_date as string)
         .gt("return_date", input.pickup_date);
+      if (excludeBookingItemId) rentalQuery = rentalQuery.neq("id", excludeBookingItemId);
+      const { data: overlappingRentals, error: rentalError } = await rentalQuery;
       if (rentalError) throw rentalError;
       alreadyReservedForDates = sumQuantity(overlappingRentals);
     }
@@ -831,23 +847,19 @@ bookingsRouter.patch("/:bookingId/items/:itemId", async (req, res) => {
     (quantity_booked !== undefined && quantity_booked !== bookingItem.quantity_booked);
 
   if (datesOrQuantityChanged) {
-    const conflict = await checkItemConflict({
-      type: bookingItem.type,
-      item_id: bookingItem.item_id,
-      quantity_booked: quantity_booked ?? bookingItem.quantity_booked,
-      pickup_date: pickup_date ?? bookingItem.pickup_date,
-      return_date: return_date ?? bookingItem.return_date,
-      price_charged: price_charged ?? bookingItem.price_charged,
-    });
-    // The item's own current row would otherwise conflict with itself in
-    // the overlap check above — exclude it before deciding to block.
-    if (conflict?.conflicts) {
-      const others = (conflict.conflicts as { id: string }[]).filter((c) => c.id !== bookingItem.id);
-      if (others.length > 0) {
-        return res.status(409).json({ error: conflict.error, conflicts: others });
-      }
-    } else if (conflict) {
-      return res.status(409).json({ error: conflict.error });
+    const conflict = await checkItemConflict(
+      {
+        type: bookingItem.type,
+        item_id: bookingItem.item_id,
+        quantity_booked: quantity_booked ?? bookingItem.quantity_booked,
+        pickup_date: pickup_date ?? bookingItem.pickup_date,
+        return_date: return_date ?? bookingItem.return_date,
+        price_charged: price_charged ?? bookingItem.price_charged,
+      },
+      bookingItem.id,
+    );
+    if (conflict) {
+      return res.status(409).json({ error: conflict.error, conflicts: conflict.conflicts });
     }
   }
 
