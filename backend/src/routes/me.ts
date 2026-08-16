@@ -1,14 +1,9 @@
 import { Router } from "express";
-import multer from "multer";
 import { supabase } from "../lib/supabase.js";
 import type { AuthedRequest } from "../middleware/auth.js";
+import { imageUpload } from "../lib/upload.js";
 
 export const meRouter = Router();
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 },
-});
 
 // GET /api/me — the caller's own app profile (id, role, name, email,
 // photo_url). Not used to gate anything yet — exists so role-based UI (e.g.
@@ -46,7 +41,7 @@ meRouter.patch("/", async (req: AuthedRequest, res) => {
 // standalone avatar control has no separate "Save" step to wait for).
 // Same backend-does-the-upload pattern as POST /api/items/photos: service
 // role key never leaves the backend, no Storage RLS policy needed.
-meRouter.post("/photo", upload.single("photo"), async (req: AuthedRequest, res) => {
+meRouter.post("/photo", imageUpload.single("photo"), async (req: AuthedRequest, res) => {
   if (!req.file) return res.status(400).json({ error: "No photo uploaded" });
   const ext = req.file.originalname.split(".").pop() || "jpg";
   const path = `${req.user!.id}/${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;

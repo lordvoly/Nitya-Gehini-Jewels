@@ -1,6 +1,13 @@
 import "dotenv/config";
-import express from "express";
+import express, { type ErrorRequestHandler } from "express";
+// Patches Express's router so a rejected/thrown error inside an async route
+// handler is forwarded to the error-handling middleware below automatically
+// — Express 4 doesn't do this on its own, and this app's route handlers are
+// almost all async. Must be imported before any router/route is defined.
+import "express-async-errors";
 import cors from "cors";
+import multer from "multer";
+import { UnsupportedFileTypeError } from "./lib/errors.js";
 import { itemsRouter } from "./routes/items.js";
 import { customersRouter } from "./routes/customers.js";
 import { bookingsRouter } from "./routes/bookings.js";
@@ -45,6 +52,36 @@ app.use("/api/chat", requireAuth, chatRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/reports", requireAuth, reportsRouter);
 app.use("/api/shop-settings", requireAuth, shopSettingsRouter);
+
+// Global error handler — must be registered last (Express identifies
+// error-handling middleware by its 4-argument signature) and after every
+// route above. Without this, any error reaching here — multer rejecting a
+// file (too large or wrong type), express.json() choking on a malformed
+// body, or an unhandled throw in any async route handler (forwarded here
+// automatically by express-async-errors, imported above) — fell through to
+// Express's own default handler, which renders an HTML error page.
+// apiFetch on the frontend can't parse HTML as JSON, so every such failure
+// surfaced as the same generic "request failed" message no matter what
+// actually broke — this is what turned a real, specific cause (a photo
+// over the size limit) into an unhelpful generic one.
+const errorHandler: ErrorRequestHandler = (err, _req, res, _next) => {
+  if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
+    return res.status(413).json({ error: "That file is too large — please use a smaller one." });
+  }
+  if (err instanceof UnsupportedFileTypeError) {
+    return res.status(415).json({ error: err.message });
+  }
+  // express.json()'s own body-parser throws a plain SyntaxError (tagged
+  // with a `body` property) on malformed JSON — a real, different error
+  // path from either upload case above, used to prove this handler is a
+  // genuine catch-all rather than a photo-upload-specific patch.
+  if (err instanceof SyntaxError && "body" in err) {
+    return res.status(400).json({ error: "Invalid JSON in request body." });
+  }
+  console.error(err);
+  res.status(500).json({ error: err instanceof Error ? err.message : "Internal server error" });
+};
+app.use(errorHandler);
 
 app.listen(port, () => {
   console.log(`NGJ backend listening on :${port}`);

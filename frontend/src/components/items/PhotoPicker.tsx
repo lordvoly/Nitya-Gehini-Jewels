@@ -1,5 +1,23 @@
 import { useState } from "react";
 import { uploadItemPhoto } from "../../lib/items";
+import { ApiError } from "../../lib/api";
+import { compressImageForUpload } from "../../lib/imageCompression";
+
+// Distinguishes the real cause so the message is actually accurate — the
+// backend's global error handler returns 413 for "still too large after
+// compression" and 415 for "not an accepted image type" specifically so
+// this doesn't have to guess from a generic failure.
+function describeUploadError(e: unknown): string {
+  if (e instanceof ApiError) {
+    if (e.status === 413) {
+      return "That photo is too large, even after compression — try a smaller one.";
+    }
+    if (e.status === 415) {
+      return e.message || "That file isn't a supported photo type — please upload a JPEG, PNG, WEBP, or HEIC image.";
+    }
+  }
+  return "A photo failed to upload — you can try again or continue without it.";
+}
 
 export function PhotoPicker({
   photos,
@@ -38,11 +56,12 @@ export function PhotoPicker({
     let current = photos;
     for (const file of Array.from(files)) {
       try {
-        const url = await uploadFn(file);
+        const toUpload = await compressImageForUpload(file);
+        const url = await uploadFn(toUpload);
         current = [...current, url];
         onChange(current);
-      } catch {
-        setError("A photo failed to upload — you can try again or continue without it.");
+      } catch (e) {
+        setError(describeUploadError(e));
       } finally {
         adjustUploadingCount(-1);
       }

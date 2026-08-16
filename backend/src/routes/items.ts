@@ -1,14 +1,9 @@
 import { Router } from "express";
-import multer from "multer";
 import { supabase } from "../lib/supabase.js";
 import { getItemAvailability } from "../lib/itemsData.js";
+import { imageUpload } from "../lib/upload.js";
 
 export const itemsRouter = Router();
-
-const upload = multer({
-  storage: multer.memoryStorage(),
-  limits: { fileSize: 15 * 1024 * 1024 },
-});
 
 // GET /api/items — list, most recently added first. ?active_only=true
 // restricts to is_active items — used by the booking item-picker, which
@@ -57,7 +52,7 @@ itemsRouter.get("/:id", async (req, res) => {
 // public URL. Goes through the backend (service role) rather than direct
 // frontend-to-Supabase upload, so no Storage RLS policy is needed and the
 // service role key never has to leave the backend.
-itemsRouter.post("/photos", upload.single("photo"), async (req, res) => {
+itemsRouter.post("/photos", imageUpload.single("photo"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No photo uploaded" });
   const ext = req.file.originalname.split(".").pop() || "jpg";
   const path = `${Date.now()}-${Math.random().toString(36).slice(2)}.${ext}`;
