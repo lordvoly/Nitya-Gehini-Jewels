@@ -12,6 +12,8 @@ import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/payments";
 import { formatDateDisplay } from "../../lib/dates";
 import { CustomerPicker } from "./CustomerPicker";
+import { Modal } from "../common/Modal";
+import { AddItemWizard } from "../items/AddItemWizard";
 
 interface LineItemDraft {
   key: string;
@@ -45,6 +47,10 @@ function emptyLineItem(type: BookingItemType): LineItemDraft {
 
 export function BookingForm() {
   const [items, setItems] = useState<Item[]>([]);
+  // Which line item's "+ Add New Item" modal is open, if any — keyed by
+  // row.key so with multiple lines the newly created item lands back on
+  // the exact row that asked for it, not just "the first" or "the last".
+  const [addingItemForRow, setAddingItemForRow] = useState<string | null>(null);
   const [bookingCode, setBookingCode] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
   // The entry-point choice — nothing else renders until this is set. Once
@@ -117,6 +123,20 @@ export function BookingForm() {
     const selected = items.find((i) => i.id === itemId) ?? null;
     const autoPrice = selected ? (row.type === "rental" ? selected.rental_price : selected.sale_price) : null;
     updateLineItem(row.key, { itemId, quantityBooked: "1", price: autoPrice != null ? String(autoPrice) : "" });
+  }
+
+  // From the "+ Add New Item" modal — same seamless behavior as adding a
+  // new customer mid-booking: the freshly created item becomes this row's
+  // selection immediately, no leaving the page or searching for it after.
+  // Computed directly from the just-created `item`, not via handleItemChange
+  // (which looks the id up in the `items` array) — setItems is async, so
+  // that lookup would still miss on this same render and silently drop the
+  // auto-filled price.
+  function handleItemCreated(row: LineItemDraft, item: Item) {
+    setItems((prev) => [item, ...prev]);
+    const autoPrice = row.type === "rental" ? item.rental_price : item.sale_price;
+    updateLineItem(row.key, { itemId: item.id, quantityBooked: "1", price: autoPrice != null ? String(autoPrice) : "" });
+    setAddingItemForRow(null);
   }
 
   function addCustomAddon(row: LineItemDraft) {
@@ -309,6 +329,17 @@ export function BookingForm() {
                   ))}
                 </select>
               </label>
+              <button type="button" className="btn-secondary" onClick={() => setAddingItemForRow(row.key)}>
+                + Add New Item
+              </button>
+              {addingItemForRow === row.key && (
+                <Modal onClose={() => setAddingItemForRow(null)}>
+                  <AddItemWizard
+                    onItemCreated={(item) => handleItemCreated(row, item)}
+                    onViewItems={() => setAddingItemForRow(null)}
+                  />
+                </Modal>
+              )}
 
               {selected?.tracking_type === "quantity" && (
                 <label className="field-label">
