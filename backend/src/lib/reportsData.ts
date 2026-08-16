@@ -90,6 +90,85 @@ export async function getExpensesForPeriod(from: string, to: string) {
   };
 }
 
+// received / balance_remaining for the exact same pickup-date-filtered,
+// non-cancelled item set "revenue" already uses — grand_total is that same
+// revenue figure, not a third independent computation, so the three always
+// reconcile exactly (received + balance_remaining === grand_total, by
+// construction, never just by coincidence).
+//
+// The real complication: payments are recorded once per PARENT booking
+// (one running balance per family transaction — see CLAUDE.md), never
+// per line item, so there is no stored record of which payment paid for
+// which item. Most bookings have every item on the same pickup_date (one
+// family visit), where this doesn't matter — but it's a real, not
+// theoretical, case: confirmed live against production that a booking can
+// have items on genuinely different pickup dates (checked before writing
+// this). For such a booking, "how much of what was paid belongs to just
+// the in-range items" is unknowable from the data as stored, so it's
+// allocated proportionally by each item's own share of the booking's
+// total (non-cancelled) price — the only allocation that guarantees the
+// sum across every touched booking still reconciles exactly against
+// revenue, rather than either double-counting or dropping a fraction.
+//
+// Known limitation, called out rather than silently glossed over: if a
+// booking has a cancelled item whose deposit was collected and
+// deliberately kept (not refunded — a legitimate cancellation-fee case
+// the refund-infrastructure flow allows), that payment is still sitting in
+// the booking's total_paid with no way to attribute it specifically to
+// the cancelled item, since payments carry no item-level reference at
+// all. It will proportionally count toward this booking's OTHER, still-
+// active items' "received" instead of being excluded — the closest this
+// data model can get to "excluded entirely" without per-item payment
+// tracking, which doesn't exist anywhere else in this app either.
+async function getRevenueBreakdown(periodItems: BookingItemRow[]) {
+  const bookingIds = [...new Set(periodItems.map((b) => b.booking_id))];
+  if (bookingIds.length === 0) return { grand_total: 0, received: 0, balance_remaining: 0 };
+
+  const rangePriceByBooking = new Map<string, number>();
+  for (const item of periodItems) {
+    rangePriceByBooking.set(item.booking_id, (rangePriceByBooking.get(item.booking_id) ?? 0) + Number(item.price_charged));
+  }
+
+  // Every non-cancelled item for each touched booking (not just the
+  // in-range ones) — the denominator for proration, matching
+  // booking_financials' own "status <> 'cancelled'" price definition
+  // exactly so this never silently diverges from that view.
+  const { data: allItemsForTouchedBookings, error: allItemsError } = await supabase
+    .from("booking_items")
+    .select("booking_id, price_charged")
+    .in("booking_id", bookingIds)
+    .neq("status", "cancelled");
+  if (allItemsError) throw allItemsError;
+  const totalPriceByBooking = new Map<string, number>();
+  for (const row of allItemsForTouchedBookings ?? []) {
+    totalPriceByBooking.set(row.booking_id, (totalPriceByBooking.get(row.booking_id) ?? 0) + Number(row.price_charged));
+  }
+
+  const { data: financials, error: financialsError } = await supabase
+    .from("booking_financials")
+    .select("booking_id, total_paid")
+    .in("booking_id", bookingIds);
+  if (financialsError) throw financialsError;
+  const paidByBooking = new Map((financials ?? []).map((f) => [f.booking_id, Number(f.total_paid)]));
+
+  let grand_total = 0;
+  let received = 0;
+  for (const bookingId of bookingIds) {
+    const pRange = rangePriceByBooking.get(bookingId) ?? 0;
+    const pAll = totalPriceByBooking.get(bookingId) ?? 0;
+    const paid = paidByBooking.get(bookingId) ?? 0;
+    grand_total += pRange;
+    received += pAll > 0 ? paid * (pRange / pAll) : 0;
+  }
+  grand_total = Math.round(grand_total * 100) / 100;
+  received = Math.round(received * 100) / 100;
+  // Derived, not independently rounded — guarantees the invariant holds
+  // exactly instead of drifting by a paisa from rounding both sides.
+  const balance_remaining = Math.round((grand_total - received) * 100) / 100;
+
+  return { grand_total, received, balance_remaining };
+}
+
 // Revenue reuses summarizeBookingItems' total_revenue (same periodItems,
 // same cancelled-excluded rule) rather than a second query — one function
 // both reports.ts and get_financial_summary call, so they can never drift.
@@ -97,11 +176,19 @@ export async function getFinancialSummary(from: string, to: string) {
   const periodItems = await getPeriodBookingItems(from, to);
   const { total_revenue } = summarizeBookingItems(periodItems);
   const { expenses_total, by_category } = await getExpensesForPeriod(from, to);
+  const { grand_total, received, balance_remaining } = await getRevenueBreakdown(periodItems);
   return {
     revenue: total_revenue,
     expenses: expenses_total,
     net: total_revenue - expenses_total,
     by_category,
+    // grand_total === revenue always (same periodItems, same formula) —
+    // exposed alongside it under the shop's own vocabulary (received/
+    // balance remaining/grand total) rather than asking the AI tool's
+    // caller to infer that mapping from "revenue" alone.
+    grand_total,
+    received,
+    balance_remaining,
   };
 }
 

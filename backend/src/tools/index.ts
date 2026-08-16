@@ -99,7 +99,8 @@ export const toolDefinitions = [
   },
   {
     name: "get_financial_summary",
-    description: "Revenue, expenses, and net profit for a period. Defaults to the current IST calendar month if no dates are given.",
+    description:
+      "Revenue, expenses, net profit, and a received/balance-remaining breakdown for a period. Defaults to the current IST calendar month if no dates are given. The period filters by pickup/rental start date (pickup_date), same as everything else in this app that's scoped to 'this week'/'this month'. revenue and grand_total are the same figure (total agreed price, cancelled items excluded entirely) — received is how much of that has actually been paid so far, balance_remaining is what's still owed; received + balance_remaining always equals grand_total exactly. Covers both rentals and sales, and both unique and quantity-tracked items.",
     input_schema: {
       type: "object" as const,
       properties: {
