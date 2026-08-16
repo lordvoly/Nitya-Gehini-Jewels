@@ -77,7 +77,16 @@ dashboardRouter.get("/summary", async (_req, res) => {
     // Pickup). pickupOverdue (booked, pickup_date passed, never confirmed)
     // still counts as "out" for this purpose; it just also gets its own
     // distinct badge/category elsewhere so it can be found and confirmed.
+    //
+    // items_needs_confirmation is reported separately (not folded silently
+    // into items_out) so the frontend can show a breakdown — a real user
+    // report confirmed this ambiguity: the combined number didn't match
+    // what "out" visibly meant to them (no item showed an "Out" pill),
+    // because the whole count came from an unconfirmed-pickup item that
+    // only shows the separate "Pickup Overdue — Not Confirmed" pill. Same
+    // subnote pattern as items_retired alongside items_in_catalog.
     const items_out = availability.currentlyOut.size + availability.pickupOverdue.size;
+    const items_needs_confirmation = availability.pickupOverdue.size;
 
     res.json({
       // Server IST date, echoed back so the frontend never has to compute
@@ -96,6 +105,7 @@ dashboardRouter.get("/summary", async (_req, res) => {
         items_in_catalog: items_in_catalog ?? 0,
         items_retired: items_retired ?? 0,
         items_out,
+        items_needs_confirmation,
         total_customers: total_customers ?? 0,
         bookings_this_week,
       },

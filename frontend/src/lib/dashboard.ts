@@ -46,6 +46,11 @@ export interface DashboardStats {
   items_in_catalog: number;
   items_retired: number;
   items_out: number;
+  // The subset of items_out that's a rental past its pickup_date but never
+  // confirmed via Confirm Pickup — reported separately so the tile can show
+  // a breakdown instead of one ambiguous combined number (see itemsData.ts
+  // for why items_out itself still includes these).
+  items_needs_confirmation: number;
   total_customers: number;
   bookings_this_week: number;
 }

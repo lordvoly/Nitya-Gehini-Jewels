@@ -19,7 +19,9 @@ export default function ItemsPage() {
   // fight the user if they change it afterward.
   const filterParam = searchParams.get("filter");
   const initialFilter: ItemsFilter =
-    filterParam === "active" || filterParam === "retired" || filterParam === "out" ? filterParam : "all";
+    filterParam === "active" || filterParam === "retired" || filterParam === "out" || filterParam === "needs_confirmation"
+      ? filterParam
+      : "all";
 
   const refresh = useCallback(async () => {
     setLoading(true);

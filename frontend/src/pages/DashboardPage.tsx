@@ -41,10 +41,17 @@ export default function DashboardPage() {
             </Link>
           )}
         </div>
-        <Link to="/items?filter=out" className="stat-card">
-          <div className="stat-value">{stats.items_out}</div>
-          <div className="stat-label">Items out</div>
-        </Link>
+        <div className="stat-card">
+          <Link to="/items?filter=out" className="stat-card-link">
+            <div className="stat-value">{stats.items_out}</div>
+            <div className="stat-label">Items out</div>
+          </Link>
+          {stats.items_needs_confirmation > 0 && (
+            <Link to="/items?filter=needs_confirmation" className="stat-subnote">
+              ({stats.items_needs_confirmation} needs confirmation)
+            </Link>
+          )}
+        </div>
         <Link to="/customers" className="stat-card">
           <div className="stat-value">{stats.total_customers}</div>
           <div className="stat-label">Customers</div>

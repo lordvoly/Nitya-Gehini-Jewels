@@ -4,14 +4,18 @@ import type { Item } from "../../lib/items";
 import { itemStatusPill } from "../../lib/statusPill";
 import { PhotoLightbox } from "./PhotoLightbox";
 
-export type ItemsFilter = "all" | "active" | "retired" | "out";
+export type ItemsFilter = "all" | "active" | "retired" | "out" | "needs_confirmation";
 type Filter = ItemsFilter;
 
 const EMPTY_COPY: Record<Filter, { title: string; hint: string }> = {
   all: { title: "No items yet", hint: "Add your first one to get started." },
   active: { title: "No active items", hint: "Everything's retired, or nothing's been added yet." },
   retired: { title: "No retired items", hint: "Retired pieces will show up here." },
-  out: { title: "Nothing currently out", hint: "Items with an active rental will show up here." },
+  out: { title: "Nothing currently out", hint: "Items with a confirmed pickup will show up here." },
+  needs_confirmation: {
+    title: "Nothing needs confirmation",
+    hint: "Items past their pickup date but never confirmed will show up here.",
+  },
 };
 
 export function ItemsList({
@@ -46,6 +50,7 @@ export function ItemsList({
     if (filter === "active") result = result.filter((i) => i.is_active);
     if (filter === "retired") result = result.filter((i) => !i.is_active);
     if (filter === "out") result = result.filter((i) => i.currently_out);
+    if (filter === "needs_confirmation") result = result.filter((i) => i.pickup_overdue);
 
     const term = search.trim().toLowerCase();
     if (term) {
