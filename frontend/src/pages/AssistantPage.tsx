@@ -8,7 +8,13 @@ import "../styles/shared.css";
 // overdue, outstanding dues, most-booked items) — see
 // backend/src/tools/index.ts. Tapping one sends immediately (same as a
 // per-reply suggestion chip below) rather than just filling the input.
+// "What can you help me with?" leads the list rather than following it —
+// for a first-time non-technical user this orientation question matters
+// more than any single data question, so it shouldn't require scrolling
+// past the others to find. Answered directly by SYSTEM_PROMPT's own
+// capabilities paragraph (backend/src/routes/chat.ts), not a tool call.
 const STARTER_QUESTIONS = [
+  "What can you help me with?",
   "Catch me up on today",
   "What's overdue this week?",
   "Who owes us money?",
