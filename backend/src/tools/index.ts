@@ -7,7 +7,7 @@ import {
   getFinancialSummary,
   getOutstandingDues,
 } from "../lib/reportsData.js";
-import { getDailyBriefingData } from "../lib/dashboardData.js";
+import { getDailyBriefingData, getUpcomingPickupsForDays } from "../lib/dashboardData.js";
 import { getItemCharges } from "../routes/itemCharges.js";
 import { getBookingDetail } from "../routes/bookings.js";
 import { getPaymentsForBooking } from "../routes/payments.js";
@@ -84,6 +84,15 @@ export const toolDefinitions = [
     input_schema: { type: "object" as const, properties: {} },
   },
   {
+    name: "get_upcoming_pickups",
+    description:
+      "Items scheduled to go OUT to a customer soon — still status='booked', not yet picked up/handed over. Use this for any question about items going out, being picked up, or being handed over next (e.g. 'what's going out next', 'what needs to be picked up today/this week', 'what am I handing over'). This is the OPPOSITE of get_upcoming_returns/get_overdue_rentals/get_daily_briefing, which are all about items coming BACK to the shop — never reach for those on a 'going out' question, even if no other tool seems to fit. Covers both rentals and sales, since a sale customer collecting their purchase is also a pickup.",
+    input_schema: {
+      type: "object" as const,
+      properties: { days_ahead: { type: "number", description: "How many days ahead to look. Defaults to 7." } },
+    },
+  },
+  {
     name: "get_customer_summary",
     description: "Total customer count, broken down by type (regular/influencer/mua), plus the full customer list.",
     input_schema: { type: "object" as const, properties: {} },
@@ -130,7 +139,7 @@ export const toolDefinitions = [
   {
     name: "get_daily_briefing",
     description:
-      "A single combined status check: today's returns due, currently overdue rentals (flagging which ones have the next customer already waiting), and the current outstanding-payment total and count.",
+      "A single combined status check: today's returns due, currently overdue rentals (flagging which ones have the next customer already waiting), and the current outstanding-payment total and count. This is about items coming BACK only — for anything about items going OUT to a customer (pickups, hand-overs), use get_upcoming_pickups instead, even for a general 'catch me up' question that turns out to be about pickups.",
     input_schema: { type: "object" as const, properties: {} },
   },
   {
@@ -201,6 +210,10 @@ export async function runTool(name: string, input: Record<string, unknown>) {
       const { data, error } = await supabase.from("overdue_rentals").select("*");
       if (error) throw error;
       return data;
+    }
+    case "get_upcoming_pickups": {
+      const daysAhead = Number(input.days_ahead ?? 7);
+      return await getUpcomingPickupsForDays(daysAhead);
     }
     case "get_customer_summary": {
       const { data, error } = await supabase.from("customers").select("name, phone, customer_type").order("name");

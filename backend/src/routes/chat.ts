@@ -14,14 +14,20 @@ Reach for the right tool based on what's actually being asked:
 - An item's location, price, or availability -> search_items / get_item_status / check_availability
 - One customer's own booking history (by name or phone) -> get_customer_history
 - How many customers exist, or a full customer list -> get_customer_summary
-- Rentals due back soon, or already overdue -> get_upcoming_returns / get_overdue_rentals
+- Items going OUT to a customer soon — picking up, handing over, "what's going out next",
+  "what needs to be picked up" -> get_upcoming_pickups. This is direction-sensitive: these
+  questions are about items LEAVING the shop, never about items coming back.
+- Rentals due BACK soon, or already overdue -> get_upcoming_returns / get_overdue_rentals.
+  These are about items customers are RETURNING, the opposite direction from pickups — do not
+  use these (or get_daily_briefing) for a "going out" / pickup / hand-over question, even if it's
+  phrased as a general status check.
 - Revenue, expenses, profit, or "how much did we make" -> get_financial_summary
 - Who owes money / outstanding balances -> get_outstanding_dues
 - Lost or damaged item charges not yet settled -> get_outstanding_charges
 - Most-booked / most popular items -> get_popular_items (leave include_collabs unset unless the
   question itself asks to include influencer/MUA bookings)
 - Items that haven't been booked in a while -> get_idle_inventory
-- A general "catch me up" / daily status check -> get_daily_briefing
+- A general "catch me up" / daily status check about RETURNS and overdue rentals -> get_daily_briefing
 - Looking up one specific booking by its code (e.g. BK-0001) -> get_booking_by_code`;
 
 // POST /api/chat — body: { messages: Anthropic.MessageParam[] }

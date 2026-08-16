@@ -1,5 +1,5 @@
 import { supabase } from "./supabase.js";
-import { istToday, istWeekEnd } from "./dates.js";
+import { istToday, istWeekEnd, istDaysAhead } from "./dates.js";
 import { ACTIVE_STATUSES } from "../routes/bookings.js";
 
 // Shared by dashboard.ts (GET /api/dashboard/summary, which also adds the
@@ -87,57 +87,71 @@ export async function getDailyBriefingData() {
   };
 }
 
-// Deliberately separate from getDailyBriefingData() above rather than
-// folded into it — that function's shape is shared with the AI assistant's
-// get_daily_briefing tool, and this is a new, distinct concern ("what to
-// prep for" vs. "what's due back") with no reason to touch that existing
-// contract. Only status='booked' — an item already 'out' has already been
-// picked up and needs no further prep; a cancelled one was never really
-// due. No type filter: applies to both rental and sale line items, since a
-// sale customer collecting their purchase still needs it prepped and
-// ready, same as a rental customer. Deliberately excludes the overdue/
-// unconfirmed concept (pickup_date in the past, still 'booked') — that's a
-// different, already-flagged idea for later, not folded in here.
-export async function getUpcomingPickupsData() {
-  const today = istToday();
-  const weekEnd = istWeekEnd();
+const PICKUP_SELECT = "*, bookings(booking_code, customer_id), items(item_code, name, item_type, tracking_type, components, photos)";
 
-  const PICKUP_SELECT = "*, bookings(booking_code, customer_id), items(item_code, name, item_type, tracking_type, components, photos)";
+// The one shared primitive behind every "what's going out" view — the
+// Dashboard's fixed today/this-week windows below AND the AI assistant's
+// flexible get_upcoming_pickups(days_ahead) both call this, rather than
+// either reimplementing the query. Only status='booked' — an item already
+// 'out' has already been picked up and needs no further prep; a cancelled
+// one was never really due. No type filter: applies to both rental and
+// sale line items, since a sale customer collecting their purchase still
+// needs it prepped and ready, same as a rental customer. Deliberately
+// excludes the overdue/unconfirmed concept (pickup_date in the past, still
+// 'booked') — that's a different, already-flagged idea for later, not
+// folded in here. Bounds are both inclusive.
+async function getPickupsInRange(fromDate: string, toDate: string) {
+  const { data: rows, error } = await supabase
+    .from("booking_items")
+    .select(PICKUP_SELECT)
+    .eq("status", "booked")
+    .gte("pickup_date", fromDate)
+    .lte("pickup_date", toDate)
+    .order("pickup_date")
+    .order("id");
+  if (error) throw error;
 
-  const [{ data: todayRows, error: todayError }, { data: weekRows, error: weekError }] = await Promise.all([
-    supabase.from("booking_items").select(PICKUP_SELECT).eq("status", "booked").eq("pickup_date", today).order("id"),
-    // Strictly AFTER today through the end of this calendar week — today's
-    // own pickups are already covered by pickups_due_today above and must
-    // not also appear here.
-    supabase
-      .from("booking_items")
-      .select(PICKUP_SELECT)
-      .eq("status", "booked")
-      .gt("pickup_date", today)
-      .lte("pickup_date", weekEnd)
-      .order("pickup_date")
-      .order("id"),
-  ]);
-  if (todayError) throw todayError;
-  if (weekError) throw weekError;
-
-  const allRows = [...(todayRows ?? []), ...(weekRows ?? [])];
   const customerIds = [
-    ...new Set(allRows.map((r) => (r as unknown as { bookings: { customer_id: string } }).bookings.customer_id)),
-  ];
+    ...new Set((rows ?? []).map((r) => (r as unknown as { bookings: { customer_id: string } | null }).bookings?.customer_id)),
+  ].filter((id): id is string => !!id);
   const { data: customers, error: customersError } = customerIds.length
     ? await supabase.from("customers").select("id, name, phone").in("id", customerIds)
     : { data: [], error: null };
   if (customersError) throw customersError;
   const customersById = new Map((customers ?? []).map((c) => [c.id, c]));
 
-  function attachCustomer(r: Record<string, unknown>) {
+  return (rows ?? []).map((r) => {
     const row = r as unknown as { bookings: { customer_id: string } | null };
     return { ...r, customers: row.bookings ? (customersById.get(row.bookings.customer_id) ?? null) : null };
-  }
+  });
+}
 
-  return {
-    pickups_due_today: (todayRows ?? []).map(attachCustomer),
-    pickups_due_this_week: (weekRows ?? []).map(attachCustomer),
-  };
+// Deliberately separate from getDailyBriefingData() above rather than
+// folded into it — that function's shape is shared with the AI assistant's
+// get_daily_briefing tool, and this is a new, distinct concern ("what to
+// prep for" vs. "what's due back") with no reason to touch that existing
+// contract.
+export async function getUpcomingPickupsData() {
+  const today = istToday();
+  const weekEnd = istWeekEnd();
+
+  const [pickups_due_today, pickups_due_this_week] = await Promise.all([
+    getPickupsInRange(today, today),
+    // Strictly AFTER today through the end of this calendar week — today's
+    // own pickups are already covered by pickups_due_today and must not
+    // also appear here. getPickupsInRange's own bounds are inclusive on
+    // both ends, so "after today" is expressed as istDaysAhead(1), not a
+    // second exclusive-vs-inclusive variant of the shared query.
+    getPickupsInRange(istDaysAhead(1), weekEnd),
+  ]);
+
+  return { pickups_due_today, pickups_due_this_week };
+}
+
+// The AI assistant's flexible counterpart — "next N days" rather than the
+// Dashboard's fixed today/this-week windows, but the exact same underlying
+// query (getPickupsInRange) either way. Mirrors get_upcoming_returns'
+// existing days_ahead parameter shape.
+export async function getUpcomingPickupsForDays(daysAhead: number) {
+  return getPickupsInRange(istToday(), istDaysAhead(daysAhead));
 }

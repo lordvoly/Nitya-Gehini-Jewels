@@ -63,6 +63,15 @@ export function istDaysAgo(days: number): string {
   return today.toLocaleDateString("en-CA");
 }
 
+/**
+ * `days` days after today in IST, as YYYY-MM-DD — the forward-looking
+ * counterpart to istDaysAgo(), for a flexible "next N days" window (e.g.
+ * the AI assistant's get_upcoming_pickups(days_ahead)).
+ */
+export function istDaysAhead(days: number): string {
+  return istDaysAgo(-days);
+}
+
 const BOOKING_TIME_RANGE_DAYS: Record<string, number> = {
   week: 7,
   month: 30,
