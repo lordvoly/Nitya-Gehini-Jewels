@@ -18,11 +18,13 @@ export function BookingDetail({
   onBack,
   onEdit,
   onProcessReturn,
+  onConfirmPickup,
 }: {
   bookingId: string;
   onBack: () => void;
   onEdit: () => void;
   onProcessReturn: (booking: Booking, item: BookingItem) => void;
+  onConfirmPickup: (booking: Booking, item: BookingItem) => void;
 }) {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
@@ -116,8 +118,9 @@ export function BookingDetail({
 
             <h2>Items ({booking.booking_items.length})</h2>
             {booking.booking_items.map((bi) => {
-              const itemPill = bookingItemStatusPill(bi.status);
+              const itemPill = bookingItemStatusPill(bi);
               const canReturn = bi.type === "rental" && (bi.status === "booked" || bi.status === "out");
+              const canConfirmPickup = bi.status === "booked";
               return (
                 <div className="line-item-card" key={bi.id}>
                   <div className="line-item-card-header">
@@ -131,6 +134,7 @@ export function BookingDetail({
                     <li>
                       Dates: {formatDateDisplay(bi.pickup_date)}
                       {bi.return_date ? ` → ${formatDateDisplay(bi.return_date)}` : ""}
+                      {bi.actual_pickup_date ? ` (picked up ${formatDateDisplay(bi.actual_pickup_date)})` : ""}
                       {bi.actual_return_date ? ` (returned ${formatDateDisplay(bi.actual_return_date)})` : ""}
                     </li>
                     <li>Price charged: ₹{bi.price_charged}</li>
@@ -181,11 +185,18 @@ export function BookingDetail({
                     </div>
                   )}
 
-                  {canReturn && (
+                  {(canConfirmPickup || canReturn) && (
                     <div className="wizard-actions">
-                      <button className="btn-secondary" onClick={() => onProcessReturn(booking, bi)}>
-                        Process Return
-                      </button>
+                      {canConfirmPickup && (
+                        <button className="btn-secondary" onClick={() => onConfirmPickup(booking, bi)}>
+                          Confirm Pickup
+                        </button>
+                      )}
+                      {canReturn && (
+                        <button className="btn-secondary" onClick={() => onProcessReturn(booking, bi)}>
+                          Process Return
+                        </button>
+                      )}
                     </div>
                   )}
                 </div>

@@ -9,11 +9,15 @@ export type BookingItemStatus = "booked" | "out" | "returned" | "cancelled";
 export type BookingComputedStatus = "active" | "completed" | "cancelled";
 
 // BookingsList's category filter — item-status buckets, distinct from
-// BookingComputedStatus (a per-booking rollup). "out"/"booked" mirror the
-// same pickup_date-vs-today split the Items list's "Currently Out"/"Booked"
-// badges already use. A booking matches a bucket if ANY of its items does
-// (except "cancelled", which is the whole booking's computed status).
-export type BookingCategory = "all" | "out" | "booked" | "completed" | "cancelled";
+// BookingComputedStatus (a per-booking rollup). "out" means explicitly
+// confirmed (status='out', via Confirm Pickup) — mirrors the Items list's
+// "Out" badge exactly. "needs_confirmation" is the separate, distinct
+// bucket for a rental still 'booked' whose pickup_date has already
+// passed but was never confirmed — mirrors the Items list's "Pickup
+// Overdue — Not Confirmed" badge. A booking matches a bucket if ANY of its
+// items does (except "cancelled", which is the whole booking's computed
+// status).
+export type BookingCategory = "all" | "out" | "needs_confirmation" | "booked" | "completed" | "cancelled";
 // Which date field BookingsList's time-range filter/sort applies to —
 // independent of category above.
 export type BookingDateBasis = "pickup" | "booking";
@@ -54,6 +58,7 @@ export interface BookingItem {
   type: BookingItemType;
   pickup_date: string;
   return_date: string | null;
+  actual_pickup_date: string | null;
   actual_return_date: string | null;
   status: BookingItemStatus;
   price_charged: number;
@@ -69,6 +74,10 @@ export interface BookingItem {
   items: BookingItemSummary | null;
   previous_booking_item?: BookingChainLink | null;
   future_booking_items?: BookingChainLink[];
+  // Computed server-side (bookings.ts's attachChains()), never stored —
+  // true only for a rental still 'booked' whose pickup_date has already
+  // passed. Always present on both GET /api/bookings and GET /:id.
+  pickup_overdue: boolean;
   // Not a DB column — present only when the backend has a non-blocking
   // heads-up for the operator (e.g. an incomplete return checklist).
   warning?: string;
@@ -207,6 +216,22 @@ export interface ReturnPayload {
 
 export function processReturn(bookingId: string, itemId: string, payload: ReturnPayload) {
   return apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${itemId}/return`, {
+    method: "POST",
+    body: JSON.stringify(payload),
+  });
+}
+
+// Payment fields are all optional together — omit amount (or send 0) to
+// confirm pickup with nothing collected right now. When amount > 0, method
+// is required (validated server-side before anything is written).
+export interface ConfirmPickupPayload {
+  amount?: number;
+  method?: PaymentMethod;
+  payment_date?: string | null;
+}
+
+export function confirmPickup(bookingId: string, itemId: string, payload: ConfirmPickupPayload) {
+  return apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${itemId}/confirm-pickup`, {
     method: "POST",
     body: JSON.stringify(payload),
   });

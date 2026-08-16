@@ -1,5 +1,5 @@
 import type { ItemStatus } from "./items";
-import type { BookingComputedStatus, BookingItemStatus } from "./bookings";
+import type { BookingComputedStatus, BookingItemStatus, BookingItemType } from "./bookings";
 
 export interface PillInfo {
   className: string;
@@ -22,17 +22,31 @@ export function itemStatusPill(status: ItemStatus): PillInfo {
   }
 }
 
-// A single booking_items row's own status (booked/out/returned/cancelled).
-export function bookingItemStatusPill(status: BookingItemStatus): PillInfo {
-  switch (status) {
-    case "booked":
-      return { className: "pill-active", label: "Booked" };
-    case "out":
-      return { className: "pill-active", label: "Out" };
+// A single booking_items row's own status (booked/out/returned/cancelled) —
+// takes the whole item (not just status) because "booked" now splits three
+// ways depending on type and whether pickup is overdue-but-unconfirmed.
+// pickup_overdue is computed server-side (bookings.ts's attachChains()) —
+// never derived here from a client-side "today", per this app's IST rule.
+// Confirmed 'out' is deliberately never "attention" styling — that's
+// reserved for the one state that genuinely needs a look (not yet
+// confirmed, past due); a confirmed pickup is a settled, non-urgent state,
+// same reasoning as itemStatusPill's own good/neutral/attention split.
+export function bookingItemStatusPill(bi: {
+  status: BookingItemStatus;
+  type: BookingItemType;
+  pickup_overdue?: boolean;
+}): PillInfo {
+  switch (bi.status) {
     case "returned":
       return { className: "pill-good", label: "Returned" };
     case "cancelled":
       return { className: "pill-neutral", label: "Cancelled" };
+    case "out":
+      return bi.type === "sale" ? { className: "pill-neutral", label: "Picked Up" } : { className: "pill-neutral", label: "Out" };
+    case "booked":
+      if (bi.type === "sale") return { className: "pill-active", label: "Awaiting Pickup" };
+      if (bi.pickup_overdue) return { className: "pill-attention", label: "Pickup Overdue — Not Confirmed" };
+      return { className: "pill-active", label: "Booked" };
   }
 }
 

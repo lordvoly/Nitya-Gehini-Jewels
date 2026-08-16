@@ -36,15 +36,19 @@ export interface Item {
   created_at: string;
   updated_at: string;
   // Computed live from active rental booking_items, never stored (a unique
-  // item's own `status` is deliberately never flipped for rentals — see
-  // backend/src/lib/itemsData.ts). Only GET /api/items (the list) includes
-  // these; single-item write responses (create/update/retire/reactivate)
-  // don't recompute them, so treat a missing value as "false" rather than
-  // as an authoritative answer. Mutually exclusive per active rental:
-  // currently_out means pickup day has already arrived (physically out
-  // today); currently_booked means it's reserved but pickup hasn't
-  // happened yet. An item with more than one active rental could show both.
+  // item's own `status` is deliberately never flipped for rentals or on
+  // pickup confirmation — see backend/src/lib/itemsData.ts). Only
+  // GET /api/items (the list) includes these; single-item write responses
+  // (create/update/retire/reactivate) don't recompute them, so treat a
+  // missing value as "false" rather than as an authoritative answer.
+  // Mutually exclusive per active rental: currently_out means pickup was
+  // explicitly confirmed (Confirm Pickup); pickup_overdue means pickup day
+  // has already arrived but nobody confirmed it yet — a distinct "needs a
+  // look" state, not folded into currently_out; currently_booked means
+  // it's reserved but pickup day hasn't arrived. An item with more than one
+  // active rental could show more than one of these at once.
   currently_out?: boolean;
+  pickup_overdue?: boolean;
   currently_booked?: boolean;
 }
 

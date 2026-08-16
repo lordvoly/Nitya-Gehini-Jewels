@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
 import { istToday, istRangeForPreset } from "../lib/dates.js";
+import { recordPayment } from "../lib/payments.js";
 import type { AuthedRequest } from "../middleware/auth.js";
 
 export const bookingsRouter = Router();
@@ -19,6 +20,8 @@ interface ChainableBookingItem {
   id: string;
   item_id: string;
   pickup_date: string;
+  type: string;
+  status: string;
   items?: { tracking_type: string } | null;
 }
 
@@ -38,11 +41,32 @@ interface BookingChainLink {
 // can be active on it at once) — see the fuller comment on GET /:id below.
 async function attachChains<T extends ChainableBookingItem>(
   items: T[],
-): Promise<(T & { previous_booking_item: BookingChainLink | null; future_booking_items: BookingChainLink[] })[]> {
+): Promise<
+  (T & {
+    previous_booking_item: BookingChainLink | null;
+    future_booking_items: BookingChainLink[];
+    // True only for a rental still sitting in 'booked' whose pickup_date
+    // has already passed — i.e. date-inference's fallback answer for "is
+    // this actually out" when nobody has explicitly confirmed pickup via
+    // POST .../confirm-pickup. Once status flips to 'out' this is always
+    // false, regardless of pickup_date — the explicit signal always wins
+    // over the date-based fallback that produced it, per the task's
+    // "date-based detection as a fallback for anything not yet confirmed"
+    // instruction. Computed here (not stored) so it's identical wherever
+    // this function's output is used — GET / and GET /:id both flow
+    // through it, which is what keeps BookingsList/BookingDetail agreeing
+    // with each other and with the Items page's own pickup_overdue set
+    // (itemsData.ts's getItemAvailability(), computed the same way).
+    pickup_overdue: boolean;
+  })[]
+> {
+  const today = istToday();
   return Promise.all(
     items.map(async (bi) => {
+      const pickup_overdue = bi.type === "rental" && bi.status === "booked" && bi.pickup_date <= today;
+
       if (bi.items?.tracking_type !== "unique") {
-        return { ...bi, previous_booking_item: null, future_booking_items: [] };
+        return { ...bi, previous_booking_item: null, future_booking_items: [], pickup_overdue };
       }
 
       const { data: sequence, error: sequenceError } = await supabase
@@ -89,6 +113,7 @@ async function attachChains<T extends ChainableBookingItem>(
             }
           : null,
         future_booking_items: futureBookingItems,
+        pickup_overdue,
       };
     }),
   );
@@ -188,34 +213,47 @@ bookingsRouter.get("/", async (req, res) => {
     result = result.filter((b) => b.computed_status === req.query.computed_status);
   }
 
-  // ?category=out|booked|completed|cancelled — a booking matches if ANY of
-  // its items falls in that bucket (a family transaction can have items in
-  // genuinely different states at once — one returned, one still out).
-  // "cancelled" is the one exception: it's the whole booking's computed
-  // status (every item cancelled), not a per-item OR, since that's what
-  // "cancelled" already unambiguously means booking-wide everywhere else in
-  // this app. "out"/"booked" reuse the exact same pickup_date-vs-today split
-  // itemsData.ts's getItemAvailability() already uses for the Items list's
-  // "Currently Out"/"Booked" badges — computed here in JS off the already-
-  // fetched booking_items rather than a second query, same reasoning as the
-  // computed_status filter just above.
+  // ?category=out|booked|needs_confirmation|completed|cancelled — a booking
+  // matches if ANY of its items falls in that bucket (a family transaction
+  // can have items in genuinely different states at once — one returned,
+  // one still out). "cancelled" is the one exception: it's the whole
+  // booking's computed status (every item cancelled), not a per-item OR,
+  // since that's what "cancelled" already unambiguously means booking-wide
+  // everywhere else in this app.
+  //
+  // "out" now means explicitly confirmed (status='out', set only by
+  // POST .../confirm-pickup) — no longer pure pickup_date-vs-today
+  // inference. "needs_confirmation" is the new, separate bucket for exactly
+  // the case that inference used to silently fold into "out": a rental
+  // still 'booked' whose pickup_date has already passed, i.e. bi.
+  // pickup_overdue (computed once in attachChains() above and reused here,
+  // not recomputed) — the no-show/missed-confirmation case this bucket
+  // exists to surface on its own. "booked" is now strictly upcoming:
+  // 'booked' status with a pickup_date still in the future. This is the
+  // same three-way split itemsData.ts's getItemAvailability() uses for the
+  // Items list's Out/Needs-Confirmation/Booked badges — computed here in JS
+  // off the already-fetched booking_items rather than a second query, same
+  // reasoning as the computed_status filter just above.
   interface CategoryBookingItem {
     type: string;
     status: string;
     pickup_date: string;
+    pickup_overdue: boolean;
   }
 
   const category = typeof req.query.category === "string" ? req.query.category : "all";
   if (category !== "all") {
-    const today = istToday();
     result = result.filter((b) => {
       if (category === "cancelled") return b.computed_status === "cancelled";
       const items = (b.booking_items ?? []) as unknown as CategoryBookingItem[];
       if (category === "out") {
-        return items.some((bi) => bi.type === "rental" && ACTIVE_STATUSES.includes(bi.status) && bi.pickup_date <= today);
+        return items.some((bi) => bi.type === "rental" && bi.status === "out");
+      }
+      if (category === "needs_confirmation") {
+        return items.some((bi) => bi.pickup_overdue);
       }
       if (category === "booked") {
-        return items.some((bi) => bi.type === "rental" && ACTIVE_STATUSES.includes(bi.status) && bi.pickup_date > today);
+        return items.some((bi) => bi.type === "rental" && bi.status === "booked" && !bi.pickup_overdue);
       }
       if (category === "completed") {
         return items.some((bi) => bi.status !== "cancelled" && (bi.type === "sale" || bi.status === "returned"));
@@ -957,6 +995,80 @@ bookingsRouter.patch("/:bookingId/items/:itemId", async (req, res) => {
   const { data, error } = await supabase.from("booking_items").update(update).eq("id", bookingItem.id).select().single();
   if (error) return res.status(400).json({ error: error.message });
   res.status(200).json(data);
+});
+
+// POST /api/bookings/:bookingId/items/:itemId/confirm-pickup — the first
+// real, explicit status='out' transition this app has ever had. Until now
+// "currently out" was pure inference (pickup_date <= today), which is what
+// itemsData.ts/attachChains()'s pickup_overdue still falls back to for
+// anything not yet confirmed — this endpoint is what actually clears that
+// fallback for a given item by recording a real event: an operator
+// confirming the item has genuinely left the shop (or, for a sale,
+// genuinely changed hands) right now. Applies to both rental AND sale
+// items — a sale has no return step, but "has the customer actually taken
+// it yet" is still a real, useful question for one too.
+//
+// Deliberately does NOT flip items.status for a unique item (e.g. to
+// 'rented_out') — same reasoning as booking creation already documented at
+// length above POST / for rentals: a unique item can have several
+// legitimate future non-overlapping bookings, and checkItemConflict only
+// ever checks item.status === 'available'. Flipping it here would wrongly
+// block every one of those future bookings the same way flipping it at
+// creation would. Per-booking status (booking_items.status), not
+// items.status, is what tracks whether a specific booking's item is out.
+//
+// Payment recording is optional and validated up front (amount+method
+// together, before any write) — same "hard-validate before touching the
+// DB" pattern POST / already uses for its advance payment, since an
+// operator who typed in an amount should never have it silently dropped.
+// The actual insert, once validated, is non-blocking on failure (same
+// warning-not-rollback pattern as every other secondary write in this
+// file) — the pickup confirmation itself already succeeded and shouldn't
+// be undone by a payments-table hiccup.
+bookingsRouter.post("/:bookingId/items/:itemId/confirm-pickup", async (req: AuthedRequest, res) => {
+  const { data: bookingItem, error: fetchError } = await supabase
+    .from("booking_items")
+    .select("*")
+    .eq("booking_id", req.params.bookingId)
+    .eq("item_id", req.params.itemId)
+    .single();
+  if (fetchError || !bookingItem) return res.status(404).json({ error: "Booking item not found" });
+
+  if (bookingItem.status !== "booked") {
+    return res.status(409).json({ error: `This item is already '${bookingItem.status}' and can't be confirmed for pickup` });
+  }
+
+  const { amount, method, payment_date } = req.body ?? {};
+  const paymentAmount = amount != null ? Number(amount) : 0;
+  if (paymentAmount > 0 && !method) {
+    return res.status(400).json({ error: "method is required when recording a payment" });
+  }
+
+  const { data, error } = await supabase
+    .from("booking_items")
+    .update({ status: "out", actual_pickup_date: istToday() })
+    .eq("id", bookingItem.id)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+
+  let warning: string | undefined;
+  if (paymentAmount > 0) {
+    try {
+      await recordPayment({
+        bookingId: req.params.bookingId,
+        amount: paymentAmount,
+        method,
+        paymentDate: payment_date,
+        notes: null,
+        recordedBy: req.user?.id ?? null,
+      });
+    } catch {
+      warning = "Pickup confirmed, but the payment couldn't be recorded — add it manually from the booking's detail page.";
+    }
+  }
+
+  res.status(200).json({ ...data, warning });
 });
 
 // POST /api/bookings/:bookingId/items/:itemId/return — returns processing,

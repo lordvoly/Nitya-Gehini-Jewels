@@ -400,7 +400,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
         <h2>Items ({booking.booking_items.length})</h2>
         {booking.booking_items.map((bi) => {
           const state = itemEdits[bi.id];
-          const pill = bookingItemStatusPill(bi.status);
+          const pill = bookingItemStatusPill(bi);
           const editable = bi.status === "booked" || bi.status === "out";
           if (!state) return null;
 

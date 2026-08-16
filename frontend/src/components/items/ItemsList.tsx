@@ -203,8 +203,13 @@ export function ItemsList({
                           <span className={`pill ${pill.className}`}>{pill.label}</span>
                         )}
                         {item.currently_out && (
-                          <Link to={`/bookings?item=${item.id}`} className="pill pill-attention pill-link">
+                          <Link to={`/bookings?item=${item.id}`} className="pill pill-neutral pill-link">
                             Out
+                          </Link>
+                        )}
+                        {item.pickup_overdue && (
+                          <Link to={`/bookings?item=${item.id}`} className="pill pill-attention pill-link">
+                            Pickup Overdue — Not Confirmed
                           </Link>
                         )}
                         {item.currently_booked && (

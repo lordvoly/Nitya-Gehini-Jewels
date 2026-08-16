@@ -76,7 +76,7 @@ export default function ReceiptPage() {
         <tbody>
           {booking.booking_items.map((bi) => {
             const cancelled = bi.status === "cancelled";
-            const pill = bookingItemStatusPill(bi.status);
+            const pill = bookingItemStatusPill(bi);
             return (
               <tr key={bi.id} className={cancelled ? "receipt-item-cancelled" : undefined}>
                 <td data-label="Item">

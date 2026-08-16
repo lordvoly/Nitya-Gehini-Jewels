@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
-import { istToday } from "../lib/dates.js";
+import { recordPayment } from "../lib/payments.js";
 import type { AuthedRequest } from "../middleware/auth.js";
 
 export const paymentsRouter = Router();
@@ -44,25 +44,17 @@ paymentsRouter.get("/", async (req, res) => {
 // creation flow).
 paymentsRouter.post("/", async (req: AuthedRequest, res) => {
   const { booking_id, amount, method, payment_date, notes } = req.body ?? {};
-  if (!booking_id || amount == null || !method) {
-    return res.status(400).json({ error: "booking_id, amount, and method are required" });
-  }
-  if (amount <= 0) {
-    return res.status(400).json({ error: "amount must be greater than 0" });
-  }
-  const { data, error } = await supabase
-    .from("payments")
-    .insert({
-      booking_id,
+  try {
+    const data = await recordPayment({
+      bookingId: booking_id,
       amount,
       method,
-      type: "payment",
-      payment_date: payment_date || istToday(),
-      notes: notes?.trim() || null,
-      recorded_by: req.user?.id ?? null,
-    })
-    .select()
-    .single();
-  if (error) return res.status(400).json({ error: error.message });
-  res.status(201).json(data);
+      paymentDate: payment_date,
+      notes,
+      recordedBy: req.user?.id ?? null,
+    });
+    res.status(201).json(data);
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Failed to record payment" });
+  }
 });

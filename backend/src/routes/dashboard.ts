@@ -70,7 +70,14 @@ dashboardRouter.get("/summary", async (_req, res) => {
     if (catalogItemsError) throw catalogItemsError;
     if (retiredItemsError) throw retiredItemsError;
     if (customersError) throw customersError;
-    const items_out = availability.currentlyOut.size;
+    // "Out" here still means the Dashboard's original, broader sense —
+    // physically out of the shop right now, whether or not pickup was
+    // explicitly confirmed — so this stat's meaning doesn't silently shrink
+    // now that currentlyOut has narrowed to mean confirmed-only (Confirm
+    // Pickup). pickupOverdue (booked, pickup_date passed, never confirmed)
+    // still counts as "out" for this purpose; it just also gets its own
+    // distinct badge/category elsewhere so it can be found and confirmed.
+    const items_out = availability.currentlyOut.size + availability.pickupOverdue.size;
 
     res.json({
       // Server IST date, echoed back so the frontend never has to compute

@@ -14,6 +14,7 @@ import { formatDateDisplay } from "../../lib/dates";
 const CATEGORY_LABELS: Record<BookingCategory, string> = {
   all: "All",
   out: "Currently Out",
+  needs_confirmation: "Needs Confirmation",
   booked: "Booked",
   completed: "Completed",
   cancelled: "Cancelled",
@@ -21,8 +22,12 @@ const CATEGORY_LABELS: Record<BookingCategory, string> = {
 
 const CATEGORY_EMPTY_COPY: Record<BookingCategory, { title: string; hint: string }> = {
   all: { title: "No bookings yet", hint: "Create your first rental or sale to see it here." },
-  out: { title: "Nothing currently out", hint: "Bookings with an item past its pickup date will show up here." },
-  booked: { title: "Nothing booked ahead", hint: "Bookings with an item not yet picked up will show up here." },
+  out: { title: "Nothing currently out", hint: "Bookings with a confirmed pickup will show up here." },
+  needs_confirmation: {
+    title: "Nothing needs confirmation",
+    hint: "Bookings with an item past its pickup date but never confirmed will show up here.",
+  },
+  booked: { title: "Nothing booked ahead", hint: "Bookings with an item not yet due for pickup will show up here." },
   completed: { title: "No completed bookings", hint: "Bookings with a returned or sold item will show up here." },
   cancelled: { title: "No cancelled bookings", hint: "Cancelled bookings will show up here." },
 };
@@ -41,6 +46,7 @@ const TIME_RANGE_LABELS: Record<BookingTimeRange, string> = {
 // .data-table pattern; this is the one list that doesn't.
 export function BookingsList({
   onProcessReturn,
+  onConfirmPickup,
   onViewDetail,
   onEditBooking,
   filterItemId = null,
@@ -49,6 +55,7 @@ export function BookingsList({
   readOnly = false,
 }: {
   onProcessReturn?: (booking: Booking, item: BookingItem) => void;
+  onConfirmPickup?: (booking: Booking, item: BookingItem) => void;
   onViewDetail: (bookingId: string) => void;
   onEditBooking?: (bookingId: string) => void;
   // Deep link from the Items list's "Out"/"Booked" badges: show only this
@@ -269,8 +276,9 @@ export function BookingsList({
 
             <div className="booking-card-items">
               {b.booking_items.map((bi) => {
-                const itemPill = bookingItemStatusPill(bi.status);
+                const itemPill = bookingItemStatusPill(bi);
                 const canReturn = bi.type === "rental" && (bi.status === "booked" || bi.status === "out");
+                const canConfirmPickup = bi.status === "booked";
                 return (
                   <div className="booking-card-item" key={bi.id}>
                     <div className="booking-card-item-info">
@@ -297,6 +305,11 @@ export function BookingsList({
                     </div>
                     <div className="booking-card-item-actions">
                       <span className={`pill ${itemPill.className}`}>{itemPill.label}</span>
+                      {!readOnly && canConfirmPickup && onConfirmPickup && (
+                        <button className="btn-secondary" onClick={() => onConfirmPickup(b, bi)}>
+                          Confirm Pickup
+                        </button>
+                      )}
                       {!readOnly && canReturn && onProcessReturn && (
                         <button className="btn-secondary" onClick={() => onProcessReturn(b, bi)}>
                           Process Return
