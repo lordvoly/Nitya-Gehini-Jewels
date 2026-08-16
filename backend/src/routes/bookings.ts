@@ -13,7 +13,10 @@ export const bookingsRouter = Router();
 // reports, tools) still wants exactly this list.
 export const ACTIVE_STATUSES = ["booked", "out"];
 
-const ITEMS_EMBED = "item_code, name, item_type, tracking_type, components";
+// photos added for the thumbnail on each booking-item row (Feature B) —
+// fetched in the same embed every booking_items query already does, no
+// separate per-row photo query.
+const ITEMS_EMBED = "item_code, name, item_type, tracking_type, components, photos";
 const BOOKING_ITEMS_EMBED = `*, items(${ITEMS_EMBED})`;
 
 interface ChainableBookingItem {

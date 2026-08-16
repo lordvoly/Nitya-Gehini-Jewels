@@ -1405,6 +1405,40 @@ a.stat-card:active {
   gap: 8px;
 }
 
+/* Groups the thumbnail + name together on the left of the header, so
+   .line-item-card-header's own space-between still puts the status pill
+   cleanly on the right — without this wrapper, a 3rd flex child (the
+   thumbnail) would spread evenly across the whole row instead of sitting
+   next to the name it belongs with. */
+.line-item-title-group {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.line-item-thumb-link {
+  display: block;
+  flex: 0 0 auto;
+}
+
+.line-item-thumb {
+  width: 40px;
+  height: 40px;
+  object-fit: cover;
+  border-radius: 6px;
+  display: block;
+}
+
+.line-item-thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ivory);
+  border: 1px solid var(--line);
+  font-size: 16px;
+}
+
 /* Only shown on a line whose type doesn't match the booking's primary
    choice (added via "+ Add a [X] item instead") — text-transform reset
    since the parent h3 is uppercase and every other .pill in the app reads
@@ -1965,4 +1999,36 @@ a.stat-card:active {
   body {
     background: #fff;
   }
+}
+
+/* ── Item Detail page ─────────────────────────────────────────────────── */
+
+.item-detail-photo-button {
+  display: block;
+  width: 100%;
+  padding: 0;
+  border: none;
+  background: none;
+  cursor: zoom-in;
+}
+
+.item-detail-photo {
+  width: 100%;
+  max-height: 360px;
+  object-fit: cover;
+  border-radius: var(--radius-lg);
+  display: block;
+  margin-bottom: 14px;
+}
+
+.item-detail-photo-placeholder {
+  height: 220px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ivory);
+  border: 1.5px dashed var(--line);
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 600;
 }

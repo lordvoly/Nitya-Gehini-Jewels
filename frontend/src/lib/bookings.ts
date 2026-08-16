@@ -29,6 +29,10 @@ export interface BookingItemSummary {
   item_type: "set" | "single";
   components: string[] | null;
   tracking_type: "unique" | "quantity";
+  // For the thumbnail on each booking-item row — same items.photos array
+  // the Items list itself uses, embedded in the same query as everything
+  // else here (see ITEMS_EMBED in bookings.ts), not a separate fetch.
+  photos: string[];
 }
 
 export interface BookingCustomerSummary {

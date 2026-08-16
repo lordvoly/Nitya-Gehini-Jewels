@@ -2,6 +2,7 @@ import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
 import { getItemAvailability } from "../lib/itemsData.js";
 import { imageUpload } from "../lib/upload.js";
+import { istToday } from "../lib/dates.js";
 
 export const itemsRouter = Router();
 
@@ -41,6 +42,46 @@ itemsRouter.get("/next-code", async (_req, res) => {
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "Failed to compute next item code" });
   }
+});
+
+// GET /api/items/:id/history — every booking_item this item has ever
+// appeared in, active AND cancelled (unlike attachChains()'s "When
+// Returns" chain query in bookings.ts, which deliberately excludes
+// cancelled rows and is unique-item-only — that query answers a different
+// question, "what's next," not "show me everything"). Registered before
+// GET /:id so it isn't shadowed — Express matches by full path shape, and
+// this one has an extra segment, but keeping the more specific route above
+// the general one is the established convention in this file (see
+// next-code above GET /:id).
+itemsRouter.get("/:id/history", async (req, res) => {
+  const { data, error } = await supabase
+    .from("booking_items")
+    .select("id, type, status, pickup_date, return_date, price_charged, booking_id, bookings(booking_code, customers(name))")
+    .eq("item_id", req.params.id)
+    .order("pickup_date", { ascending: false });
+  if (error) return res.status(500).json({ error: error.message });
+
+  const today = istToday();
+  const history = (data ?? []).map((row) => {
+    const booking = row.bookings as unknown as { booking_code: string; customers: { name: string } | null } | null;
+    return {
+      id: row.id,
+      type: row.type,
+      status: row.status,
+      pickup_date: row.pickup_date,
+      return_date: row.return_date,
+      price_charged: row.price_charged,
+      booking_id: row.booking_id,
+      booking_code: booking?.booking_code ?? null,
+      customer_name: booking?.customers?.name ?? null,
+      // Same computation as attachChains()'s pickup_overdue in bookings.ts
+      // — kept in sync by being the same three-condition check, not a
+      // shared import, since this route has no other reason to depend on
+      // bookings.ts and the check itself is one line.
+      pickup_overdue: row.type === "rental" && row.status === "booked" && row.pickup_date <= today,
+    };
+  });
+  res.json(history);
 });
 
 // GET /api/items/:id

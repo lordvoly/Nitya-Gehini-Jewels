@@ -12,6 +12,7 @@ import ChargesPage from "./pages/ChargesPage";
 import AssistantPage from "./pages/AssistantPage";
 import SettingsPage from "./pages/SettingsPage";
 import ReceiptPage from "./pages/ReceiptPage";
+import ItemDetailPage from "./pages/ItemDetailPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { Modal } from "./components/common/Modal";
 import { Avatar } from "./components/common/Avatar";
@@ -190,6 +191,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <ReceiptPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/items/:id"
+            element={
+              <ProtectedRoute>
+                <ItemDetailPage />
               </ProtectedRoute>
             }
           />

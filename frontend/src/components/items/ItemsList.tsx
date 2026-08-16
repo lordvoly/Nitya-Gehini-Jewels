@@ -193,8 +193,12 @@ export function ItemsList({
                         </button>
                       )}
                     </td>
-                    <td data-label="Code">{item.item_code}</td>
-                    <td data-label="Name">{item.name}</td>
+                    <td data-label="Code">
+                      <Link to={`/items/${item.id}`}>{item.item_code}</Link>
+                    </td>
+                    <td data-label="Name">
+                      <Link to={`/items/${item.id}`}>{item.name}</Link>
+                    </td>
                     <td data-label="Category">{item.category}</td>
                     <td data-label="Type">
                       {item.item_type === "set" ? "Set" : "Single"} ·{" "}

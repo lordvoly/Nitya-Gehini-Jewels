@@ -124,9 +124,22 @@ export function BookingDetail({
               return (
                 <div className="line-item-card" key={bi.id}>
                   <div className="line-item-card-header">
-                    <h3>
-                      {bi.items?.item_code} — {bi.items?.name}
-                    </h3>
+                    <div className="line-item-title-group">
+                      <Link to={`/items/${bi.item_id}`} className="line-item-thumb-link" aria-label={`View ${bi.items?.name}`}>
+                        {bi.items?.photos?.[0] ? (
+                          <img src={bi.items.photos[0]} alt="" className="line-item-thumb" />
+                        ) : (
+                          <span className="line-item-thumb line-item-thumb-placeholder" aria-hidden="true">
+                            🖼️
+                          </span>
+                        )}
+                      </Link>
+                      <h3>
+                        <Link to={`/items/${bi.item_id}`}>
+                          {bi.items?.item_code} — {bi.items?.name}
+                        </Link>
+                      </h3>
+                    </div>
                     <span className={`pill ${itemPill.className}`}>{itemPill.label}</span>
                   </div>
                   <ul className="review-list">

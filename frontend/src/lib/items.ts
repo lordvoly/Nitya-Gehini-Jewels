@@ -1,4 +1,5 @@
 import { apiFetch } from "./api";
+import type { BookingItemStatus, BookingItemType } from "./bookings";
 
 export type ItemCategory = "Bridal Set" | "Party Wear" | "Individual" | "American Diamond" | "Temple" | "Other";
 export type ItemType = "set" | "single";
@@ -77,6 +78,32 @@ export interface NewItem {
 // argument — retired items stay visible there (just visually marked).
 export function fetchItems(opts?: { activeOnly?: boolean }) {
   return apiFetch<Item[]>(`/api/items${opts?.activeOnly ? "?active_only=true" : ""}`);
+}
+
+export function fetchItem(id: string) {
+  return apiFetch<Item>(`/api/items/${id}`);
+}
+
+// One row per booking this item has ever appeared in — active AND
+// cancelled (Item Detail's history table, unlike the "When Returns" chain
+// used elsewhere, which deliberately excludes cancelled rows). pickup_date/
+// return_date are the planned dates on that line item, not necessarily
+// when it actually happened.
+export interface ItemHistoryRow {
+  id: string;
+  type: BookingItemType;
+  status: BookingItemStatus;
+  pickup_date: string;
+  return_date: string | null;
+  price_charged: number;
+  booking_id: string;
+  booking_code: string | null;
+  customer_name: string | null;
+  pickup_overdue: boolean;
+}
+
+export function fetchItemHistory(id: string) {
+  return apiFetch<ItemHistoryRow[]>(`/api/items/${id}/history`);
 }
 
 // The suggested next auto-generated code — used to pre-fill the (editable)
