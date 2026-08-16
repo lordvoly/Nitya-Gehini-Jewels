@@ -47,7 +47,7 @@ function emptyLineItem(type: BookingItemType): LineItemDraft {
 
 export function BookingForm() {
   const [items, setItems] = useState<Item[]>([]);
-  // Which line item's "+ Add New Item" modal is open, if any — keyed by
+  // Which line item's "+ Create New Item" modal is open, if any — keyed by
   // row.key so with multiple lines the newly created item lands back on
   // the exact row that asked for it, not just "the first" or "the last".
   const [addingItemForRow, setAddingItemForRow] = useState<string | null>(null);
@@ -125,7 +125,7 @@ export function BookingForm() {
     updateLineItem(row.key, { itemId, quantityBooked: "1", price: autoPrice != null ? String(autoPrice) : "" });
   }
 
-  // From the "+ Add New Item" modal — same seamless behavior as adding a
+  // From the "+ Create New Item" modal — same seamless behavior as adding a
   // new customer mid-booking: the freshly created item becomes this row's
   // selection immediately, no leaving the page or searching for it after.
   // Computed directly from the just-created `item`, not via handleItemChange
@@ -330,7 +330,7 @@ export function BookingForm() {
                 </select>
               </label>
               <button type="button" className="btn-secondary" onClick={() => setAddingItemForRow(row.key)}>
-                + Add New Item
+                + Create New Item
               </button>
               {addingItemForRow === row.key && (
                 <Modal onClose={() => setAddingItemForRow(null)}>
