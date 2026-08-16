@@ -168,7 +168,8 @@ a {
 
 /* ── Mobile nav (icon+label bar + header "more") ─────────────────────────
    Desktop keeps .app-tabbar above, unchanged, as the only nav — these are
-   hidden by default and only switched on below 640px, where .app-tabbar is
+   hidden by default and only switched on below the shared compact-layout
+   breakpoint (see the single @media block below), where .app-tabbar is
    switched off instead. Two full nav implementations rather than one
    adaptive one, same reasoning as .data-table's card breakpoint: the
    icon-bar shape and the plain labeled row are different enough patterns
@@ -272,7 +273,23 @@ a {
   margin-top: 14px;
 }
 
-@media (max-width: 640px) {
+/* ── THE compact-layout breakpoint ────────────────────────────────────────
+   One number, one block, for every "mobile vs desktop" decision in this
+   app (bottom nav vs top nav, table rows vs stacked cards) — deliberately
+   NOT split across separate @media blocks with their own copies of this
+   number, even though the rules themselves are logically separate (nav
+   here, .data-table's card collapse below). Two identical-but-separate
+   640px blocks is exactly how this drifted from "this app's actual mobile
+   breakpoint" to "a number well below real tablet width" without anyone
+   noticing — a real tablet in portrait (iPad Mini 768px, iPad Air/Pro 11"
+   834px) was getting the desktop table/nav treatment instead of the
+   compact one, confirmed live before this fix. 900px clears real tablet
+   portrait with headroom. Tablet LANDSCAPE (1024px+) is a deliberate,
+   discussed decision to keep as desktop — it overlaps with small laptop
+   windows, which should stay desktop, and 1024px is genuinely ambiguous
+   between "iPad landscape" and "iPad Pro 12.9" portrait" anyway.
+   If this number ever needs to change again, change it once, here. */
+@media (max-width: 900px) {
   .app-tabbar {
     display: none;
   }
@@ -289,6 +306,70 @@ a {
     /* Bar height + breathing room, so the last bit of scrollable page
        content never sits under the fixed bottom bar. */
     padding-bottom: 92px;
+  }
+
+  /* Table rows become stacked cards instead of forcing horizontal scroll —
+     a table is not a touch-friendly shape below desktop width. Each <td>
+     that carries a data-label attribute gets that label rendered ahead of
+     its value; the actions cell (no data-label) just becomes a button row
+     at the bottom of the card. (Moved here from its own separate @media
+     block, which is what let it and the nav breakpoint above drift apart
+     in the first place — see the comment at the top of this block.) */
+  .data-table thead {
+    display: none;
+  }
+
+  .data-table,
+  .data-table tbody,
+  .data-table tr,
+  .data-table td {
+    display: block;
+    width: 100%;
+  }
+
+  .data-table tr {
+    border: 1px solid var(--line);
+    border-radius: var(--radius);
+    background: var(--surface);
+    padding: 12px 14px;
+    margin-bottom: 10px;
+  }
+
+  .data-table td {
+    border-bottom: none;
+    white-space: normal;
+    padding: 4px 0;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 10px;
+  }
+
+  .data-table td[data-label]::before {
+    content: attr(data-label);
+    font-size: 11.5px;
+    font-weight: 700;
+    color: var(--ink-soft);
+    text-transform: uppercase;
+    letter-spacing: 0.03em;
+    flex-shrink: 0;
+  }
+
+  .data-table td:not([data-label]) {
+    justify-content: flex-start;
+  }
+
+  .data-table .row-actions {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+    padding-top: 10px;
+    margin-top: 6px;
+    border-top: 1px solid var(--line);
+  }
+
+  .data-table .row-thumb {
+    width: 52px;
+    height: 52px;
   }
 }
 
@@ -710,69 +791,10 @@ a {
   margin-left: 0;
 }
 
-/* Below tablet width, table rows become stacked cards instead of forcing
-   horizontal scroll — a table is not a touch-friendly shape on a phone.
-   Each <td> that carries a data-label attribute gets that label rendered
-   ahead of its value; the actions cell (no data-label) just becomes a
-   button row at the bottom of the card. */
-@media (max-width: 640px) {
-  .data-table thead {
-    display: none;
-  }
-
-  .data-table,
-  .data-table tbody,
-  .data-table tr,
-  .data-table td {
-    display: block;
-    width: 100%;
-  }
-
-  .data-table tr {
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
-    background: var(--surface);
-    padding: 12px 14px;
-    margin-bottom: 10px;
-  }
-
-  .data-table td {
-    border-bottom: none;
-    white-space: normal;
-    padding: 4px 0;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    gap: 10px;
-  }
-
-  .data-table td[data-label]::before {
-    content: attr(data-label);
-    font-size: 11.5px;
-    font-weight: 700;
-    color: var(--ink-soft);
-    text-transform: uppercase;
-    letter-spacing: 0.03em;
-    flex-shrink: 0;
-  }
-
-  .data-table td:not([data-label]) {
-    justify-content: flex-start;
-  }
-
-  .data-table .row-actions {
-    justify-content: flex-start;
-    flex-wrap: wrap;
-    padding-top: 10px;
-    margin-top: 6px;
-    border-top: 1px solid var(--line);
-  }
-
-  .data-table .row-thumb {
-    width: 52px;
-    height: 52px;
-  }
-}
+/* The table→card responsive rules for .data-table live in the single
+   compact-layout @media block near the top of this file (next to
+   .mobile-tabbar), not here — see the comment there for why they're kept
+   together with the nav breakpoint on purpose. */
 
 .search-input {
   display: block;
