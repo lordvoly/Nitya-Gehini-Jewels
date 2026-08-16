@@ -1,8 +1,39 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchBookings, type Booking, type BookingItem } from "../../lib/bookings";
+import {
+  fetchBookings,
+  type Booking,
+  type BookingItem,
+  type BookingCategory,
+  type BookingDateBasis,
+  type BookingTimeRange,
+} from "../../lib/bookings";
 import { bookingItemStatusPill, bookingComputedStatusPill } from "../../lib/statusPill";
 import { formatDateDisplay } from "../../lib/dates";
+
+const CATEGORY_LABELS: Record<BookingCategory, string> = {
+  all: "All",
+  out: "Currently Out",
+  booked: "Booked",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+const CATEGORY_EMPTY_COPY: Record<BookingCategory, { title: string; hint: string }> = {
+  all: { title: "No bookings yet", hint: "Create your first rental or sale to see it here." },
+  out: { title: "Nothing currently out", hint: "Bookings with an item past its pickup date will show up here." },
+  booked: { title: "Nothing booked ahead", hint: "Bookings with an item not yet picked up will show up here." },
+  completed: { title: "No completed bookings", hint: "Bookings with a returned or sold item will show up here." },
+  cancelled: { title: "No cancelled bookings", hint: "Cancelled bookings will show up here." },
+};
+
+const TIME_RANGE_LABELS: Record<BookingTimeRange, string> = {
+  all: "All Time",
+  week: "Past Week",
+  month: "Past Month",
+  "3months": "Past 3 Months",
+  year: "Past Year",
+};
 
 // One card per family transaction — a flat table row can't express "one
 // booking, several items on independent schedules," which is the whole
@@ -38,24 +69,42 @@ export function BookingsList({
   const [term, setTerm] = useState("");
   const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(false);
+  // Category (item-status bucket) and date basis/time range are both new,
+  // server-side-filtered controls — only shown on the main "All Bookings"
+  // tab (not filterItemId/filterCustomerId's narrowed views, same scoping
+  // as the search box just below). Defaults ("all"/"pickup"/"all") are
+  // deliberately omitted from the request entirely (see params below)
+  // rather than sent as explicit query params, so a filter-untouched page
+  // load is byte-for-byte the same request as before this feature existed.
+  const [category, setCategory] = useState<BookingCategory>("all");
+  const [dateBasis, setDateBasis] = useState<BookingDateBasis>("pickup");
+  const [timeRange, setTimeRange] = useState<BookingTimeRange>("all");
 
   // Same debounced, cancelled-flag-guarded search as CustomersList: a
   // 300ms pause before the request fires, and a newer search's response
   // can't be clobbered by an older one landing late. When filterItemId or
-  // filterCustomerId is set, search is bypassed entirely — the filter
-  // takes over.
+  // filterCustomerId is set, search/category/date filters are bypassed
+  // entirely — the filter takes over.
   useEffect(() => {
     let cancelled = false;
     setLoading(true);
     const handle = setTimeout(
       () => {
-        const params = filterItemId
-          ? { item_id: filterItemId }
-          : filterCustomerId
-            ? { customer_id: filterCustomerId }
-            : term
-              ? { search: term }
-              : undefined;
+        let params: Record<string, string> | undefined;
+        if (filterItemId) {
+          params = { item_id: filterItemId };
+        } else if (filterCustomerId) {
+          params = { customer_id: filterCustomerId };
+        } else {
+          const extra: Record<string, string> = {};
+          if (term) extra.search = term;
+          if (category !== "all") extra.category = category;
+          if (timeRange !== "all") {
+            extra.time_range = timeRange;
+            extra.date_basis = dateBasis;
+          }
+          params = Object.keys(extra).length > 0 ? extra : undefined;
+        }
         fetchBookings(params)
           .then((data) => {
             if (cancelled) return;
@@ -83,7 +132,7 @@ export function BookingsList({
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [term, filterItemId, filterCustomerId]);
+  }, [term, filterItemId, filterCustomerId, category, dateBasis, timeRange]);
 
   return (
     <div>
@@ -97,13 +146,48 @@ export function BookingsList({
           </p>
         </div>
       ) : filterCustomerId ? null : (
-        <input
-          className="search-input"
-          type="text"
-          placeholder="Search by booking code or customer…"
-          value={term}
-          onChange={(e) => setTerm(e.target.value)}
-        />
+        <>
+          <input
+            className="search-input"
+            type="text"
+            placeholder="Search by booking code or customer…"
+            value={term}
+            onChange={(e) => setTerm(e.target.value)}
+          />
+
+          <p className="filter-group-label">Show</p>
+          <div className="toggle-group filter-group">
+            {(Object.keys(CATEGORY_LABELS) as BookingCategory[]).map((c) => (
+              <button key={c} className={category === c ? "toggle-btn active" : "toggle-btn"} onClick={() => setCategory(c)}>
+                {CATEGORY_LABELS[c]}
+              </button>
+            ))}
+          </div>
+
+          <p className="filter-group-label">Filter &amp; sort by</p>
+          <div className="toggle-group filter-group">
+            <button
+              className={dateBasis === "pickup" ? "toggle-btn active" : "toggle-btn"}
+              onClick={() => setDateBasis("pickup")}
+            >
+              Pickup Date
+            </button>
+            <button
+              className={dateBasis === "booking" ? "toggle-btn active" : "toggle-btn"}
+              onClick={() => setDateBasis("booking")}
+            >
+              Booking Date
+            </button>
+          </div>
+
+          <div className="toggle-group filter-group">
+            {(Object.keys(TIME_RANGE_LABELS) as BookingTimeRange[]).map((r) => (
+              <button key={r} className={timeRange === r ? "toggle-btn active" : "toggle-btn"} onClick={() => setTimeRange(r)}>
+                {TIME_RANGE_LABELS[r]}
+              </button>
+            ))}
+          </div>
+        </>
       )}
       <div className="list-header">
         <h2>
@@ -113,7 +197,9 @@ export function BookingsList({
               ? `Bookings (${bookings.length})`
               : term
                 ? `Results (${bookings.length})`
-                : `All Bookings (${bookings.length})`}
+                : category !== "all"
+                  ? `${CATEGORY_LABELS[category]} (${bookings.length})`
+                  : `All Bookings (${bookings.length})`}
         </h2>
         {loading && <span className="wizard-hint">{filterItemId || filterCustomerId ? "Loading…" : "Searching…"}</span>}
       </div>
@@ -137,8 +223,8 @@ export function BookingsList({
             </>
           ) : (
             <>
-              <h3>No bookings yet</h3>
-              <p>Create your first rental or sale to see it here.</p>
+              <h3>{CATEGORY_EMPTY_COPY[category].title}</h3>
+              <p>{CATEGORY_EMPTY_COPY[category].hint}</p>
             </>
           )}
         </div>
@@ -164,6 +250,7 @@ export function BookingsList({
                     "—"
                   )}
                 </p>
+                <p className="booking-card-date wizard-hint">Booked on: {formatDateDisplay(b.booking_date)}</p>
               </div>
               <div className="booking-card-status">
                 <span className={`pill ${statusPill.className}`}>{statusPill.label}</span>

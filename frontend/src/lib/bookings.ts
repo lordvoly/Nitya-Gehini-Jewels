@@ -8,6 +8,17 @@ export type BookingType = BookingItemType; // same meaning, now per-item
 export type BookingItemStatus = "booked" | "out" | "returned" | "cancelled";
 export type BookingComputedStatus = "active" | "completed" | "cancelled";
 
+// BookingsList's category filter — item-status buckets, distinct from
+// BookingComputedStatus (a per-booking rollup). "out"/"booked" mirror the
+// same pickup_date-vs-today split the Items list's "Currently Out"/"Booked"
+// badges already use. A booking matches a bucket if ANY of its items does
+// (except "cancelled", which is the whole booking's computed status).
+export type BookingCategory = "all" | "out" | "booked" | "completed" | "cancelled";
+// Which date field BookingsList's time-range filter/sort applies to —
+// independent of category above.
+export type BookingDateBasis = "pickup" | "booking";
+export type BookingTimeRange = "all" | "week" | "month" | "3months" | "year";
+
 export interface BookingItemSummary {
   item_code: string;
   name: string;
@@ -76,6 +87,10 @@ export interface Booking {
   hsn_code: string | null;
   tax_rate: number | null;
   created_by: string | null;
+  // The date the booking was actually made — editable, distinct from
+  // created_at (an untouched system timestamp). Defaults to today in IST
+  // at creation but can be backdated/corrected afterward.
+  booking_date: string;
   created_at: string;
   updated_at: string;
   customers: BookingCustomerSummary | null;
@@ -114,6 +129,9 @@ export interface NewBooking {
   // often actually paid on a different day than when the booking gets
   // entered.
   advance_date?: string | null;
+  // Left blank on purpose defaults to today in IST server-side — same
+  // pattern as advance_date above.
+  booking_date?: string | null;
   items: NewBookingItem[];
   // Defaults to server-generated (BK-000N) when omitted/empty — an
   // explicit non-empty value is validated for uniqueness instead, same
@@ -159,6 +177,9 @@ export function fetchBookings(params?: {
   customer_id?: string;
   computed_status?: BookingComputedStatus;
   search?: string;
+  category?: BookingCategory;
+  date_basis?: BookingDateBasis;
+  time_range?: BookingTimeRange;
 }) {
   const qs = params ? new URLSearchParams(params as Record<string, string>).toString() : "";
   return apiFetch<Booking[]>(`/api/bookings${qs ? `?${qs}` : ""}`);
@@ -244,6 +265,7 @@ export interface UpdateBookingInput {
   gst_invoice_number?: string | null;
   hsn_code?: string | null;
   tax_rate?: number | null;
+  booking_date?: string;
 }
 
 export function updateBooking(id: string, patch: UpdateBookingInput) {

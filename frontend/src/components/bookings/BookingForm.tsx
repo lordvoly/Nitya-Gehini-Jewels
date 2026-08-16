@@ -60,6 +60,11 @@ export function BookingForm() {
   // change data on rows already added.
   const [bookingType, setBookingType] = useState<BookingItemType | null>(null);
   const [lineItems, setLineItems] = useState<LineItemDraft[]>([]);
+  // Left blank on purpose — the backend defaults to today in IST when this
+  // is omitted, same pattern as advanceDate below. Distinct from created_at
+  // (never user-editable) — this is "the date the booking was actually
+  // made", which the operator can backdate/correct.
+  const [bookingDate, setBookingDate] = useState("");
   const [advanceAmount, setAdvanceAmount] = useState("");
   const [advanceMethod, setAdvanceMethod] = useState<PaymentMethod>("cash");
   // Left blank on purpose — the backend defaults to today in IST when this
@@ -173,6 +178,7 @@ export function BookingForm() {
         advance_amount: toNumberOrNull(advanceAmount) ?? 0,
         advance_method: (toNumberOrNull(advanceAmount) ?? 0) > 0 ? advanceMethod : null,
         advance_date: (toNumberOrNull(advanceAmount) ?? 0) > 0 ? advanceDate || null : null,
+        booking_date: bookingDate || null,
         items: lineItems.map((r) => {
           const selected = selectedItemFor(r);
           return {
@@ -209,6 +215,7 @@ export function BookingForm() {
     setCustomer(null);
     setBookingType(null);
     setLineItems([]);
+    setBookingDate("");
     setAdvanceAmount("");
     setAdvanceMethod("cash");
     setAdvanceDate("");
@@ -230,6 +237,7 @@ export function BookingForm() {
         <p className="wizard-hint">
           {saved.booking_items.length} item{saved.booking_items.length === 1 ? "" : "s"} · ₹{saved.price_charged}
         </p>
+        <p className="wizard-hint">Booked on: {formatDateDisplay(saved.booking_date)}</p>
         {(toNumberOrNull(advanceAmount) ?? 0) > 0 && (
           <p className="wizard-hint">
             Advance of ₹{advanceAmount} ({PAYMENT_METHOD_LABELS[advanceMethod]}) recorded
@@ -287,6 +295,12 @@ export function BookingForm() {
               />
             </label>
             <p className="wizard-hint">Suggested automatically — edit it if you'd rather use your own code.</p>
+
+            <label className="field-label">
+              Booking Date
+              <input type="date" value={bookingDate} onChange={(e) => setBookingDate(e.target.value)} />
+            </label>
+            <p className="wizard-hint">Leave blank to use today. Distinct from pickup/return dates below.</p>
 
             <p className="field-label">Customer</p>
             <CustomerPicker selected={customer} onSelect={setCustomer} />

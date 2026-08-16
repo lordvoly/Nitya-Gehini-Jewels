@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
-import { istToday } from "../lib/dates.js";
+import { istToday, istRangeForPreset } from "../lib/dates.js";
 import type { AuthedRequest } from "../middleware/auth.js";
 
 export const bookingsRouter = Router();
@@ -186,6 +186,82 @@ bookingsRouter.get("/", async (req, res) => {
   // filtered here in JS after the merge rather than in the initial query.
   if (typeof req.query.computed_status === "string") {
     result = result.filter((b) => b.computed_status === req.query.computed_status);
+  }
+
+  // ?category=out|booked|completed|cancelled — a booking matches if ANY of
+  // its items falls in that bucket (a family transaction can have items in
+  // genuinely different states at once — one returned, one still out).
+  // "cancelled" is the one exception: it's the whole booking's computed
+  // status (every item cancelled), not a per-item OR, since that's what
+  // "cancelled" already unambiguously means booking-wide everywhere else in
+  // this app. "out"/"booked" reuse the exact same pickup_date-vs-today split
+  // itemsData.ts's getItemAvailability() already uses for the Items list's
+  // "Currently Out"/"Booked" badges — computed here in JS off the already-
+  // fetched booking_items rather than a second query, same reasoning as the
+  // computed_status filter just above.
+  interface CategoryBookingItem {
+    type: string;
+    status: string;
+    pickup_date: string;
+  }
+
+  const category = typeof req.query.category === "string" ? req.query.category : "all";
+  if (category !== "all") {
+    const today = istToday();
+    result = result.filter((b) => {
+      if (category === "cancelled") return b.computed_status === "cancelled";
+      const items = (b.booking_items ?? []) as unknown as CategoryBookingItem[];
+      if (category === "out") {
+        return items.some((bi) => bi.type === "rental" && ACTIVE_STATUSES.includes(bi.status) && bi.pickup_date <= today);
+      }
+      if (category === "booked") {
+        return items.some((bi) => bi.type === "rental" && ACTIVE_STATUSES.includes(bi.status) && bi.pickup_date > today);
+      }
+      if (category === "completed") {
+        return items.some((bi) => bi.status !== "cancelled" && (bi.type === "sale" || bi.status === "returned"));
+      }
+      return true;
+    });
+  }
+
+  // ?date_basis=pickup|booking (default pickup) + ?time_range=week|month|
+  // 3months|year|all (default all) — independent of category above: this is
+  // about which date field time-based filtering/sorting uses, not item
+  // status. "All time" leaves both the result set and sort order completely
+  // untouched (still created_at desc, the pre-existing default) regardless
+  // of date_basis — sorting by a specific date field only becomes
+  // meaningful once there's an actual window being filtered to, and
+  // "everything" is still best served newest-created-first. This is also
+  // what keeps a filter-untouched page load byte-for-byte identical to
+  // this feature not existing at all.
+  const dateBasis = req.query.date_basis === "booking" ? "booking" : "pickup";
+  const range = typeof req.query.time_range === "string" ? istRangeForPreset(req.query.time_range) : null;
+  if (range) {
+    if (dateBasis === "booking") {
+      result = result
+        .filter((b) => {
+          const bookingDate = (b as { booking_date?: unknown }).booking_date;
+          return typeof bookingDate === "string" && bookingDate >= range.from && bookingDate <= range.to;
+        })
+        .sort((a, b) =>
+          (b as unknown as { booking_date: string }).booking_date.localeCompare(
+            (a as unknown as { booking_date: string }).booking_date,
+          ),
+        );
+    } else {
+      // Pickup-date mode: a multi-item booking matches if ANY item's pickup
+      // falls in range; sorted by the latest such matching pickup_date
+      // (the most recent/relevant pickup within the window), descending.
+      result = result
+        .map((b) => {
+          const items = (b.booking_items ?? []) as unknown as CategoryBookingItem[];
+          const matching = items.map((bi) => bi.pickup_date).filter((d) => d >= range.from && d <= range.to);
+          return { booking: b, matchDate: matching.length > 0 ? matching.sort().at(-1)! : null };
+        })
+        .filter((x) => x.matchDate !== null)
+        .sort((a, b) => (b.matchDate as string).localeCompare(a.matchDate as string))
+        .map((x) => x.booking);
+    }
   }
 
   res.json(result);
@@ -426,6 +502,7 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
     advance_amount,
     advance_method,
     advance_date,
+    booking_date,
     items,
     booking_code: requestedBookingCode,
   } = req.body ?? {};
@@ -525,6 +602,10 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
       p_tax_rate: gst_applicable ? tax_rate ?? null : null,
       p_created_by: req.user?.id ?? null,
       p_items: rpcItems,
+      // Left blank on purpose defaults to today in IST server-side — same
+      // pattern as advance_date/payment_date above, rather than the
+      // frontend computing "today" itself.
+      p_booking_date: booking_date || istToday(),
     });
 
     if (!error) {
@@ -805,9 +886,10 @@ bookingsRouter.post("/:id/cancel", async (req: AuthedRequest, res) => {
 // PATCH /api/bookings/:id — parent-level fields only (customer_id, GST
 // fields). Line-item fields are edited through the endpoint below.
 bookingsRouter.patch("/:id", async (req, res) => {
-  const { customer_id, gst_applicable, gst_invoice_number, hsn_code, tax_rate } = req.body ?? {};
+  const { customer_id, gst_applicable, gst_invoice_number, hsn_code, tax_rate, booking_date } = req.body ?? {};
   const update: Record<string, unknown> = {};
   if (customer_id !== undefined) update.customer_id = customer_id;
+  if (booking_date !== undefined) update.booking_date = booking_date;
   if (gst_applicable !== undefined) {
     update.gst_applicable = gst_applicable;
     update.gst_invoice_number = gst_applicable ? gst_invoice_number ?? null : null;

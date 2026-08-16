@@ -1509,6 +1509,20 @@ a.stat-card:active {
   margin-bottom: 14px;
 }
 
+/* Small muted heading above a .toggle-group, for BookingsList's stacked
+   Category / Date Basis / Time Range controls — unlike ItemsList's single
+   self-explanatory toggle row, three stacked rows need a label each so
+   "Pickup Date"/"Booking Date" reads as a mode switch, not a mystery. */
+.filter-group-label {
+  font-size: 12.5px;
+  color: var(--ink-soft);
+  margin: 10px 0 4px;
+}
+
+.booking-card-date {
+  margin-top: 2px;
+}
+
 .date-range-row {
   margin-bottom: 8px;
 }

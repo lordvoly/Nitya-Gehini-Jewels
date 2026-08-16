@@ -84,6 +84,10 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   const [error, setError] = useState<string | null>(null);
 
   const [customer, setCustomer] = useState<Customer | null>(null);
+  // Pre-filled from the existing value (unlike BookingForm's blank-
+  // defaults-to-today field) — this is editing a real, already-known date,
+  // not leaving an optional one to a server default.
+  const [bookingDate, setBookingDate] = useState("");
   const [gstApplicable, setGstApplicable] = useState(false);
   const [gstInvoiceNumber, setGstInvoiceNumber] = useState("");
   const [hsnCode, setHsnCode] = useState("");
@@ -130,6 +134,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
           customer_type: "regular",
           created_at: "",
         });
+        setBookingDate(b.booking_date);
         setGstApplicable(b.gst_applicable);
         setGstInvoiceNumber(b.gst_invoice_number ?? "");
         setHsnCode(b.hsn_code ?? "");
@@ -161,6 +166,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
       // which would wipe booking.booking_items and crash the item list below.
       await updateBooking(bookingId, {
         customer_id: customer.id,
+        booking_date: bookingDate,
         gst_applicable: gstApplicable,
         gst_invoice_number: gstApplicable ? gstInvoiceNumber.trim() || null : null,
         hsn_code: gstApplicable ? hsnCode.trim() || null : null,
@@ -356,6 +362,12 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
         <form onSubmit={handleSaveParent}>
           <p className="field-label">Customer</p>
           <CustomerPicker selected={customer} onSelect={setCustomer} />
+
+          <label className="field-label">
+            Booking Date
+            <input type="date" value={bookingDate} onChange={(e) => setBookingDate(e.target.value)} />
+          </label>
+          <p className="wizard-hint">When this booking was actually made — separate from pickup/return dates.</p>
 
           <label className="field-label">
             <input type="checkbox" checked={gstApplicable} onChange={(e) => setGstApplicable(e.target.checked)} />{" "}

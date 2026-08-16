@@ -97,6 +97,7 @@ export function BookingDetail({
               )}
             </p>
             <ul className="review-list">
+              <li>Booked on: {formatDateDisplay(booking.booking_date)}</li>
               <li>
                 Status: <span className={`pill ${statusPill.className}`}>{statusPill.label}</span>
                 {statusPill.fraction && ` — ${statusPill.fraction}`}
