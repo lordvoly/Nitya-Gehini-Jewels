@@ -1232,6 +1232,34 @@ a.stat-card:active {
   border-color: var(--clay);
 }
 
+/* Today's/This Week's Pickups Due — .found-panel styling reused (same
+   visual language as Returns Due), but unlike that section's single
+   whole-row Link, this row needs two separate link destinations (thumb+
+   name → item, booking code → booking), so it's a plain div with its own
+   nested links rather than one .dashboard-link wrapper. */
+.dashboard-pickup-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.dashboard-pickup-info {
+  min-width: 0;
+}
+
+.dashboard-pickup-info p {
+  margin: 2px 0 0;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
+
+.dashboard-day-group-label {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  margin: 14px 0 6px;
+}
+
 /* ── Booking cards ────────────────────────────────────────────────────── */
 /* One family booking (parent transaction) can now hold several line items
    on independent schedules — a flat table row can't express that

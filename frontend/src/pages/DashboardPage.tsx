@@ -1,9 +1,64 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { fetchDashboardSummary, type DashboardSummary } from "../lib/dashboard";
+import { fetchDashboardSummary, type DashboardSummary, type PickupDueBookingItem } from "../lib/dashboard";
 import { useAuth } from "../lib/auth";
 import { DashboardAlerts } from "../components/dashboard/DashboardAlerts";
+import { formatDateDisplay, addDaysToDateString, formatWeekdayDate } from "../lib/dates";
 import "../styles/shared.css";
+
+// One card per physical item due for pickup — thumbnail+name link to the
+// item's own detail page (Feature A/B convention), booking code links to
+// the booking, same "everything links out, nothing duplicates an action"
+// rule the rest of the Dashboard already follows. Not a single big Link
+// like Returns Due's rows, since this row needs two different link
+// destinations at once.
+function PickupRow({ pickup }: { pickup: PickupDueBookingItem }) {
+  return (
+    <div className="found-panel dashboard-pickup-row">
+      <Link to={`/items/${pickup.item_id}`} className="line-item-thumb-link" aria-label={`View ${pickup.items?.name}`}>
+        {pickup.items?.photos?.[0] ? (
+          <img src={pickup.items.photos[0]} alt="" className="line-item-thumb" />
+        ) : (
+          <span className="line-item-thumb line-item-thumb-placeholder" aria-hidden="true">
+            🖼️
+          </span>
+        )}
+      </Link>
+      <div className="dashboard-pickup-info">
+        <Link to={`/items/${pickup.item_id}`}>
+          {pickup.items?.item_code} — {pickup.items?.name}
+        </Link>
+        <p>
+          {pickup.customers?.name ?? "—"} ·{" "}
+          <Link to={`/bookings?booking=${pickup.booking_id}`}>{pickup.bookings?.booking_code}</Link> ·{" "}
+          {formatDateDisplay(pickup.pickup_date)}
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// Groups an already pickup_date-ascending list into per-day buckets, each
+// labeled "Tomorrow" or "Wed 19 Aug" — never a raw ISO date. `today` is
+// always the server's own echoed-back value (DashboardSummary.today),
+// never computed locally, per this app's IST rule; "tomorrow" is pure
+// date-math on that same server-provided anchor, not a fresh "now".
+function groupPickupsByDay(pickups: PickupDueBookingItem[], today: string) {
+  const tomorrow = addDaysToDateString(today, 1);
+  const groups = new Map<string, PickupDueBookingItem[]>();
+  for (const p of pickups) {
+    const list = groups.get(p.pickup_date) ?? [];
+    list.push(p);
+    groups.set(p.pickup_date, list);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, items]) => ({
+      date,
+      label: date === tomorrow ? "Tomorrow" : formatWeekdayDate(date),
+      items,
+    }));
+}
 
 export default function DashboardPage() {
   const { session } = useAuth();
@@ -21,9 +76,10 @@ export default function DashboardPage() {
   if (loading) return <div className="page">Loading…</div>;
   if (error || !summary) return <div className="page wizard-error">{error ?? "Failed to load dashboard"}</div>;
 
-  const { due_today, overdue, outstanding_balance, stats } = summary;
+  const { due_today, overdue, pickups_due_today, pickups_due_this_week, outstanding_balance, stats } = summary;
   const urgentOverdue = overdue.filter((b) => b.next_customer_waiting);
   const otherOverdue = overdue.filter((b) => !b.next_customer_waiting);
+  const weekPickupGroups = groupPickupsByDay(pickups_due_this_week, summary.today);
 
   return (
     <div className="page">
@@ -106,6 +162,29 @@ export default function DashboardPage() {
                 {Math.abs(b.days_until_return)} day{Math.abs(b.days_until_return) === 1 ? "" : "s"} overdue
               </p>
             </Link>
+          ))}
+        </div>
+      </div>
+
+      <div id="pickups-due-section">
+        <div className="dashboard-section">
+          <h2>Today's Pickups Due ({pickups_due_today.length})</h2>
+          {pickups_due_today.length === 0 && <p className="wizard-hint">Nothing to prep for pickup today.</p>}
+          {pickups_due_today.map((p) => (
+            <PickupRow key={p.id} pickup={p} />
+          ))}
+        </div>
+
+        <div className="dashboard-section">
+          <h2>This Week's Pickups Due ({pickups_due_this_week.length})</h2>
+          {pickups_due_this_week.length === 0 && <p className="wizard-hint">Nothing else due for pickup this week.</p>}
+          {weekPickupGroups.map((group) => (
+            <div key={group.date}>
+              <p className="dashboard-day-group-label">{group.label}</p>
+              {group.items.map((p) => (
+                <PickupRow key={p.id} pickup={p} />
+              ))}
+            </div>
           ))}
         </div>
       </div>

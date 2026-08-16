@@ -55,12 +55,37 @@ export interface DashboardStats {
   bookings_this_week: number;
 }
 
+// "Prep in advance" rows — status='booked' only (not yet picked up/
+// confirmed), both rental and sale, deliberately excluding the overdue/
+// unconfirmed concept (a different, already-flagged idea for later). items
+// carries photos (BookingItemSummary already includes it, from the recent
+// Item Detail thumbnail work) for the row's thumbnail — same field, no new
+// per-row fetch.
+export interface PickupDueBookingItem {
+  id: string;
+  booking_id: string;
+  item_id: string;
+  quantity_booked: number;
+  type: BookingItemType;
+  pickup_date: string;
+  status: BookingItemStatus;
+  price_charged: number;
+  bookings: { booking_code: string; customer_id: string } | null;
+  items: BookingItemSummary | null;
+  customers: BookingCustomerSummary | null;
+}
+
 export interface DashboardSummary {
   // Server IST date (see backend/src/routes/dashboard.ts) — used only to key
   // the once-per-day dashboard-popup dismissal, never computed locally.
   today: string;
   due_today: DueTodayBookingItem[];
   overdue: OverdueBookingItem[];
+  pickups_due_today: PickupDueBookingItem[];
+  // Strictly AFTER today through the end of the current calendar week (IST)
+  // — today's own pickups are only in pickups_due_today, never duplicated
+  // here.
+  pickups_due_this_week: PickupDueBookingItem[];
   outstanding_balance: number;
   outstanding_balance_count: number;
   stats: DashboardStats;

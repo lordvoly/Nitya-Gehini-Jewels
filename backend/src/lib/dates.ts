@@ -27,6 +27,22 @@ export function istWeekStart(): string {
 }
 
 /**
+ * End (Sunday) of the current calendar week in IST, as YYYY-MM-DD — the
+ * forward-looking counterpart to istWeekStart(). Neither istWeekStart()
+ * alone (used backward/present-looking, "since Monday until now", by
+ * bookings_this_week) nor istRangeForPreset("week") (a backward-looking
+ * rolling "past 7 days" window, for BookingsList's Time filter) is a
+ * forward-looking range — this is a distinct third use of "week", for
+ * "what's coming up before this calendar week ends" (Dashboard's This
+ * Week's Pickups Due).
+ */
+export function istWeekEnd(): string {
+  const start = new Date(`${istWeekStart()}T00:00:00`);
+  start.setDate(start.getDate() + 6);
+  return start.toLocaleDateString("en-CA");
+}
+
+/**
  * First and last day of the current calendar month in IST, as YYYY-MM-DD
  * — the default date range for Reports.
  */
