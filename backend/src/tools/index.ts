@@ -6,11 +6,15 @@ import {
   getIdleInventory,
   getFinancialSummary,
   getOutstandingDues,
+  getItemBookingItems,
+  getRevenueBreakdown,
 } from "../lib/reportsData.js";
 import { getDailyBriefingData, getUpcomingPickupsForDays } from "../lib/dashboardData.js";
 import { getItemCharges } from "../routes/itemCharges.js";
-import { getBookingDetail } from "../routes/bookings.js";
+import { getBookingDetail, checkUniqueRentalConflicts, getQuantityAvailability } from "../routes/bookings.js";
 import { getPaymentsForBooking } from "../routes/payments.js";
+import { resolveItemByCodeOrName } from "../lib/itemsData.js";
+import { searchCustomers, getCustomerHistory } from "../lib/customersData.js";
 
 /**
  * Tools exposed to Claude Haiku 4.5 in the chat endpoint (Phase 3).
@@ -48,25 +52,27 @@ export const toolDefinitions = [
     },
   },
   {
-    name: "check_availability",
-    description: "Whether an item is free for a hypothetical new booking date range.",
+    name: "get_item_availability",
+    description:
+      "Is ONE SPECIFIC item free for a given date range — a hypothetical check for questions like 'is the Peacock Set free 19-22 Sept' or 'how many bangles are left for next weekend'. Looked up by item code or name (not an internal id). For a unique item: yes/no, and if no, the real conflicting booking(s) (code + dates). For a quantity-tracked item: units free out of the total for that range. Reports when the item can't be resolved rather than guessing. Distinct from get_item_status (that item's CURRENT status/location right now, no date range involved) and from get_upcoming_pickups/get_overdue_rentals (whole-shop lists, not one item's hypothetical range).",
     input_schema: {
       type: "object" as const,
       properties: {
-        item_id: { type: "string" },
+        item_code_or_name: { type: "string", description: "The item's code (e.g. NGJ-0013) or name" },
         start_date: { type: "string", description: "YYYY-MM-DD" },
         end_date: { type: "string", description: "YYYY-MM-DD" },
       },
-      required: ["item_id", "start_date", "end_date"],
+      required: ["item_code_or_name", "start_date", "end_date"],
     },
   },
   {
     name: "get_customer_history",
-    description: "Past bookings for a customer, looked up by phone or name.",
+    description:
+      "ONE customer's own booking history, looked up by name (also matches on phone digits if given one). Every booking they've ever made — active, completed, and cancelled, labeled distinctly — plus how much they've actually paid in total and their current outstanding balance. If the name matches more than one real customer, reports the ambiguity and lists candidates instead of guessing which one. This is about a single named customer — distinct from get_outstanding_dues (every customer who currently owes money, shop-wide) and from get_financial_summary/get_item_revenue (shop-wide or one-item revenue, not one customer's own spend).",
     input_schema: {
       type: "object" as const,
-      properties: { phone_or_name: { type: "string" } },
-      required: ["phone_or_name"],
+      properties: { customer_name: { type: "string", description: "Customer's name (or phone number)" } },
+      required: ["customer_name"],
     },
   },
   {
@@ -100,13 +106,27 @@ export const toolDefinitions = [
   {
     name: "get_financial_summary",
     description:
-      "Revenue, expenses, net profit, and a received/balance-remaining breakdown for a period. Defaults to the current IST calendar month if no dates are given. The period filters by pickup/rental start date (pickup_date), same as everything else in this app that's scoped to 'this week'/'this month'. revenue and grand_total are the same figure (total agreed price, cancelled items excluded entirely) — received is how much of that has actually been paid so far, balance_remaining is what's still owed; received + balance_remaining always equals grand_total exactly. Covers both rentals and sales, and both unique and quantity-tracked items.",
+      "OUR revenue — the whole shop's, across every item — plus expenses, net profit, and a received/balance-remaining breakdown for a period. Defaults to the current IST calendar month if no dates are given. The period filters by pickup/rental start date (pickup_date), same as everything else in this app that's scoped to 'this week'/'this month'. revenue and grand_total are the same figure (total agreed price, cancelled items excluded entirely) — received is how much of that has actually been paid so far, balance_remaining is what's still owed; received + balance_remaining always equals grand_total exactly. Covers both rentals and sales, and both unique and quantity-tracked items. For ONE item's own revenue instead of the whole shop's, use get_item_revenue, never this.",
     input_schema: {
       type: "object" as const,
       properties: {
         from: { type: "string", description: "YYYY-MM-DD, defaults to the start of the current month" },
         to: { type: "string", description: "YYYY-MM-DD, defaults to the end of the current month" },
       },
+    },
+  },
+  {
+    name: "get_item_revenue",
+    description:
+      "ONE SPECIFIC item's own revenue — received / balance remaining / grand total for just that item, all-time by default (optional pickup-date range). Uses the exact same cancelled-exclusion and payment-proration rules as get_financial_summary, just scoped to one item instead of the whole shop. This is revenue EARNED, not profit or ROI — there's no item acquisition cost tracked in this app, so no cost/margin figure is computed here. For the whole shop's revenue instead of one item's, use get_financial_summary, never this.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        item_code: { type: "string", description: "The item's code, e.g. NGJ-0013" },
+        from: { type: "string", description: "YYYY-MM-DD, optional — all-time if omitted" },
+        to: { type: "string", description: "YYYY-MM-DD, optional — all-time if omitted" },
+      },
+      required: ["item_code"],
     },
   },
   {
@@ -174,32 +194,64 @@ export async function runTool(name: string, input: Record<string, unknown>) {
       if (error) throw error;
       return data;
     }
-    case "check_availability": {
-      const { data, error } = await supabase
-        .from("booking_items")
-        .select("*")
-        .eq("item_id", input.item_id)
-        .in("status", ["booked", "out"])
-        .lte("pickup_date", input.end_date as string)
-        .gte("return_date", input.start_date as string);
-      if (error) throw error;
-      return { available: (data?.length ?? 0) === 0, conflicting_bookings: data };
+    case "get_item_availability": {
+      const resolved = await resolveItemByCodeOrName(String(input.item_code_or_name ?? ""));
+      if ("error" in resolved) return resolved;
+      const { item } = resolved;
+      const startDate = String(input.start_date);
+      const endDate = String(input.end_date);
+
+      if (item.tracking_type === "unique") {
+        if (item.status !== "available") {
+          return { item_code: item.item_code, name: item.name, tracking_type: "unique", available: false, reason: `Item status is '${item.status}'`, conflicts: [] };
+        }
+        const conflicts = await checkUniqueRentalConflicts(item.id, startDate, endDate);
+        return {
+          item_code: item.item_code,
+          name: item.name,
+          tracking_type: "unique",
+          available: conflicts.length === 0,
+          conflicts: conflicts.map((c) => {
+            const booking = c.bookings as unknown as { booking_code: string; customers: { name: string } | null } | null;
+            return { booking_code: booking?.booking_code ?? null, customer_name: booking?.customers?.name ?? null, pickup_date: c.pickup_date, return_date: c.return_date };
+          }),
+        };
+      }
+
+      const { total, available } = await getQuantityAvailability(item.id, item.quantity_on_hand, startDate, endDate);
+      return {
+        item_code: item.item_code,
+        name: item.name,
+        tracking_type: "quantity",
+        total_units: total,
+        available_units: Math.max(available, 0),
+        range: { start_date: startDate, end_date: endDate },
+      };
     }
     case "get_customer_history": {
-      const term = String(input.phone_or_name);
-      const { data: customers, error: custError } = await supabase
-        .from("customers")
-        .select("*")
-        .or(`phone.eq.${term},name.ilike.%${term}%`);
-      if (custError) throw custError;
-      if (!customers?.length) return [];
-      const customerIds = customers.map((c) => c.id);
-      const { data: bookings, error: bookingError } = await supabase
-        .from("bookings")
-        .select("*, booking_items(*, items(item_code, name))")
-        .in("customer_id", customerIds);
-      if (bookingError) throw bookingError;
-      return { customers, bookings };
+      const term = String(input.customer_name ?? "");
+      const matches = await searchCustomers(term);
+      if (matches.length === 0) return { error: `No customer found matching "${term}"` };
+      if (matches.length > 1) {
+        return {
+          error: `"${term}" matches more than one customer — ask which one is meant.`,
+          candidates: matches.map((c) => ({ name: c.name, phone: c.phone })),
+        };
+      }
+      const customer = matches[0];
+      const bookings = await getCustomerHistory(customer.id);
+      return {
+        customer_name: customer.name,
+        phone: customer.phone,
+        customer_type: customer.customer_type,
+        total_bookings: bookings.length,
+        // Actual money paid across every booking, not the agreed total —
+        // see get_financial_summary's own received/grand_total split for
+        // why these are kept distinct rather than one blended figure.
+        total_spent: bookings.reduce((sum, b) => sum + b.total_paid, 0),
+        outstanding_balance: bookings.reduce((sum, b) => sum + b.balance_due, 0),
+        bookings,
+      };
     }
     case "get_upcoming_returns": {
       const { data, error } = await supabase.from("upcoming_returns").select("*");
@@ -229,6 +281,22 @@ export async function runTool(name: string, input: Record<string, unknown>) {
       const from = typeof input.from === "string" && input.from ? input.from : defaultRange.from;
       const to = typeof input.to === "string" && input.to ? input.to : defaultRange.to;
       return { period: { from, to }, ...(await getFinancialSummary(from, to)) };
+    }
+    case "get_item_revenue": {
+      const resolved = await resolveItemByCodeOrName(String(input.item_code ?? ""));
+      if ("error" in resolved) return resolved;
+      const { item } = resolved;
+      const from = typeof input.from === "string" && input.from ? input.from : undefined;
+      const to = typeof input.to === "string" && input.to ? input.to : undefined;
+      const itemItems = await getItemBookingItems(item.id, from, to);
+      const breakdown = await getRevenueBreakdown(itemItems);
+      return {
+        item_code: item.item_code,
+        name: item.name,
+        period: from || to ? { from: from ?? null, to: to ?? null } : "all-time",
+        booking_count: new Set(itemItems.map((i) => i.booking_id)).size,
+        ...breakdown,
+      };
     }
     case "get_outstanding_dues": {
       return await getOutstandingDues();

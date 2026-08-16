@@ -442,6 +442,74 @@ interface ItemConflict {
 // .neq() on every query below (not just the unique-item branch) so both
 // tracking types get the same self-exclusion; omitted entirely (undefined)
 // on creation/add-item calls, where there is no existing row to exclude.
+// The exact half-open-interval overlap check this app uses everywhere a
+// unique item's date-range availability matters: two rentals conflict only
+// when pickup_date < the other's return_date AND return_date > the other's
+// pickup_date (strict inequality both sides) — a pickup landing exactly on
+// another booking's return_date is a same-day turnaround, not a conflict
+// (see checkSameDayWarning below and CLAUDE.md). Exported so the AI
+// assistant's get_item_availability tool (backend/src/tools/index.ts) can
+// wrap this exact query read-only, rather than re-deriving the interval
+// logic a second time.
+export async function checkUniqueRentalConflicts(itemId: string, startDate: string, endDate: string, excludeBookingItemId?: string) {
+  let query = supabase
+    .from("booking_items")
+    .select("*, bookings(booking_code, customers(name))")
+    .eq("item_id", itemId)
+    .eq("type", "rental")
+    .in("status", ACTIVE_STATUSES)
+    .lt("pickup_date", endDate)
+    .gt("return_date", startDate);
+  if (excludeBookingItemId) query = query.neq("id", excludeBookingItemId);
+  const { data, error } = await query;
+  if (error) throw error;
+  return data ?? [];
+}
+
+// The two pieces checkItemConflict's quantity branch already summed —
+// split into two composable functions rather than one, since sales and
+// rentals combine them differently: a sale checks only alreadySold (a
+// currently-out rental doesn't block a sale of a different unit, by
+// existing design), while a rental checks both. Exported so both
+// checkItemConflict below and the read-only get_item_availability tool
+// (backend/src/tools/index.ts) share the exact same two queries.
+export async function getAlreadySoldQuantity(itemId: string, excludeBookingItemId?: string) {
+  let salesQuery = supabase.from("booking_items").select("quantity_booked").eq("item_id", itemId).eq("type", "sale").in("status", ACTIVE_STATUSES);
+  if (excludeBookingItemId) salesQuery = salesQuery.neq("id", excludeBookingItemId);
+  const { data: activeSales, error: salesError } = await salesQuery;
+  if (salesError) throw salesError;
+  return sumQuantity(activeSales);
+}
+
+export async function getReservedQuantityForRange(itemId: string, startDate: string, endDate: string, excludeBookingItemId?: string) {
+  let rentalQuery = supabase
+    .from("booking_items")
+    .select("quantity_booked")
+    .eq("item_id", itemId)
+    .eq("type", "rental")
+    .in("status", ACTIVE_STATUSES)
+    .lt("pickup_date", endDate)
+    .gt("return_date", startDate);
+  if (excludeBookingItemId) rentalQuery = rentalQuery.neq("id", excludeBookingItemId);
+  const { data: overlappingRentals, error: rentalError } = await rentalQuery;
+  if (rentalError) throw rentalError;
+  return sumQuantity(overlappingRentals);
+}
+
+// "How many free for this date range" — the general-purpose read version
+// used by get_item_availability. Always nets out both permanent sales and
+// date-overlapping rentals, since a hypothetical range query has no reason
+// to omit either the way checkItemConflict's sale-only branch below
+// deliberately does (see the comment there).
+export async function getQuantityAvailability(itemId: string, quantityOnHand: number | null, startDate: string, endDate: string, excludeBookingItemId?: string) {
+  const [alreadySold, alreadyReservedForDates] = await Promise.all([
+    getAlreadySoldQuantity(itemId, excludeBookingItemId),
+    getReservedQuantityForRange(itemId, startDate, endDate, excludeBookingItemId),
+  ]);
+  const total = quantityOnHand ?? 0;
+  return { total, available: total - alreadySold - alreadyReservedForDates };
+}
+
 async function checkItemConflict(
   input: NewBookingItemInput,
   excludeBookingItemId?: string,
@@ -456,48 +524,19 @@ async function checkItemConflict(
       return { error: `This item isn't available right now (status: ${item.status})` };
     }
     if (input.type === "rental") {
-      let query = supabase
-        .from("booking_items")
-        .select("*, bookings(booking_code, customers(name))")
-        .eq("item_id", input.item_id)
-        .eq("type", "rental")
-        .in("status", ACTIVE_STATUSES)
-        .lt("pickup_date", input.return_date as string)
-        .gt("return_date", input.pickup_date);
-      if (excludeBookingItemId) query = query.neq("id", excludeBookingItemId);
-      const { data: conflicts, error: conflictError } = await query;
-      if (conflictError) throw conflictError;
-      if (conflicts && conflicts.length > 0) {
+      const conflicts = await checkUniqueRentalConflicts(input.item_id, input.pickup_date, input.return_date as string, excludeBookingItemId);
+      if (conflicts.length > 0) {
         return { error: "This item is already booked for an overlapping date range", conflicts };
       }
     }
   } else {
-    let salesQuery = supabase
-      .from("booking_items")
-      .select("quantity_booked")
-      .eq("item_id", input.item_id)
-      .eq("type", "sale")
-      .in("status", ACTIVE_STATUSES);
-    if (excludeBookingItemId) salesQuery = salesQuery.neq("id", excludeBookingItemId);
-    const { data: activeSales, error: salesError } = await salesQuery;
-    if (salesError) throw salesError;
-    const alreadySold = sumQuantity(activeSales);
-
-    let alreadyReservedForDates = 0;
-    if (input.type === "rental") {
-      let rentalQuery = supabase
-        .from("booking_items")
-        .select("quantity_booked")
-        .eq("item_id", input.item_id)
-        .eq("type", "rental")
-        .in("status", ACTIVE_STATUSES)
-        .lt("pickup_date", input.return_date as string)
-        .gt("return_date", input.pickup_date);
-      if (excludeBookingItemId) rentalQuery = rentalQuery.neq("id", excludeBookingItemId);
-      const { data: overlappingRentals, error: rentalError } = await rentalQuery;
-      if (rentalError) throw rentalError;
-      alreadyReservedForDates = sumQuantity(overlappingRentals);
-    }
+    const alreadySold = await getAlreadySoldQuantity(input.item_id, excludeBookingItemId);
+    // A sale deliberately never subtracts date-overlapping rentals here —
+    // only get_item_availability's general range query does that (see its
+    // comment above). A rental request does, via the exact same
+    // getReservedQuantityForRange query.
+    const alreadyReservedForDates =
+      input.type === "rental" ? await getReservedQuantityForRange(input.item_id, input.pickup_date, input.return_date as string, excludeBookingItemId) : 0;
 
     const available = (item.quantity_on_hand ?? 0) - alreadySold - alreadyReservedForDates;
     if (qty > available) {

@@ -1,5 +1,6 @@
 import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
+import { searchCustomers } from "../lib/customersData.js";
 
 export const customersRouter = Router();
 
@@ -17,11 +18,11 @@ function normalizePhone(phone: string): string {
 
 // GET /api/customers?search=... — matches name (substring, case-insensitive)
 // OR phone OR phone_secondary (substring match against digits-only, so
-// callers can search with or without spaces/dashes/+91). Separate queries +
-// merge, rather than a single .or() filter, so a search term containing a
-// comma or parenthesis can't break PostgREST's filter syntax. phone_secondary
-// is search-only here — it never participates in duplicate detection (see
-// POST/PATCH below).
+// callers can search with or without spaces/dashes/+91), via the shared
+// searchCustomers() (backend/src/lib/customersData.ts) — also reused by the
+// AI assistant's get_customer_history tool, so a name resolves to the same
+// customer(s) everywhere in the app. phone_secondary is search-only here —
+// it never participates in duplicate detection (see POST/PATCH below).
 customersRouter.get("/", async (req, res) => {
   const term = typeof req.query.search === "string" ? req.query.search.trim() : "";
 
@@ -31,20 +32,11 @@ customersRouter.get("/", async (req, res) => {
     return res.json(data);
   }
 
-  const digits = normalizePhone(term);
-  const [byName, byPhone, byPhoneSecondary] = await Promise.all([
-    supabase.from("customers").select("*").ilike("name", `%${term}%`),
-    digits ? supabase.from("customers").select("*").ilike("phone", `%${digits}%`) : Promise.resolve({ data: [], error: null }),
-    digits ? supabase.from("customers").select("*").ilike("phone_secondary", `%${digits}%`) : Promise.resolve({ data: [], error: null }),
-  ]);
-  if (byName.error) return res.status(500).json({ error: byName.error.message });
-  if (byPhone.error) return res.status(500).json({ error: byPhone.error.message });
-  if (byPhoneSecondary.error) return res.status(500).json({ error: byPhoneSecondary.error.message });
-
-  const merged = new Map<string, (typeof byName.data)[number]>();
-  for (const c of [...(byName.data ?? []), ...(byPhone.data ?? []), ...(byPhoneSecondary.data ?? [])]) merged.set(c.id, c);
-  const results = Array.from(merged.values()).sort((a, b) => (b.created_at as string).localeCompare(a.created_at));
-  res.json(results);
+  try {
+    res.json(await searchCustomers(term));
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : "Search failed" });
+  }
 });
 
 customersRouter.get("/:id", async (req, res) => {

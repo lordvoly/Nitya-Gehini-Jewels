@@ -32,6 +32,26 @@ export async function getPeriodBookingItems(from: string, to: string): Promise<B
   return data;
 }
 
+// Same shape and same cancelled-exclusion rule as getPeriodBookingItems,
+// scoped to one item instead of a date-bounded shop-wide period — from/to
+// optional (all-time when omitted) rather than required, since
+// get_item_revenue's default is "this item's whole history", not "this
+// month" the way get_financial_summary's is. Feeds directly into
+// getRevenueBreakdown below exactly like getPeriodBookingItems already
+// does, so a single item's revenue reconciles by the same construction.
+export async function getItemBookingItems(itemId: string, from?: string, to?: string): Promise<BookingItemRow[]> {
+  let query = supabase
+    .from("booking_items")
+    .select("id, booking_id, type, price_charged, item_id, items(item_code, name), bookings(customer_id, customers(name, phone, customer_type))")
+    .eq("item_id", itemId)
+    .neq("status", "cancelled");
+  if (from) query = query.gte("pickup_date", from);
+  if (to) query = query.lte("pickup_date", to);
+  const { data, error } = await query.returns<BookingItemRow[]>();
+  if (error) throw error;
+  return data;
+}
+
 export function summarizeBookingItems(periodItems: BookingItemRow[]) {
   return {
     total_bookings: new Set(periodItems.map((b) => b.booking_id)).size,
@@ -120,7 +140,11 @@ export async function getExpensesForPeriod(from: string, to: string) {
 // active items' "received" instead of being excluded — the closest this
 // data model can get to "excluded entirely" without per-item payment
 // tracking, which doesn't exist anywhere else in this app either.
-async function getRevenueBreakdown(periodItems: BookingItemRow[]) {
+// Exported so get_item_revenue (backend/src/tools/index.ts) can reuse this
+// exact proration math against a single item's booking_items instead of a
+// whole period's — the function itself is agnostic to what the passed-in
+// rows have in common, so no new math is needed for that reuse.
+export async function getRevenueBreakdown(periodItems: BookingItemRow[]) {
   const bookingIds = [...new Set(periodItems.map((b) => b.booking_id))];
   if (bookingIds.length === 0) return { grand_total: 0, received: 0, balance_remaining: 0 };
 
