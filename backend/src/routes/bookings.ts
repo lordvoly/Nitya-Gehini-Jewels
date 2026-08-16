@@ -176,7 +176,7 @@ bookingsRouter.get("/", async (req, res) => {
   const chainsByItemId = new Map(
     (await attachChains((bookings ?? []).flatMap((b) => (b.booking_items ?? []) as ChainableBookingItem[]))).map((bi) => [
       bi.id,
-      { previous_booking_item: bi.previous_booking_item, future_booking_items: bi.future_booking_items },
+      { previous_booking_item: bi.previous_booking_item, future_booking_items: bi.future_booking_items, pickup_overdue: bi.pickup_overdue },
     ]),
   );
 
