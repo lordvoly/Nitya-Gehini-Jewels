@@ -1732,6 +1732,28 @@ a.stat-card:active {
   margin-bottom: 18px;
 }
 
+/* A cancelled line item still appears (it's real history) but must read as
+   the exception at a glance — muted color plus a strikethrough on the item
+   name so it's unmistakable even in grayscale print, where the pill's
+   background color may not survive. */
+.receipt-item-cancelled {
+  color: var(--ink-soft);
+}
+
+.receipt-item-name-cancelled {
+  text-decoration: line-through;
+}
+
+.receipt-item-pill {
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.receipt-cancelled-note {
+  margin-top: -10px;
+  margin-bottom: 14px;
+}
+
 .receipt-totals {
   margin-left: auto;
   max-width: 260px;

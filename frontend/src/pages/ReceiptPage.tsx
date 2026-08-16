@@ -4,6 +4,7 @@ import QRCode from "qrcode";
 import { fetchBooking, type Booking } from "../lib/bookings";
 import { fetchShopSettings, type ShopSettings } from "../lib/shopSettings";
 import { formatDateDisplay } from "../lib/dates";
+import { bookingItemStatusPill } from "../lib/statusPill";
 import "../styles/shared.css";
 
 // Printable receipt — deliberately plain, no GST section (per explicit
@@ -73,22 +74,34 @@ export default function ReceiptPage() {
           </tr>
         </thead>
         <tbody>
-          {booking.booking_items.map((bi) => (
-            <tr key={bi.id}>
-              <td data-label="Item">
-                {bi.items?.item_code} — {bi.items?.name}
-              </td>
-              <td data-label="Type">{bi.type === "rental" ? "Rental" : "Sale"}</td>
-              <td data-label="Dates">
-                {bi.type === "rental"
-                  ? `${formatDateDisplay(bi.pickup_date)}${bi.return_date ? ` → ${formatDateDisplay(bi.return_date)}` : ""}`
-                  : formatDateDisplay(bi.pickup_date)}
-              </td>
-              <td data-label="Price">₹{bi.price_charged}</td>
-            </tr>
-          ))}
+          {booking.booking_items.map((bi) => {
+            const cancelled = bi.status === "cancelled";
+            const pill = bookingItemStatusPill(bi.status);
+            return (
+              <tr key={bi.id} className={cancelled ? "receipt-item-cancelled" : undefined}>
+                <td data-label="Item">
+                  <span className={cancelled ? "receipt-item-name-cancelled" : undefined}>
+                    {bi.items?.item_code} — {bi.items?.name}
+                  </span>
+                  {cancelled && <span className={`pill ${pill.className} receipt-item-pill`}>{pill.label}</span>}
+                </td>
+                <td data-label="Type">{bi.type === "rental" ? "Rental" : "Sale"}</td>
+                <td data-label="Dates">
+                  {bi.type === "rental"
+                    ? `${formatDateDisplay(bi.pickup_date)}${bi.return_date ? ` → ${formatDateDisplay(bi.return_date)}` : ""}`
+                    : formatDateDisplay(bi.pickup_date)}
+                </td>
+                <td data-label="Price">₹{bi.price_charged}</td>
+              </tr>
+            );
+          })}
         </tbody>
       </table>
+      {booking.booking_items.some((bi) => bi.status === "cancelled") && (
+        <p className="wizard-hint receipt-cancelled-note">
+          Cancelled items are shown for a complete record but aren't included in the total below.
+        </p>
+      )}
 
       <div className="receipt-totals">
         <div className="receipt-totals-row">
