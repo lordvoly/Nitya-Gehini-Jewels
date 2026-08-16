@@ -1509,18 +1509,108 @@ a.stat-card:active {
   margin-bottom: 14px;
 }
 
-/* Small muted heading above a .toggle-group, for BookingsList's stacked
-   Category / Date Basis / Time Range controls — unlike ItemsList's single
-   self-explanatory toggle row, three stacked rows need a label each so
-   "Pickup Date"/"Booking Date" reads as a mode switch, not a mystery. */
-.filter-group-label {
-  font-size: 12.5px;
-  color: var(--ink-soft);
-  margin: 10px 0 4px;
-}
-
 .booking-card-date {
   margin-top: 2px;
+}
+
+/* ── Filter dropdown bar (BookingsList's collapsed Show/Sort/Time) ──────
+   Replaces three stacked rows of always-visible toggle buttons with one
+   slim row of compact "Label: Value ▾" triggers, each opening a small
+   anchored menu — same options, same underlying state, purely a different
+   presentation. Equal-width flex items with truncating text so the row
+   never wraps or overflows regardless of which option is currently
+   selected (a long value like "Needs Confirmation" or "Past 3 Months"
+   truncates on the trigger; the menu itself always shows the full label). */
+.filter-dropdown-bar {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 14px;
+}
+
+.filter-dropdown {
+  position: relative;
+  flex: 1 1 0;
+  min-width: 0;
+}
+
+.filter-dropdown-trigger {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  min-height: var(--tap);
+  padding: 8px 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.filter-dropdown-trigger[aria-expanded="true"] {
+  border-color: var(--gold-text);
+}
+
+.filter-dropdown-trigger-text {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.filter-dropdown-chevron {
+  flex: 0 0 auto;
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.filter-dropdown-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  z-index: 20;
+  min-width: 100%;
+  width: max-content;
+  max-width: min(240px, 80vw);
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(43, 33, 41, 0.18);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.filter-dropdown-menu-right {
+  left: auto;
+  right: 0;
+}
+
+.filter-dropdown-option {
+  min-height: var(--tap);
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.filter-dropdown-option:hover {
+  background: var(--wine-soft);
+}
+
+.filter-dropdown-option.active {
+  background: var(--wine);
+  color: #fff;
+  font-weight: 600;
 }
 
 .date-range-row {

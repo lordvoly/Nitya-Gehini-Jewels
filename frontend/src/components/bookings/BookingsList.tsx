@@ -10,6 +10,12 @@ import {
 } from "../../lib/bookings";
 import { bookingItemStatusPill, bookingComputedStatusPill } from "../../lib/statusPill";
 import { formatDateDisplay } from "../../lib/dates";
+import { FilterDropdown } from "../common/FilterDropdown";
+
+const DATE_BASIS_LABELS: Record<BookingDateBasis, string> = {
+  pickup: "Pickup Date",
+  booking: "Booking Date",
+};
 
 const CATEGORY_LABELS: Record<BookingCategory, string> = {
   all: "All",
@@ -162,37 +168,28 @@ export function BookingsList({
             onChange={(e) => setTerm(e.target.value)}
           />
 
-          <p className="filter-group-label">Show</p>
-          <div className="toggle-group filter-group">
-            {(Object.keys(CATEGORY_LABELS) as BookingCategory[]).map((c) => (
-              <button key={c} className={category === c ? "toggle-btn active" : "toggle-btn"} onClick={() => setCategory(c)}>
-                {CATEGORY_LABELS[c]}
-              </button>
-            ))}
-          </div>
-
-          <p className="filter-group-label">Filter &amp; sort by</p>
-          <div className="toggle-group filter-group">
-            <button
-              className={dateBasis === "pickup" ? "toggle-btn active" : "toggle-btn"}
-              onClick={() => setDateBasis("pickup")}
-            >
-              Pickup Date
-            </button>
-            <button
-              className={dateBasis === "booking" ? "toggle-btn active" : "toggle-btn"}
-              onClick={() => setDateBasis("booking")}
-            >
-              Booking Date
-            </button>
-          </div>
-
-          <div className="toggle-group filter-group">
-            {(Object.keys(TIME_RANGE_LABELS) as BookingTimeRange[]).map((r) => (
-              <button key={r} className={timeRange === r ? "toggle-btn active" : "toggle-btn"} onClick={() => setTimeRange(r)}>
-                {TIME_RANGE_LABELS[r]}
-              </button>
-            ))}
+          <div className="filter-dropdown-bar">
+            <FilterDropdown
+              label="Show"
+              value={category}
+              options={Object.keys(CATEGORY_LABELS) as BookingCategory[]}
+              optionLabels={CATEGORY_LABELS}
+              onChange={setCategory}
+            />
+            <FilterDropdown
+              label="Sort"
+              value={dateBasis}
+              options={Object.keys(DATE_BASIS_LABELS) as BookingDateBasis[]}
+              optionLabels={DATE_BASIS_LABELS}
+              onChange={setDateBasis}
+            />
+            <FilterDropdown
+              label="Time"
+              value={timeRange}
+              options={Object.keys(TIME_RANGE_LABELS) as BookingTimeRange[]}
+              optionLabels={TIME_RANGE_LABELS}
+              onChange={setTimeRange}
+            />
           </div>
         </>
       )}
