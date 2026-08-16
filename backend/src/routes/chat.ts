@@ -34,11 +34,6 @@ Reach for the right tool based on what's actually being asked:
 chatRouter.post("/", async (req, res) => {
   try {
     const messages: Anthropic.MessageParam[] = req.body.messages;
-    // TEMPORARY debug capture — investigating a real tool-selection bug
-    // report (get_upcoming_returns firing for a "going out" question).
-    // Removed once the real tool call has been captured; not a permanent
-    // feature.
-    const _debugToolCalls: { name: string; input: unknown }[] = [];
 
     let response = await anthropic.messages.create({
       model: "claude-haiku-4-5",
@@ -51,7 +46,6 @@ chatRouter.post("/", async (req, res) => {
     // Resolve tool calls in a loop until Claude returns a final text answer.
     while (response.stop_reason === "tool_use") {
       const toolUses = response.content.filter((block) => block.type === "tool_use");
-      for (const block of toolUses) _debugToolCalls.push({ name: block.name, input: block.input });
       const toolResults = await Promise.all(
         toolUses.map(async (block) => ({
           type: "tool_result" as const,
@@ -72,7 +66,7 @@ chatRouter.post("/", async (req, res) => {
       });
     }
 
-    res.json({ message: response, _debug_tool_calls: _debugToolCalls });
+    res.json({ message: response });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
   }
