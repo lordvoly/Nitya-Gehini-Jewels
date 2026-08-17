@@ -110,6 +110,13 @@ export interface Booking {
   booking_date: string;
   created_at: string;
   updated_at: string;
+  // Free-text internal note on the whole transaction — editable at any
+  // computed_status, never shown on the receipt/invoice (see ReceiptPage,
+  // which never spreads this object). notes_updated_at is a dedicated
+  // "last touched" timestamp, set only when notes itself changes — not the
+  // generic updated_at above, which also moves on GST/booking_date edits.
+  notes: string | null;
+  notes_updated_at: string | null;
   customers: BookingCustomerSummary | null;
   booking_items: BookingItem[];
   total_paid: number;
@@ -300,6 +307,7 @@ export interface UpdateBookingInput {
   hsn_code?: string | null;
   tax_rate?: number | null;
   booking_date?: string;
+  notes?: string | null;
 }
 
 export function updateBooking(id: string, patch: UpdateBookingInput) {

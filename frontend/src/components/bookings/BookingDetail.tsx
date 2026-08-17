@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { fetchBooking, type Booking, type BookingItem } from "../../lib/bookings";
+import { fetchBooking, updateBooking, type Booking, type BookingItem } from "../../lib/bookings";
 import {
   fetchPayments,
   recordPayment,
@@ -40,6 +40,14 @@ export function BookingDetail({
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
+
+  // Whole-booking internal note — separate from `notes` above (that's the
+  // per-payment note field in the Record Payment form). Editable at any
+  // computed_status, so no status check gates any of this.
+  const [editingNotes, setEditingNotes] = useState(false);
+  const [notesInput, setNotesInput] = useState("");
+  const [savingNotes, setSavingNotes] = useState(false);
+  const [notesError, setNotesError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -82,6 +90,20 @@ export function BookingDetail({
     }
   }
 
+  async function handleSaveNotes() {
+    setNotesError(null);
+    setSavingNotes(true);
+    try {
+      await updateBooking(bookingId, { notes: notesInput.trim() || null });
+      setEditingNotes(false);
+      await load();
+    } catch (err) {
+      setNotesError(err instanceof Error ? err.message : "Failed to save notes");
+    } finally {
+      setSavingNotes(false);
+    }
+  }
+
   const statusPill = booking
     ? bookingComputedStatusPill(booking.computed_status, booking.resolved_item_count, booking.active_item_count)
     : null;
@@ -115,6 +137,60 @@ export function BookingDetail({
                 <strong>Balance due: ₹{booking.balance_due}</strong>
               </li>
             </ul>
+
+            <h2>Notes</h2>
+            <p className="wizard-hint">Internal only — never shown on the printed receipt.</p>
+            {editingNotes ? (
+              <div className="wizard-step">
+                <label className="field-label">
+                  <textarea
+                    rows={5}
+                    value={notesInput}
+                    onChange={(e) => setNotesInput(e.target.value)}
+                    placeholder="e.g. Shop owes customer ₹500 separately from their own balance…"
+                  />
+                </label>
+                {notesError && <p className="wizard-error">{notesError}</p>}
+                <div className="wizard-actions">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      setEditingNotes(false);
+                      setNotesError(null);
+                    }}
+                  >
+                    Cancel
+                  </button>
+                  <button type="button" className="btn-primary" disabled={savingNotes} onClick={handleSaveNotes}>
+                    {savingNotes ? "Saving…" : "Save Notes"}
+                  </button>
+                </div>
+              </div>
+            ) : (
+              <>
+                {booking.notes ? (
+                  <p className="booking-notes-text">{booking.notes}</p>
+                ) : (
+                  <p className="wizard-hint">No notes yet.</p>
+                )}
+                {booking.notes_updated_at && (
+                  <p className="wizard-hint">Last updated {formatDateDisplay(booking.notes_updated_at.slice(0, 10))}</p>
+                )}
+                <div className="wizard-actions">
+                  <button
+                    type="button"
+                    className="btn-secondary"
+                    onClick={() => {
+                      setNotesInput(booking.notes ?? "");
+                      setEditingNotes(true);
+                    }}
+                  >
+                    {booking.notes ? "Edit Notes" : "Add Notes"}
+                  </button>
+                </div>
+              </>
+            )}
 
             <h2>Items ({booking.booking_items.length})</h2>
             {booking.booking_items.map((bi) => {

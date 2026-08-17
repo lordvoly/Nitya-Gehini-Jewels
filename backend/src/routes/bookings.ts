@@ -978,9 +978,12 @@ bookingsRouter.post("/:id/cancel", async (req: AuthedRequest, res) => {
 });
 
 // PATCH /api/bookings/:id — parent-level fields only (customer_id, GST
-// fields). Line-item fields are edited through the endpoint below.
+// fields, notes). Line-item fields are edited through the endpoint below.
+// Deliberately no status check anywhere in this handler — notes must stay
+// editable at any computed_status (Booked/Out/Completed/Cancelled), unlike
+// the line-item PATCH below which blocks a returned/cancelled item.
 bookingsRouter.patch("/:id", async (req, res) => {
-  const { customer_id, gst_applicable, gst_invoice_number, hsn_code, tax_rate, booking_date } = req.body ?? {};
+  const { customer_id, gst_applicable, gst_invoice_number, hsn_code, tax_rate, booking_date, notes } = req.body ?? {};
   const update: Record<string, unknown> = {};
   if (customer_id !== undefined) update.customer_id = customer_id;
   if (booking_date !== undefined) update.booking_date = booking_date;
@@ -989,6 +992,14 @@ bookingsRouter.patch("/:id", async (req, res) => {
     update.gst_invoice_number = gst_applicable ? gst_invoice_number ?? null : null;
     update.hsn_code = gst_applicable ? hsn_code ?? null : null;
     update.tax_rate = gst_applicable ? tax_rate ?? null : null;
+  }
+  // notes_updated_at is set here explicitly, only when notes itself is part
+  // of this request — not derived from the generic updated_at trigger,
+  // which fires on any of the fields above too and would make "last edited"
+  // ambiguous (see the migration's own comment).
+  if (notes !== undefined) {
+    update.notes = typeof notes === "string" && notes.trim() ? notes : null;
+    update.notes_updated_at = new Date().toISOString();
   }
 
   const { data, error } = await supabase.from("bookings").update(update).eq("id", req.params.id).select().single();
