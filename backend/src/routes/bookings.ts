@@ -265,6 +265,20 @@ bookingsRouter.get("/", async (req, res) => {
     });
   }
 
+  // ?type=rental|sale — a booking matches if ANY of its items is that type,
+  // same per-item-OR reasoning as ?category= just above (a family
+  // transaction can genuinely mix a rental and a sale in one booking, see
+  // BookingForm's "+ Add a Sale item instead" link). Deliberately no status
+  // check here, unlike category's "completed" bucket — Type describes what
+  // kind of transaction was made, not its current state, so a cancelled
+  // sale item still makes a booking match "Sale". Composes as a plain AND
+  // with category/computed_status above by being just another sequential
+  // .filter() over the same result array.
+  const typeFilter = typeof req.query.type === "string" ? req.query.type : "all";
+  if (typeFilter === "rental" || typeFilter === "sale") {
+    result = result.filter((b) => ((b.booking_items ?? []) as unknown as CategoryBookingItem[]).some((bi) => bi.type === typeFilter));
+  }
+
   // ?date_basis=pickup|booking (default pickup) + ?time_range=week|month|
   // 3months|year|all (default all) — independent of category above: this is
   // about which date field time-based filtering/sorting uses, not item

@@ -22,6 +22,10 @@ export type BookingCategory = "all" | "out" | "needs_confirmation" | "booked" | 
 // independent of category above.
 export type BookingDateBasis = "pickup" | "booking";
 export type BookingTimeRange = "all" | "week" | "month" | "3months" | "year";
+// BookingsList's Type filter — a booking matches "rental"/"sale" if ANY of
+// its items is that type, same per-item-OR reasoning as BookingCategory
+// above; a mixed booking (one rental item + one sale item) matches both.
+export type BookingTypeFilter = "all" | BookingItemType;
 
 export interface BookingItemSummary {
   item_code: string;
@@ -193,6 +197,7 @@ export function fetchBookings(params?: {
   category?: BookingCategory;
   date_basis?: BookingDateBasis;
   time_range?: BookingTimeRange;
+  type?: BookingTypeFilter;
 }) {
   const qs = params ? new URLSearchParams(params as Record<string, string>).toString() : "";
   return apiFetch<Booking[]>(`/api/bookings${qs ? `?${qs}` : ""}`);

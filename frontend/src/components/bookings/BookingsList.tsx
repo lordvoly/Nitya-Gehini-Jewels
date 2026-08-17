@@ -7,6 +7,7 @@ import {
   type BookingCategory,
   type BookingDateBasis,
   type BookingTimeRange,
+  type BookingTypeFilter,
 } from "../../lib/bookings";
 import { bookingItemStatusPill, bookingComputedStatusPill } from "../../lib/statusPill";
 import { formatDateDisplay } from "../../lib/dates";
@@ -44,6 +45,12 @@ const TIME_RANGE_LABELS: Record<BookingTimeRange, string> = {
   month: "Past Month",
   "3months": "Past 3 Months",
   year: "Past Year",
+};
+
+const TYPE_FILTER_LABELS: Record<BookingTypeFilter, string> = {
+  all: "All",
+  rental: "Rental",
+  sale: "Sale",
 };
 
 // One card per family transaction — a flat table row can't express "one
@@ -92,6 +99,7 @@ export function BookingsList({
   const [category, setCategory] = useState<BookingCategory>("all");
   const [dateBasis, setDateBasis] = useState<BookingDateBasis>("pickup");
   const [timeRange, setTimeRange] = useState<BookingTimeRange>("all");
+  const [typeFilter, setTypeFilter] = useState<BookingTypeFilter>("all");
 
   // Same debounced, cancelled-flag-guarded search as CustomersList: a
   // 300ms pause before the request fires, and a newer search's response
@@ -112,6 +120,7 @@ export function BookingsList({
           const extra: Record<string, string> = {};
           if (term) extra.search = term;
           if (category !== "all") extra.category = category;
+          if (typeFilter !== "all") extra.type = typeFilter;
           if (timeRange !== "all") {
             extra.time_range = timeRange;
             extra.date_basis = dateBasis;
@@ -145,7 +154,7 @@ export function BookingsList({
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [term, filterItemId, filterCustomerId, category, dateBasis, timeRange]);
+  }, [term, filterItemId, filterCustomerId, category, typeFilter, dateBasis, timeRange]);
 
   return (
     <div>
@@ -175,6 +184,13 @@ export function BookingsList({
               options={Object.keys(CATEGORY_LABELS) as BookingCategory[]}
               optionLabels={CATEGORY_LABELS}
               onChange={setCategory}
+            />
+            <FilterDropdown
+              label="Type"
+              value={typeFilter}
+              options={Object.keys(TYPE_FILTER_LABELS) as BookingTypeFilter[]}
+              optionLabels={TYPE_FILTER_LABELS}
+              onChange={setTypeFilter}
             />
             <FilterDropdown
               label="Sort"
