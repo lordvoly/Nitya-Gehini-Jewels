@@ -84,6 +84,21 @@ export default function ReceiptPage() {
                     {bi.items?.item_code} — {bi.items?.name}
                   </span>
                   {cancelled && <span className={`pill ${pill.className} receipt-item-pill`}>{pill.label}</span>}
+                  {/* Deliberately outside the Total/Paid/Balance figures below —
+                      a deposit never flows through booking_financials (see
+                      CLAUDE.md), this is purely a paper record of what was
+                      handed over and what came back. Shown only when a deposit
+                      was actually collected; an agreed-but-never-taken deposit
+                      (deposit_amount set, deposit_collected false) has nothing
+                      to show on a receipt. */}
+                  {!cancelled && bi.deposit_collected && (
+                    <div className="receipt-item-deposit">
+                      Security Deposit: ₹{bi.deposit_amount}
+                      {bi.deposit_refunded
+                        ? ` (Refunded${bi.deposit_refund_date ? ` ${formatDateDisplay(bi.deposit_refund_date)}` : ""})`
+                        : " (Held — not yet refunded)"}
+                    </div>
+                  )}
                 </td>
                 <td data-label="Type">{bi.type === "rental" ? "Rental" : "Sale"}</td>
                 <td data-label="Dates">
