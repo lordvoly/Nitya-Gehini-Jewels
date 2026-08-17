@@ -226,7 +226,10 @@ export function BookingDetail({
                       {bi.actual_pickup_date ? ` (picked up ${formatDateDisplay(bi.actual_pickup_date)})` : ""}
                       {bi.actual_return_date ? ` (returned ${formatDateDisplay(bi.actual_return_date)})` : ""}
                     </li>
-                    <li>Price charged: ₹{bi.price_charged}</li>
+                    <li>
+                      Price charged: ₹{bi.price_charged}
+                      {bi.is_foc && <> <span className="pill pill-foc">FOC</span></>}
+                    </li>
                     {bi.type === "rental" && bi.deposit_amount > 0 && (
                       <li>
                         Deposit: ₹{bi.deposit_amount}

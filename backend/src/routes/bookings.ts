@@ -122,7 +122,7 @@ async function attachChains<T extends ChainableBookingItem>(
   );
 }
 
-const BOOKING_LIST_SELECT = `*, customers(name, phone), booking_items(${BOOKING_ITEMS_EMBED})`;
+const BOOKING_LIST_SELECT = `*, customers(name, phone, customer_type), booking_items(${BOOKING_ITEMS_EMBED})`;
 
 // GET /api/bookings?item_id=&customer_id=&computed_status=&search=
 //
@@ -364,7 +364,7 @@ bookingsRouter.get("/next-code", async (_req, res) => {
 export async function getBookingDetail(id: string) {
   const { data: booking, error } = await supabase
     .from("bookings")
-    .select(`*, customers(name, phone), booking_items(${BOOKING_ITEMS_EMBED})`)
+    .select(`*, customers(name, phone, customer_type), booking_items(${BOOKING_ITEMS_EMBED})`)
     .eq("id", id)
     .maybeSingle();
   if (error) throw error;
@@ -428,6 +428,18 @@ interface NewBookingItemInput {
   deposit_amount?: number;
   deposit_collected?: boolean;
   custom_addons?: string[];
+  is_foc?: boolean;
+}
+
+// Whether a customer is allowed to have Free-of-Cost items on their
+// bookings at all — MUA/Influencer only, never Regular. The one place
+// this eligibility check lives; every route that accepts is_foc calls
+// this before honoring a true value, so "can't be bypassed by a direct
+// API call" holds regardless of which endpoint is used.
+async function customerAllowsFoc(customerId: string): Promise<boolean> {
+  const { data, error } = await supabase.from("customers").select("customer_type").eq("id", customerId).maybeSingle();
+  if (error) throw error;
+  return data?.customer_type === "mua" || data?.customer_type === "influencer";
 }
 
 interface ItemConflict {
@@ -630,6 +642,12 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
     }
   }
 
+  // is_foc eligibility is checked here, server-side, regardless of what the
+  // request body claims — a Regular customer's items always get clamped to
+  // is_foc: false before they ever reach the RPC, so this can't be
+  // bypassed by a direct API call, not just hidden in BookingForm's UI.
+  const allowsFoc = await customerAllowsFoc(customer_id);
+
   const advanceAmount = advance_amount != null ? Number(advance_amount) : 0;
   if (advanceAmount > 0 && !advance_method) {
     return res.status(400).json({ error: "advance_method is required when recording an advance payment" });
@@ -682,6 +700,7 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
     deposit_amount: it.type === "rental" ? it.deposit_amount ?? 0 : 0,
     deposit_collected: it.type === "rental" ? it.deposit_collected ?? false : false,
     custom_addons: it.custom_addons ?? [],
+    is_foc: allowsFoc ? !!it.is_foc : false,
   }));
 
   const maxAttempts = customBookingCode ? 1 : 3;
@@ -729,7 +748,7 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
         await Promise.all([
           supabase
             .from("bookings")
-            .select(`*, customers(name, phone), booking_items(${BOOKING_ITEMS_EMBED})`)
+            .select(`*, customers(name, phone, customer_type), booking_items(${BOOKING_ITEMS_EMBED})`)
             .eq("id", bookingId)
             .single(),
           supabase.from("booking_financials").select("total_paid, balance_due, price_charged").eq("booking_id", bookingId).maybeSingle(),
@@ -784,7 +803,7 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
 bookingsRouter.post("/:bookingId/items", async (req, res) => {
   const { data: booking, error: bookingError } = await supabase
     .from("bookings")
-    .select("id")
+    .select("id, customer_id")
     .eq("id", req.params.bookingId)
     .single();
   if (bookingError || !booking) return res.status(404).json({ error: "Booking not found" });
@@ -826,6 +845,11 @@ bookingsRouter.post("/:bookingId/items", async (req, res) => {
   }
   const warning = await checkSameDayWarning(input);
 
+  // Same eligibility clamp as POST / (create) — this is a real
+  // creation-time path for a line item too, just added to an existing
+  // booking rather than a fresh one.
+  const allowsFoc = await customerAllowsFoc(booking.customer_id);
+
   const { data, error } = await supabase
     .from("booking_items")
     .insert({
@@ -839,6 +863,7 @@ bookingsRouter.post("/:bookingId/items", async (req, res) => {
       deposit_amount: input.type === "rental" ? input.deposit_amount ?? 0 : 0,
       deposit_collected: input.type === "rental" ? input.deposit_collected ?? false : false,
       custom_addons: input.custom_addons ?? [],
+      is_foc: allowsFoc ? !!input.is_foc : false,
     })
     .select(`*, items(${ITEMS_EMBED})`)
     .single();
@@ -875,14 +900,17 @@ bookingsRouter.post("/:bookingId/items/:itemId/cancel", async (req: AuthedReques
 
   const { data: siblings, error: siblingsError } = await supabase
     .from("booking_items")
-    .select("id, price_charged, status")
+    .select("id, price_charged, status, is_foc")
     .eq("booking_id", req.params.bookingId)
     .neq("status", "cancelled");
   if (siblingsError) return res.status(500).json({ error: siblingsError.message });
 
+  // FOC siblings contribute ₹0 here, same as booking_financials' own price
+  // subquery — otherwise removing an item next to an FOC one would compute
+  // a refund based on a total that includes money never actually charged.
   const newTotal = (siblings ?? [])
     .filter((s) => s.id !== bookingItem.id)
-    .reduce((sum, s) => sum + Number(s.price_charged), 0);
+    .reduce((sum, s) => sum + (s.is_foc ? 0 : Number(s.price_charged)), 0);
 
   const { data: financials, error: financialsError } = await supabase
     .from("booking_financials")
@@ -1025,7 +1053,7 @@ bookingsRouter.patch("/:bookingId/items/:itemId", async (req, res) => {
     return res.status(409).json({ error: `This item is already '${bookingItem.status}' and can't be edited` });
   }
 
-  const { pickup_date, return_date, price_charged, quantity_booked, deposit_amount, deposit_collected, custom_addons } =
+  const { pickup_date, return_date, price_charged, quantity_booked, deposit_amount, deposit_collected, custom_addons, is_foc } =
     req.body ?? {};
 
   const datesOrQuantityChanged =
@@ -1058,6 +1086,38 @@ bookingsRouter.patch("/:bookingId/items/:itemId", async (req, res) => {
   if (deposit_amount !== undefined) update.deposit_amount = deposit_amount;
   if (deposit_collected !== undefined) update.deposit_collected = deposit_collected;
   if (custom_addons !== undefined) update.custom_addons = custom_addons;
+
+  // is_foc gets its own dedicated lock check, separate from the per-item
+  // ACTIVE_STATUSES gate above: that gate is per-ITEM status, but a
+  // sale-only booking's computed_status reaches 'completed' immediately
+  // (a sale item always counts as "resolved" — see booking_status), while
+  // the item's own status can still be 'booked'/'out'. FOC must lock at
+  // the booking level ("editable while Booked or Out, locked once
+  // Completed"), which the per-item gate alone wouldn't catch for that
+  // case. Applies whenever is_foc is present in the request, regardless
+  // of direction (turning it on OR off) — the field itself is what's
+  // locked, not just new-FOC assignment.
+  if (is_foc !== undefined) {
+    const { data: statusRow, error: statusRowError } = await supabase
+      .from("booking_status")
+      .select("computed_status")
+      .eq("booking_id", bookingItem.booking_id)
+      .maybeSingle();
+    if (statusRowError) return res.status(500).json({ error: statusRowError.message });
+    if (statusRow?.computed_status !== "active") {
+      return res.status(409).json({ error: "FOC status can only be changed while the booking is still active — it's locked once Completed." });
+    }
+
+    const { data: bookingRow, error: bookingRowError } = await supabase
+      .from("bookings")
+      .select("customer_id")
+      .eq("id", bookingItem.booking_id)
+      .single();
+    if (bookingRowError || !bookingRow) return res.status(500).json({ error: "Could not verify booking for FOC eligibility" });
+    const allowsFoc = await customerAllowsFoc(bookingRow.customer_id);
+
+    update.is_foc = allowsFoc ? !!is_foc : false;
+  }
 
   const { data, error } = await supabase.from("booking_items").update(update).eq("id", bookingItem.id).select().single();
   if (error) return res.status(400).json({ error: error.message });

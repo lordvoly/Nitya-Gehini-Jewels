@@ -911,6 +911,16 @@ a {
   color: var(--ink);
 }
 
+/* Deliberately not reusing pill-good/active/attention/neutral's palette —
+   FOC sits next to a real status pill in several places (receipt line
+   items, item history rows) and must never be mistaken for one at a
+   glance. Wine is otherwise reserved for primary actions/active nav, never
+   a status pill, which is exactly what makes it unambiguous here. */
+.pill-foc {
+  background: var(--wine-soft);
+  color: var(--wine);
+}
+
 /* ── Found / warning panels ───────────────────────────────────────────── */
 
 .found-panel {

@@ -8,6 +8,7 @@ import {
   getIdleInventory,
   getFinancialSummary,
   getOutstandingDues,
+  effectivePrice,
 } from "../lib/reportsData.js";
 
 export const reportsRouter = Router();
@@ -50,7 +51,7 @@ reportsRouter.get("/", async (req, res) => {
     // this specific aggregation yet.
     const { data: allItems, error: allError } = await supabase
       .from("booking_items")
-      .select("id, booking_id, type, price_charged, item_id, items(item_code, name), bookings(customer_id, customers(name, phone, customer_type))")
+      .select("id, booking_id, type, price_charged, is_foc, item_id, items(item_code, name), bookings(customer_id, customers(name, phone, customer_type))")
       .neq("status", "cancelled")
       .returns<
         {
@@ -58,6 +59,7 @@ reportsRouter.get("/", async (req, res) => {
           booking_id: string;
           type: "rental" | "sale";
           price_charged: number;
+          is_foc: boolean;
           item_id: string;
           items: { item_code: string; name: string } | null;
           bookings: { customer_id: string; customers: { name: string; phone: string; customer_type: "regular" | "influencer" | "mua" } | null } | null;
@@ -78,14 +80,14 @@ reportsRouter.get("/", async (req, res) => {
       const existing = customerAgg.get(customerId);
       if (existing) {
         existing.bookingIds.add(b.booking_id);
-        existing.total_spend += Number(b.price_charged);
+        existing.total_spend += effectivePrice(b);
       } else {
         customerAgg.set(customerId, {
           customer_id: customerId,
           name: customer.name,
           phone: customer.phone,
           bookingIds: new Set([b.booking_id]),
-          total_spend: Number(b.price_charged),
+          total_spend: effectivePrice(b),
         });
       }
     }

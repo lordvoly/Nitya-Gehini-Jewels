@@ -27,6 +27,7 @@ interface NewItemDraft {
   depositCollected: boolean;
   customAddons: string[];
   newAddon: string;
+  isFoc: boolean;
 }
 
 function emptyDraft(): NewItemDraft {
@@ -41,6 +42,7 @@ function emptyDraft(): NewItemDraft {
     depositCollected: false,
     customAddons: [],
     newAddon: "",
+    isFoc: false,
   };
 }
 
@@ -56,6 +58,7 @@ interface ItemEditState {
   depositCollected: boolean;
   customAddons: string[];
   newAddon: string;
+  isFoc: boolean;
 }
 
 function draftFromItem(bi: BookingItem): ItemEditState {
@@ -68,6 +71,7 @@ function draftFromItem(bi: BookingItem): ItemEditState {
     depositCollected: bi.deposit_collected,
     customAddons: bi.custom_addons ?? [],
     newAddon: "",
+    isFoc: bi.is_foc,
   };
 }
 
@@ -131,7 +135,10 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
           email: null,
           address: "",
           notes: null,
-          customer_type: "regular",
+          // Real value now that the backend embed includes it (previously
+          // hardcoded to "regular", which silently broke any FOC-visibility
+          // check keyed off this — see BookingCustomerSummary in lib/bookings.ts).
+          customer_type: b.customers?.customer_type ?? "regular",
           created_at: "",
         });
         setBookingDate(b.booking_date);
@@ -212,6 +219,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
         deposit_amount: bi.type === "rental" ? toNumberOrNull(state.depositAmount) ?? 0 : 0,
         deposit_collected: bi.type === "rental" ? state.depositCollected : false,
         custom_addons: state.customAddons,
+        is_foc: state.isFoc,
       });
       await load();
     } catch (err) {
@@ -320,6 +328,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
         deposit_amount: draft.type === "rental" ? toNumberOrNull(draft.depositAmount) ?? 0 : 0,
         deposit_collected: draft.type === "rental" ? draft.depositCollected : false,
         custom_addons: draft.customAddons,
+        is_foc: draft.isFoc,
       });
       setDraft(emptyDraft());
       setShowAddForm(false);
@@ -411,7 +420,10 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
                   <h3>
                     {bi.items?.item_code} — {bi.items?.name}
                   </h3>
-                  <span className={`pill ${pill.className}`}>{pill.label}</span>
+                  <span className="pill-group">
+                    <span className={`pill ${pill.className}`}>{pill.label}</span>
+                    {bi.is_foc && <span className="pill pill-foc">FOC</span>}
+                  </span>
                 </div>
                 <p className="wizard-hint">
                   {bi.status === "returned"
@@ -426,13 +438,26 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
 
           const pendingRefund = refundNeeded[bi.id];
 
+          // FOC's own lock is booking-level (computed_status), separate from
+          // `editable` above (per-item status) — a sale-only booking can
+          // reach computed_status 'completed' while its item's own status
+          // is still 'booked'/'out', which `editable` alone wouldn't catch.
+          // See the matching backend check in bookings.ts's PATCH
+          // .../items/:itemId for why these are deliberately two different
+          // conditions.
+          const focLocked = booking.computed_status !== "active";
+          const canShowFoc = customer?.customer_type === "mua" || customer?.customer_type === "influencer";
+
           return (
             <div className="line-item-card" key={bi.id}>
               <div className="line-item-card-header">
                 <h3>
                   {bi.items?.item_code} — {bi.items?.name}
                 </h3>
-                <span className={`pill ${pill.className}`}>{pill.label}</span>
+                <span className="pill-group">
+                  <span className={`pill ${pill.className}`}>{pill.label}</span>
+                  {bi.is_foc && <span className="pill pill-foc">FOC</span>}
+                </span>
               </div>
 
               {bi.items?.tracking_type === "quantity" && (
@@ -477,6 +502,21 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
                   onChange={(e) => updateItemEdit(bi.id, { price: e.target.value })}
                 />
               </label>
+
+              {canShowFoc && (
+                <>
+                  <label className="field-label">
+                    <input
+                      type="checkbox"
+                      checked={state.isFoc}
+                      disabled={focLocked}
+                      onChange={(e) => updateItemEdit(bi.id, { isFoc: e.target.checked })}
+                    />{" "}
+                    Free of Cost (FOC)
+                  </label>
+                  {focLocked && <p className="wizard-hint">Locked — this booking is already Completed.</p>}
+                </>
+              )}
 
               {bi.type === "rental" && (
                 <>
@@ -680,6 +720,21 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
               Price Charged (₹)
               <input type="number" min={0} value={draft.price} onChange={(e) => setDraft((d) => ({ ...d, price: e.target.value }))} />
             </label>
+
+            {(customer?.customer_type === "mua" || customer?.customer_type === "influencer") && (
+              <>
+                <label className="field-label">
+                  <input
+                    type="checkbox"
+                    checked={draft.isFoc}
+                    disabled={booking.computed_status !== "active"}
+                    onChange={(e) => setDraft((d) => ({ ...d, isFoc: e.target.checked }))}
+                  />{" "}
+                  Free of Cost (FOC)
+                </label>
+                {booking.computed_status !== "active" && <p className="wizard-hint">Locked — this booking is already Completed.</p>}
+              </>
+            )}
 
             {draft.type === "rental" && (
               <>

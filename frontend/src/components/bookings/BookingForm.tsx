@@ -27,6 +27,10 @@ interface LineItemDraft {
   depositCollected: boolean;
   customAddons: string[];
   newAddon: string;
+  // Free of Cost — only ever honored server-side when the booking's
+  // customer is MUA/Influencer; the price field above stays as entered
+  // regardless, since the real listed price is kept as a reference.
+  isFoc: boolean;
 }
 
 function emptyLineItem(type: BookingItemType): LineItemDraft {
@@ -42,6 +46,7 @@ function emptyLineItem(type: BookingItemType): LineItemDraft {
     depositCollected: false,
     customAddons: [],
     newAddon: "",
+    isFoc: false,
   };
 }
 
@@ -191,6 +196,7 @@ export function BookingForm() {
             deposit_amount: r.type === "rental" ? toNumberOrNull(r.depositAmount) ?? 0 : 0,
             deposit_collected: r.type === "rental" ? r.depositCollected : false,
             custom_addons: r.customAddons,
+            is_foc: r.isFoc,
           };
         }),
       });
@@ -445,6 +451,17 @@ export function BookingForm() {
                   onChange={(e) => updateLineItem(row.key, { price: e.target.value })}
                 />
               </label>
+
+              {(customer?.customer_type === "mua" || customer?.customer_type === "influencer") && (
+                <label className="field-label">
+                  <input
+                    type="checkbox"
+                    checked={row.isFoc}
+                    onChange={(e) => updateLineItem(row.key, { isFoc: e.target.checked })}
+                  />{" "}
+                  Free of Cost (FOC)
+                </label>
+              )}
 
               {row.type === "rental" && (
                 <>

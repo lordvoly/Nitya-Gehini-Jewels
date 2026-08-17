@@ -106,7 +106,16 @@ export default function ReceiptPage() {
                     ? `${formatDateDisplay(bi.pickup_date)}${bi.return_date ? ` → ${formatDateDisplay(bi.return_date)}` : ""}`
                     : formatDateDisplay(bi.pickup_date)}
                 </td>
-                <td data-label="Price">₹{bi.price_charged}</td>
+                <td data-label="Price">
+                  {bi.is_foc ? (
+                    <>
+                      <span className="receipt-item-name-cancelled">₹{bi.price_charged}</span>{" "}
+                      <span className="pill pill-foc receipt-item-pill">FOC</span>
+                    </>
+                  ) : (
+                    `₹${bi.price_charged}`
+                  )}
+                </td>
               </tr>
             );
           })}

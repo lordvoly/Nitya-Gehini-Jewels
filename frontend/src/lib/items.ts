@@ -96,6 +96,7 @@ export interface ItemHistoryRow {
   pickup_date: string;
   return_date: string | null;
   price_charged: number;
+  is_foc: boolean;
   booking_id: string;
   booking_code: string | null;
   customer_name: string | null;

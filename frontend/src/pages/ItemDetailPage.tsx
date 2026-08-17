@@ -130,7 +130,16 @@ export default function ItemDetailPage() {
                         <td data-label="Status">
                           <span className={`pill ${rowPill.className}`}>{rowPill.label}</span>
                         </td>
-                        <td data-label="Amount">₹{row.price_charged}</td>
+                        <td data-label="Amount">
+                          {row.is_foc ? (
+                            <>
+                              <span className="receipt-item-name-cancelled">₹{row.price_charged}</span>{" "}
+                              <span className="pill pill-foc receipt-item-pill">FOC</span>
+                            </>
+                          ) : (
+                            `₹${row.price_charged}`
+                          )}
+                        </td>
                       </tr>
                     );
                   })}

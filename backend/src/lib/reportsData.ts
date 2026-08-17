@@ -11,6 +11,7 @@ export interface BookingItemRow {
   booking_id: string;
   type: "rental" | "sale";
   price_charged: number;
+  is_foc: boolean;
   item_id: string;
   items: { item_code: string; name: string } | null;
   bookings: { customer_id: string; customers: { name: string; phone: string; customer_type: "regular" | "influencer" | "mua" } | null } | null;
@@ -18,12 +19,21 @@ export interface BookingItemRow {
 
 const isRegular = (b: BookingItemRow) => (b.bookings?.customers?.customer_type ?? "regular") === "regular";
 
+// The one place "what did this item actually cost" gets decided — an FOC
+// item's real price_charged stays stored untouched (a reference of what it
+// would have cost), but contributes ₹0 to every revenue/balance figure.
+// Every function below that sums price_charged goes through this instead
+// of reading the raw column directly.
+export function effectivePrice(item: { price_charged: number; is_foc: boolean }): number {
+  return item.is_foc ? 0 : Number(item.price_charged);
+}
+
 // A cancelled item never actually happened, so it's excluded here — same
 // rule applied consistently across every figure derived from this query.
 export async function getPeriodBookingItems(from: string, to: string): Promise<BookingItemRow[]> {
   const { data, error } = await supabase
     .from("booking_items")
-    .select("id, booking_id, type, price_charged, item_id, items(item_code, name), bookings(customer_id, customers(name, phone, customer_type))")
+    .select("id, booking_id, type, price_charged, is_foc, item_id, items(item_code, name), bookings(customer_id, customers(name, phone, customer_type))")
     .neq("status", "cancelled")
     .gte("pickup_date", from)
     .lte("pickup_date", to)
@@ -42,7 +52,7 @@ export async function getPeriodBookingItems(from: string, to: string): Promise<B
 export async function getItemBookingItems(itemId: string, from?: string, to?: string): Promise<BookingItemRow[]> {
   let query = supabase
     .from("booking_items")
-    .select("id, booking_id, type, price_charged, item_id, items(item_code, name), bookings(customer_id, customers(name, phone, customer_type))")
+    .select("id, booking_id, type, price_charged, is_foc, item_id, items(item_code, name), bookings(customer_id, customers(name, phone, customer_type))")
     .eq("item_id", itemId)
     .neq("status", "cancelled");
   if (from) query = query.gte("pickup_date", from);
@@ -57,7 +67,9 @@ export function summarizeBookingItems(periodItems: BookingItemRow[]) {
     total_bookings: new Set(periodItems.map((b) => b.booking_id)).size,
     rental_count: periodItems.filter((b) => b.type === "rental").length,
     sale_count: periodItems.filter((b) => b.type === "sale").length,
-    total_revenue: periodItems.reduce((sum, b) => sum + Number(b.price_charged), 0),
+    // FOC items count for booking/rental/sale counts above (a real
+    // transaction happened) but contribute ₹0 to revenue.
+    total_revenue: periodItems.reduce((sum, b) => sum + effectivePrice(b), 0),
   };
 }
 
@@ -150,22 +162,23 @@ export async function getRevenueBreakdown(periodItems: BookingItemRow[]) {
 
   const rangePriceByBooking = new Map<string, number>();
   for (const item of periodItems) {
-    rangePriceByBooking.set(item.booking_id, (rangePriceByBooking.get(item.booking_id) ?? 0) + Number(item.price_charged));
+    rangePriceByBooking.set(item.booking_id, (rangePriceByBooking.get(item.booking_id) ?? 0) + effectivePrice(item));
   }
 
   // Every non-cancelled item for each touched booking (not just the
   // in-range ones) — the denominator for proration, matching
-  // booking_financials' own "status <> 'cancelled'" price definition
-  // exactly so this never silently diverges from that view.
+  // booking_financials' own "status <> 'cancelled', FOC counts as ₹0"
+  // price definition exactly so this never silently diverges from that
+  // view.
   const { data: allItemsForTouchedBookings, error: allItemsError } = await supabase
     .from("booking_items")
-    .select("booking_id, price_charged")
+    .select("booking_id, price_charged, is_foc")
     .in("booking_id", bookingIds)
     .neq("status", "cancelled");
   if (allItemsError) throw allItemsError;
   const totalPriceByBooking = new Map<string, number>();
   for (const row of allItemsForTouchedBookings ?? []) {
-    totalPriceByBooking.set(row.booking_id, (totalPriceByBooking.get(row.booking_id) ?? 0) + Number(row.price_charged));
+    totalPriceByBooking.set(row.booking_id, (totalPriceByBooking.get(row.booking_id) ?? 0) + effectivePrice(row));
   }
 
   const { data: financials, error: financialsError } = await supabase

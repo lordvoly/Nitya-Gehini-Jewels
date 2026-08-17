@@ -1,5 +1,6 @@
 import { apiFetch, ApiError } from "./api";
 import type { PaymentMethod } from "./payments";
+import type { CustomerType } from "./customers";
 
 // ── Real types (Checkpoint b/§8 design) ─────────────────────────────────
 
@@ -42,6 +43,10 @@ export interface BookingItemSummary {
 export interface BookingCustomerSummary {
   name: string;
   phone: string;
+  // Gates the FOC checkbox in BookingForm/EditBookingForm — was missing
+  // from this embed until the FOC task added it, which left
+  // EditBookingForm no way to know a booking's real customer category.
+  customer_type: CustomerType;
 }
 
 export interface BookingChainLink {
@@ -70,6 +75,9 @@ export interface BookingItem {
   actual_return_date: string | null;
   status: BookingItemStatus;
   price_charged: number;
+  // The real listed price stays here untouched even when is_foc is true —
+  // it's a reference of what the item would have cost, never zeroed out.
+  is_foc: boolean;
   deposit_amount: number;
   deposit_collected: boolean;
   deposit_refunded: boolean;
@@ -138,6 +146,9 @@ export interface NewBookingItem {
   deposit_amount?: number;
   deposit_collected?: boolean;
   custom_addons?: string[];
+  // Honored only when the booking's customer is MUA/Influencer — clamped
+  // to false server-side otherwise, regardless of what's sent here.
+  is_foc?: boolean;
 }
 
 export interface NewBooking {
@@ -325,6 +336,9 @@ export interface UpdateBookingItemInput {
   deposit_amount?: number;
   deposit_collected?: boolean;
   custom_addons?: string[];
+  // Editable only while the booking is still active — locked once
+  // Completed (backend enforces this, not just hidden in the UI).
+  is_foc?: boolean;
 }
 
 export function updateBookingItem(bookingId: string, itemId: string, patch: UpdateBookingItemInput) {

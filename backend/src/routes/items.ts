@@ -56,7 +56,7 @@ itemsRouter.get("/next-code", async (_req, res) => {
 itemsRouter.get("/:id/history", async (req, res) => {
   const { data, error } = await supabase
     .from("booking_items")
-    .select("id, type, status, pickup_date, return_date, price_charged, booking_id, bookings(booking_code, customers(name))")
+    .select("id, type, status, pickup_date, return_date, price_charged, is_foc, booking_id, bookings(booking_code, customers(name))")
     .eq("item_id", req.params.id)
     .order("pickup_date", { ascending: false });
   if (error) return res.status(500).json({ error: error.message });
@@ -71,6 +71,7 @@ itemsRouter.get("/:id/history", async (req, res) => {
       pickup_date: row.pickup_date,
       return_date: row.return_date,
       price_charged: row.price_charged,
+      is_foc: row.is_foc,
       booking_id: row.booking_id,
       booking_code: booking?.booking_code ?? null,
       customer_name: booking?.customers?.name ?? null,
