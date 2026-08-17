@@ -10,6 +10,14 @@ export const CUSTOMER_TYPE_LABELS: Record<CustomerType, string> = {
   mua: "MUA",
 };
 
+// CustomersList's Category filter — "all" plus the three real values.
+export type CustomerCategoryFilter = "all" | CustomerType;
+
+export const CUSTOMER_CATEGORY_FILTER_LABELS: Record<CustomerCategoryFilter, string> = {
+  all: "All",
+  ...CUSTOMER_TYPE_LABELS,
+};
+
 export interface Customer {
   id: string;
   name: string;
@@ -32,9 +40,12 @@ export interface NewCustomer {
   customer_type: CustomerType;
 }
 
-export function fetchCustomers(search?: string) {
-  const qs = search?.trim() ? `?search=${encodeURIComponent(search.trim())}` : "";
-  return apiFetch<Customer[]>(`/api/customers${qs}`);
+export function fetchCustomers(params?: { search?: string; customer_type?: CustomerCategoryFilter }) {
+  const extra: Record<string, string> = {};
+  if (params?.search?.trim()) extra.search = params.search.trim();
+  if (params?.customer_type && params.customer_type !== "all") extra.customer_type = params.customer_type;
+  const qs = new URLSearchParams(extra).toString();
+  return apiFetch<Customer[]>(`/api/customers${qs ? `?${qs}` : ""}`);
 }
 
 export function fetchCustomer(id: string) {

@@ -1,5 +1,13 @@
 import { useEffect, useState } from "react";
-import { CUSTOMER_TYPE_LABELS, deleteCustomer, fetchCustomers, type Customer } from "../../lib/customers";
+import {
+  CUSTOMER_TYPE_LABELS,
+  CUSTOMER_CATEGORY_FILTER_LABELS,
+  deleteCustomer,
+  fetchCustomers,
+  type Customer,
+  type CustomerCategoryFilter,
+} from "../../lib/customers";
+import { FilterDropdown } from "../common/FilterDropdown";
 
 export function CustomersList({
   onEdit,
@@ -9,6 +17,7 @@ export function CustomersList({
   onView: (customer: Customer) => void;
 }) {
   const [term, setTerm] = useState("");
+  const [categoryFilter, setCategoryFilter] = useState<CustomerCategoryFilter>("all");
   const [customers, setCustomers] = useState<Customer[]>([]);
   const [loading, setLoading] = useState(false);
   const [confirmingId, setConfirmingId] = useState<string | null>(null);
@@ -19,7 +28,7 @@ export function CustomersList({
     let cancelled = false;
     setLoading(true);
     const handle = setTimeout(() => {
-      fetchCustomers(term)
+      fetchCustomers({ search: term, customer_type: categoryFilter })
         .then((data) => {
           // A newer search may have started (and possibly already resolved)
           // while this request was in flight — an older response landing
@@ -34,7 +43,7 @@ export function CustomersList({
       cancelled = true;
       clearTimeout(handle);
     };
-  }, [term]);
+  }, [term, categoryFilter]);
 
   async function confirmDelete(customer: Customer) {
     setDeletingId(customer.id);
@@ -59,8 +68,23 @@ export function CustomersList({
         value={term}
         onChange={(e) => setTerm(e.target.value)}
       />
+      <div className="filter-dropdown-bar">
+        <FilterDropdown
+          label="Category"
+          value={categoryFilter}
+          options={Object.keys(CUSTOMER_CATEGORY_FILTER_LABELS) as CustomerCategoryFilter[]}
+          optionLabels={CUSTOMER_CATEGORY_FILTER_LABELS}
+          onChange={setCategoryFilter}
+        />
+      </div>
       <div className="list-header">
-        <h2>{term ? `Results (${customers.length})` : `All Customers (${customers.length})`}</h2>
+        <h2>
+          {term
+            ? `Results (${customers.length})`
+            : categoryFilter !== "all"
+              ? `${CUSTOMER_CATEGORY_FILTER_LABELS[categoryFilter]} (${customers.length})`
+              : `All Customers (${customers.length})`}
+        </h2>
         {loading && <span className="wizard-hint">Searching…</span>}
       </div>
 
@@ -72,6 +96,11 @@ export function CustomersList({
             <>
               <h3>No matches</h3>
               <p>Nobody found for "{term}" — check the spelling or try just the phone number.</p>
+            </>
+          ) : categoryFilter !== "all" ? (
+            <>
+              <h3>No {CUSTOMER_CATEGORY_FILTER_LABELS[categoryFilter]} customers</h3>
+              <p>No customers are tagged {CUSTOMER_CATEGORY_FILTER_LABELS[categoryFilter]} yet.</p>
             </>
           ) : (
             <>

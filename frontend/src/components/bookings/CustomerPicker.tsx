@@ -24,7 +24,7 @@ export function CustomerPicker({
     }
     let cancelled = false;
     const handle = setTimeout(() => {
-      fetchCustomers(term).then((data) => {
+      fetchCustomers({ search: term }).then((data) => {
         if (!cancelled) setResults(data);
       });
     }, 300);

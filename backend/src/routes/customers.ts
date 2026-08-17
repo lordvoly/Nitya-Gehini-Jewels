@@ -16,27 +16,42 @@ function normalizePhone(phone: string): string {
   return phone.replace(/\D/g, "").slice(-10);
 }
 
-// GET /api/customers?search=... — matches name (substring, case-insensitive)
-// OR phone OR phone_secondary (substring match against digits-only, so
-// callers can search with or without spaces/dashes/+91), via the shared
-// searchCustomers() (backend/src/lib/customersData.ts) — also reused by the
-// AI assistant's get_customer_history tool, so a name resolves to the same
-// customer(s) everywhere in the app. phone_secondary is search-only here —
-// it never participates in duplicate detection (see POST/PATCH below).
+// GET /api/customers?search=...&customer_type=... — search matches name
+// (substring, case-insensitive) OR phone OR phone_secondary (substring
+// match against digits-only, so callers can search with or without
+// spaces/dashes/+91), via the shared searchCustomers()
+// (backend/src/lib/customersData.ts) — also reused by the AI assistant's
+// get_customer_history tool, so a name resolves to the same customer(s)
+// everywhere in the app. phone_secondary is search-only here — it never
+// participates in duplicate detection (see POST/PATCH below).
+//
+// customer_type composes as an AND with search, same pattern as bookings.ts's
+// ?category=/?type= filters: fetch whichever result set search/no-search
+// needs, then a plain JS .filter() over it — still fully server-side, just
+// not expressed as a second SQL WHERE clause, consistent with how every
+// other list filter in this app works.
 customersRouter.get("/", async (req, res) => {
   const term = typeof req.query.search === "string" ? req.query.search.trim() : "";
 
+  let result: Record<string, unknown>[];
   if (!term) {
     const { data, error } = await supabase.from("customers").select("*").order("created_at", { ascending: false });
     if (error) return res.status(500).json({ error: error.message });
-    return res.json(data);
+    result = data ?? [];
+  } else {
+    try {
+      result = await searchCustomers(term);
+    } catch (e) {
+      return res.status(500).json({ error: e instanceof Error ? e.message : "Search failed" });
+    }
   }
 
-  try {
-    res.json(await searchCustomers(term));
-  } catch (e) {
-    res.status(500).json({ error: e instanceof Error ? e.message : "Search failed" });
+  const customerType = typeof req.query.customer_type === "string" ? req.query.customer_type : "";
+  if (CUSTOMER_TYPES.includes(customerType as CustomerType)) {
+    result = result.filter((c) => c.customer_type === customerType);
   }
+
+  res.json(result);
 });
 
 customersRouter.get("/:id", async (req, res) => {
