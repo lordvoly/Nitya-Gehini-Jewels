@@ -60,6 +60,19 @@ body {
   line-height: 1.5;
   -webkit-font-smoothing: antialiased;
   font-variant-numeric: tabular-nums;
+  /* Base-level, inherited protection against unpredictable-length text
+     (addresses, item names, free-text notes, chat messages) bleeding past
+     its container on a narrow viewport — the same failure mode kept
+     recurring per-component (.review-list li, .checklist-item-text) before
+     this was ever centralized. A single unbroken token has no natural
+     break point, so plain word-wrap isn't enough; break-word allows a
+     mid-word break only when a line would otherwise overflow. This alone
+     does NOT fix a flex item whose default min-width:auto still floors it
+     at its content's full width — those need an explicit min-width: 0 too
+     (see .data-table td > *, .booking-card-item-info, .receipt-meta > div
+     below), which is a separate, second half of the same failure mode. */
+  overflow-wrap: break-word;
+  word-break: break-word;
 }
 
 h1,
@@ -768,6 +781,36 @@ a {
   white-space: nowrap;
 }
 
+/* Real bug found during the mobile-overflow investigation, not just a
+   missing rule: the @media (max-width: 900px) block above already sets
+   `.data-table td { white-space: normal }` to let the stacked-card layout
+   wrap — but that rule and the desktop one immediately above share the
+   exact same specificity (0,1,1), so the cascade falls back to source
+   order, and the desktop `nowrap` (appearing later in this file) silently
+   wins even inside the media query's own viewport range. Reasserted here,
+   after the desktop rule, so the mobile override actually applies where
+   it's meant to — same root cause and fix shape as the wizard-nav
+   breakpoint drift noted elsewhere in this file, just never connected to
+   this rule before. */
+@media (max-width: 900px) {
+  .data-table td {
+    white-space: normal;
+  }
+}
+
+/* A table cell's value (as opposed to its data-label, which is a
+   flex-shrink: 0 ::before pseudo-element under the mobile stacked-card
+   layout) is a flex item with no min-width set, so it defaults to
+   min-width: auto — its own unbroken content width — and refuses to
+   shrink below that regardless of white-space/overflow-wrap. Applies to
+   whatever real element sits inside a <td> (a plain text node can't be
+   targeted directly, but every cell in this app that can hold
+   unpredictable-length text already wraps its value in a real element —
+   a <span>, <strong>, or <button class="link-button">). */
+.data-table td > * {
+  min-width: 0;
+}
+
 .data-table th {
   color: var(--ink-soft);
   font-size: 12px;
@@ -1355,6 +1398,11 @@ a.stat-card:active {
 
 .booking-card-item-info {
   font-size: 13.5px;
+  /* Direct flex item of .booking-card-item — same min-width:auto default
+     as .data-table td's value content above, holding the same kind of
+     unpredictable text (item name, customer name via the sibling in
+     .booking-card-header). */
+  min-width: 0;
 }
 
 .booking-card-item-info strong {
@@ -1905,6 +1953,14 @@ a.stat-card:active {
   gap: 12px;
   margin-bottom: 18px;
   font-size: 14px;
+}
+
+/* Both direct children (booking code on the left, customer name/phone on
+   the right) are flex items holding unpredictable-length text — same
+   min-width:0 need as .data-table td's value content and
+   .booking-card-item-info above. */
+.receipt-meta > div {
+  min-width: 0;
 }
 
 .receipt-meta-right {
