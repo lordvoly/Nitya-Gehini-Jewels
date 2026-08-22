@@ -88,6 +88,11 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   const [error, setError] = useState<string | null>(null);
 
   const [customer, setCustomer] = useState<Customer | null>(null);
+  // Real typo-fix support — previously there was no way to correct a
+  // mistyped booking code after creation. Same client-side non-empty guard
+  // as ItemEditForm's item_code edit (immediate feedback, no round trip),
+  // backed by the same server-side check + friendly-409-on-collision.
+  const [bookingCode, setBookingCode] = useState("");
   // Pre-filled from the existing value (unlike BookingForm's blank-
   // defaults-to-today field) — this is editing a real, already-known date,
   // not leaving an optional one to a server default.
@@ -152,6 +157,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
           customer_type: b.customers?.customer_type ?? "regular",
           created_at: "",
         });
+        setBookingCode(b.booking_code);
         setBookingDate(b.booking_date);
         setGstApplicable(b.gst_applicable);
         setGstInvoiceNumber(b.gst_invoice_number ?? "");
@@ -177,6 +183,10 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     if (!customer) return;
     setParentError(null);
     setParentSaved(false);
+    if (!bookingCode.trim()) {
+      setParentError("Booking code can't be empty");
+      return;
+    }
     setSavingParent(true);
     try {
       // PATCH /:id returns only the updated row's own columns (no
@@ -185,6 +195,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
       // which would wipe booking.booking_items and crash the item list below.
       await updateBooking(bookingId, {
         customer_id: customer.id,
+        booking_code: bookingCode.trim(),
         booking_date: bookingDate,
         gst_applicable: gstApplicable,
         gst_invoice_number: gstApplicable ? gstInvoiceNumber.trim() || null : null,
@@ -386,6 +397,11 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
         <form onSubmit={handleSaveParent}>
           <p className="field-label">Customer</p>
           <CustomerPicker selected={customer} onSelect={setCustomer} />
+
+          <label className="field-label">
+            Booking Code
+            <input type="text" value={bookingCode} onChange={(e) => setBookingCode(e.target.value)} />
+          </label>
 
           <label className="field-label">
             Booking Date

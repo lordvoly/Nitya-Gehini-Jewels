@@ -998,15 +998,32 @@ bookingsRouter.post("/:id/cancel", async (req: AuthedRequest, res) => {
 });
 
 // PATCH /api/bookings/:id — parent-level fields only (customer_id, GST
-// fields, notes). Line-item fields are edited through the endpoint below.
-// Deliberately no status check anywhere in this handler — notes must stay
-// editable at any computed_status (Booked/Out/Completed/Cancelled), unlike
-// the line-item PATCH below which blocks a returned/cancelled item.
+// fields, notes, booking_code). Line-item fields are edited through the
+// endpoint below. Deliberately no status check anywhere in this handler —
+// notes/booking_code must stay editable at any computed_status
+// (Booked/Out/Completed/Cancelled), unlike the line-item PATCH below which
+// blocks a returned/cancelled item.
+//
+// booking_code: real typo-fix support — investigated before building
+// (nothing routes on it as a lookup key besides the AI assistant's
+// get_booking_by_code, which resolves it live with no caching; the
+// generator has no stored counter to leave a gap in; the DB unique
+// constraint already exists). Same friendly-409-on-collision pattern as
+// items.ts's item_code edit, plus an explicit non-empty check server-side
+// (unlike item_code's edit, which only guards client-side) since this
+// route already validates every other field itself rather than trusting
+// the frontend alone.
 bookingsRouter.patch("/:id", async (req, res) => {
-  const { customer_id, gst_applicable, gst_invoice_number, hsn_code, tax_rate, booking_date, notes } = req.body ?? {};
+  const { customer_id, gst_applicable, gst_invoice_number, hsn_code, tax_rate, booking_date, notes, booking_code } =
+    req.body ?? {};
   const update: Record<string, unknown> = {};
   if (customer_id !== undefined) update.customer_id = customer_id;
   if (booking_date !== undefined) update.booking_date = booking_date;
+  if (booking_code !== undefined) {
+    const trimmed = typeof booking_code === "string" ? booking_code.trim() : "";
+    if (!trimmed) return res.status(400).json({ error: "Booking code can't be empty" });
+    update.booking_code = trimmed;
+  }
   if (gst_applicable !== undefined) {
     update.gst_applicable = gst_applicable;
     update.gst_invoice_number = gst_applicable ? gst_invoice_number ?? null : null;
@@ -1023,8 +1040,14 @@ bookingsRouter.patch("/:id", async (req, res) => {
   }
 
   const { data, error } = await supabase.from("bookings").update(update).eq("id", req.params.id).select().single();
-  if (error) return res.status(400).json({ error: error.message });
-  res.status(200).json(data);
+  if (!error) return res.status(200).json(data);
+  // 23505 = booking_code collision — same friendly-message pattern as
+  // creation's own custom-code path above, rather than a raw constraint
+  // error surfacing to the operator.
+  if (error.code === "23505") {
+    return res.status(409).json({ error: "This booking code is already in use — choose a different one." });
+  }
+  res.status(400).json({ error: error.message });
 });
 
 // PATCH /api/bookings/:bookingId/items/:bookingItemId — edit an existing

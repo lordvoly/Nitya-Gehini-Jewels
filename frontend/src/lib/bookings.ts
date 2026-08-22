@@ -313,6 +313,7 @@ export function cancelBooking(bookingId: string, refundAmount: number) {
 
 export interface UpdateBookingInput {
   customer_id?: string;
+  booking_code?: string;
   gst_applicable?: boolean;
   gst_invoice_number?: string | null;
   hsn_code?: string | null;
