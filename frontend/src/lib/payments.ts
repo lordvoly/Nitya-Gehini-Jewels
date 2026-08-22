@@ -50,3 +50,31 @@ export function recordPayment(input: NewPayment) {
     body: JSON.stringify(input),
   });
 }
+
+// Full audit-trail entry for one payment amount correction — old/new
+// amount, the mandatory reason, and who/when. Never overwritten; a payment
+// edited twice has two of these.
+export interface PaymentAmountEdit {
+  id: string;
+  payment_id: string;
+  old_amount: number;
+  new_amount: number;
+  reason: string;
+  edited_by_name: string | null;
+  edited_at: string;
+}
+
+export function fetchPaymentEdits(bookingId: string) {
+  return apiFetch<PaymentAmountEdit[]>(`/api/payments/edits?booking_id=${encodeURIComponent(bookingId)}`);
+}
+
+// Corrects one payment's amount — a real mandatory-reason exception to the
+// "locked once Completed" rule every other financial field on a booking
+// follows (price_charged, dates, is_foc). Scoped to amount only; nothing
+// else about the payment is editable through this call.
+export function editPaymentAmount(paymentId: string, newAmount: number, reason: string) {
+  return apiFetch<Payment>(`/api/payments/${paymentId}`, {
+    method: "PATCH",
+    body: JSON.stringify({ new_amount: newAmount, reason }),
+  });
+}

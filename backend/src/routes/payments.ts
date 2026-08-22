@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
-import { recordPayment } from "../lib/payments.js";
+import { recordPayment, editPaymentAmount, getPaymentEditsForBooking } from "../lib/payments.js";
 import type { AuthedRequest } from "../middleware/auth.js";
 
 export const paymentsRouter = Router();
@@ -22,6 +22,21 @@ paymentsRouter.get("/", async (req, res) => {
     const { data, error } = await supabase.from("payments").select("*").order("payment_date", { ascending: false });
     if (error) throw error;
     res.json(data);
+  } catch (err) {
+    res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
+  }
+});
+
+// GET /api/payments/edits?booking_id=... — full audit history of every
+// amount correction across every payment on this booking, newest first.
+// Registered as a static path (not a route param), so there's no :id
+// route on this router for it to collide with anyway.
+paymentsRouter.get("/edits", async (req, res) => {
+  try {
+    if (typeof req.query.booking_id !== "string") {
+      return res.status(400).json({ error: "booking_id is required" });
+    }
+    res.json(await getPaymentEditsForBooking(req.query.booking_id));
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });
   }
@@ -56,5 +71,27 @@ paymentsRouter.post("/", async (req: AuthedRequest, res) => {
     res.status(201).json(data);
   } catch (e) {
     res.status(400).json({ error: e instanceof Error ? e.message : "Failed to record payment" });
+  }
+});
+
+// PATCH /api/payments/:id — correct a mis-entered payment amount. A real
+// mandatory-reason, fully-logged exception to this app's usual
+// "financials lock once a booking is Completed" rule: deliberately no
+// booking/computed_status check anywhere in this handler (see
+// editPaymentAmount's own comment) — narrowly scoped to amount only,
+// nothing else about a payment or booking becomes editable through this
+// route.
+paymentsRouter.patch("/:id", async (req: AuthedRequest, res) => {
+  const { new_amount, reason } = req.body ?? {};
+  try {
+    const data = await editPaymentAmount({
+      paymentId: req.params.id,
+      newAmount: new_amount,
+      reason,
+      editedBy: req.user?.id ?? null,
+    });
+    res.status(200).json(data);
+  } catch (e) {
+    res.status(400).json({ error: e instanceof Error ? e.message : "Failed to edit payment" });
   }
 });

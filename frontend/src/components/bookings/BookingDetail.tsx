@@ -4,10 +4,13 @@ import { fetchBooking, updateBooking, type Booking, type BookingItem } from "../
 import {
   fetchPayments,
   recordPayment,
+  fetchPaymentEdits,
+  editPaymentAmount,
   PAYMENT_METHODS,
   PAYMENT_METHOD_LABELS,
   type Payment,
   type PaymentMethod,
+  type PaymentAmountEdit,
 } from "../../lib/payments";
 import { toNumberOrNull } from "../../lib/numbers";
 import { bookingItemStatusPill, bookingComputedStatusPill } from "../../lib/statusPill";
@@ -28,6 +31,7 @@ export function BookingDetail({
 }) {
   const [booking, setBooking] = useState<Booking | null>(null);
   const [payments, setPayments] = useState<Payment[]>([]);
+  const [paymentEdits, setPaymentEdits] = useState<PaymentAmountEdit[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -41,6 +45,18 @@ export function BookingDetail({
   const [saving, setSaving] = useState(false);
   const [paymentError, setPaymentError] = useState<string | null>(null);
 
+  // Edit Payment — corrects one existing payment entry's amount. Keyed per
+  // payment.id (not a single form) since a booking can have more than one
+  // payment row and total_paid is never a single stored value to adjust —
+  // see the investigation behind this feature. A mandatory reason and full
+  // audit trail, available even on a Completed booking (unlike every other
+  // financial field), scoped to amount only.
+  const [editingPaymentId, setEditingPaymentId] = useState<string | null>(null);
+  const [editAmount, setEditAmount] = useState("");
+  const [editReason, setEditReason] = useState("");
+  const [savingEdit, setSavingEdit] = useState(false);
+  const [editError, setEditError] = useState<string | null>(null);
+
   // Whole-booking internal note — separate from `notes` above (that's the
   // per-payment note field in the Record Payment form). Editable at any
   // computed_status, so no status check gates any of this.
@@ -52,10 +68,11 @@ export function BookingDetail({
   const load = useCallback(() => {
     setLoading(true);
     setError(null);
-    return Promise.all([fetchBooking(bookingId), fetchPayments(bookingId)])
-      .then(([b, p]) => {
+    return Promise.all([fetchBooking(bookingId), fetchPayments(bookingId), fetchPaymentEdits(bookingId)])
+      .then(([b, p, e]) => {
         setBooking(b);
         setPayments(p);
+        setPaymentEdits(e);
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load booking"))
       .finally(() => setLoading(false));
@@ -101,6 +118,43 @@ export function BookingDetail({
       setNotesError(err instanceof Error ? err.message : "Failed to save notes");
     } finally {
       setSavingNotes(false);
+    }
+  }
+
+  function startEditPayment(p: Payment) {
+    setEditingPaymentId(p.id);
+    setEditAmount(String(p.amount));
+    setEditReason("");
+    setEditError(null);
+  }
+
+  function cancelEditPayment() {
+    setEditingPaymentId(null);
+    setEditError(null);
+  }
+
+  async function handleSaveEditPayment(paymentId: string) {
+    setEditError(null);
+    // Client-side guard for immediate feedback, same as the reason
+    // requirement's own point — the server enforces this too regardless.
+    if (!editReason.trim()) {
+      setEditError("A reason is required to edit a payment");
+      return;
+    }
+    const newAmount = toNumberOrNull(editAmount);
+    if (newAmount == null || newAmount < 0) {
+      setEditError("Enter a valid non-negative amount");
+      return;
+    }
+    setSavingEdit(true);
+    try {
+      await editPaymentAmount(paymentId, newAmount, editReason.trim());
+      setEditingPaymentId(null);
+      await load();
+    } catch (err) {
+      setEditError(err instanceof Error ? err.message : "Failed to edit payment");
+    } finally {
+      setSavingEdit(false);
     }
   }
 
@@ -300,12 +354,71 @@ export function BookingDetail({
               <p className="wizard-hint">No payments recorded yet.</p>
             ) : (
               <ul className="review-list">
-                {payments.map((p) => (
-                  <li key={p.id}>
-                    ₹{p.amount} — {PAYMENT_METHOD_LABELS[p.method]} · {formatDateDisplay(p.payment_date)}
-                    {p.notes ? ` — ${p.notes}` : ""}
-                  </li>
-                ))}
+                {payments.map((p) => {
+                  const editsForThisPayment = paymentEdits.filter((e) => e.payment_id === p.id);
+                  const isEditingThis = editingPaymentId === p.id;
+                  return (
+                    <li key={p.id}>
+                      <div>
+                        ₹{p.amount} — {PAYMENT_METHOD_LABELS[p.method]} · {formatDateDisplay(p.payment_date)}
+                        {p.notes ? ` — ${p.notes}` : ""}
+                      </div>
+
+                      {/* Full audit trail, visible right here — every past
+                          correction to this specific entry, not just the
+                          most recent one. */}
+                      {editsForThisPayment.map((e) => (
+                        <p key={e.id} className="wizard-hint">
+                          Edited: ₹{e.old_amount} → ₹{e.new_amount} — "{e.reason}" — {e.edited_by_name ?? "Unknown"} ·{" "}
+                          {formatDateDisplay(e.edited_at.slice(0, 10))}
+                        </p>
+                      ))}
+
+                      {/* Refunds/charges (type='refund') aren't editable
+                          here — they're managed through their own flows
+                          (item charges / cancel-with-refund), same
+                          restriction the backend enforces. */}
+                      {p.type === "payment" &&
+                        (isEditingThis ? (
+                          <div className="wizard-step">
+                            <label className="field-label">
+                              New Amount (₹)
+                              <input type="number" min={0} value={editAmount} onChange={(e) => setEditAmount(e.target.value)} />
+                            </label>
+                            <label className="field-label">
+                              Reason (required)
+                              <input
+                                type="text"
+                                value={editReason}
+                                onChange={(e) => setEditReason(e.target.value)}
+                                placeholder="e.g. Typed ₹5000 instead of ₹500"
+                              />
+                            </label>
+                            {editError && <p className="wizard-error">{editError}</p>}
+                            <div className="wizard-actions">
+                              <button type="button" className="btn-secondary" onClick={cancelEditPayment}>
+                                Cancel
+                              </button>
+                              <button
+                                type="button"
+                                className="btn-primary"
+                                disabled={savingEdit}
+                                onClick={() => handleSaveEditPayment(p.id)}
+                              >
+                                {savingEdit ? "Saving…" : "Save Correction"}
+                              </button>
+                            </div>
+                          </div>
+                        ) : (
+                          <div className="wizard-actions">
+                            <button type="button" className="btn-secondary" onClick={() => startEditPayment(p)}>
+                              Edit Payment
+                            </button>
+                          </div>
+                        ))}
+                    </li>
+                  );
+                })}
               </ul>
             )}
 
