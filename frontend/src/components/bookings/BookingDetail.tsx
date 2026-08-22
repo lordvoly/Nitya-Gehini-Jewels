@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
+import { ImageOff } from "lucide-react";
 import { fetchBooking, updateBooking, type Booking, type BookingItem } from "../../lib/bookings";
+import { BookingDetailSkeleton } from "../common/Skeleton";
 import {
   fetchPayments,
   recordPayment,
@@ -165,9 +167,10 @@ export function BookingDetail({
   return (
     <div className="wizard-card">
       <div className="wizard-step">
-        <h2>{loading ? "Loading…" : booking?.booking_code}</h2>
-        {error && <p className="wizard-error">{error}</p>}
-        {booking && statusPill && (
+        {loading && <BookingDetailSkeleton />}
+        {!loading && <h2>{booking?.booking_code}</h2>}
+        {!loading && error && <p className="wizard-error">{error}</p>}
+        {!loading && booking && statusPill && (
           <>
             <p className="wizard-hint">
               {booking.customers?.name && (
@@ -260,7 +263,7 @@ export function BookingDetail({
                           <img src={bi.items.photos[0]} alt="" className="line-item-thumb" />
                         ) : (
                           <span className="line-item-thumb line-item-thumb-placeholder" aria-hidden="true">
-                            🖼️
+                            <ImageOff size={16} strokeWidth={2} />
                           </span>
                         )}
                       </Link>

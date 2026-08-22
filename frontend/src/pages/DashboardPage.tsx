@@ -1,8 +1,10 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { ImageOff } from "lucide-react";
 import { fetchDashboardSummary, type DashboardSummary, type PickupDueBookingItem } from "../lib/dashboard";
 import { useAuth } from "../lib/auth";
 import { DashboardAlerts } from "../components/dashboard/DashboardAlerts";
+import { DashboardSkeleton } from "../components/common/Skeleton";
 import { formatDateDisplay, addDaysToDateString, formatWeekdayDate } from "../lib/dates";
 import "../styles/shared.css";
 
@@ -20,7 +22,7 @@ function PickupRow({ pickup }: { pickup: PickupDueBookingItem }) {
           <img src={pickup.items.photos[0]} alt="" className="line-item-thumb" />
         ) : (
           <span className="line-item-thumb line-item-thumb-placeholder" aria-hidden="true">
-            🖼️
+            <ImageOff size={16} strokeWidth={2} />
           </span>
         )}
       </Link>
@@ -73,7 +75,7 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <div className="page">Loading…</div>;
+  if (loading) return <DashboardSkeleton />;
   if (error || !summary) return <div className="page wizard-error">{error ?? "Failed to load dashboard"}</div>;
 
   const { due_today, overdue, pickups_due_today, pickups_due_this_week, outstanding_balance, stats } = summary;

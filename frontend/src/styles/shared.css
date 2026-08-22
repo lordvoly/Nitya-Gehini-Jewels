@@ -31,9 +31,24 @@
   --focus: #7a5d1f;
 
   --radius: 10px;
-  --radius-lg: 14px;
+  --radius-lg: 16px;
   --radius-pill: 999px;
   --tap: 46px; /* minimum comfortable touch target */
+
+  /* Phase 2 Stage 1 — the shared "lifted surface" replacing a flat 1px
+     border on the app's page-level cards (wizard-card/stat-card/
+     booking-card, plus .data-table's mobile stacked-row cards). Ink-tinted
+     rather than pure black, matching the warm palette rather than a
+     generic grey shadow. Two layers — a tight, barely-there contact
+     shadow plus a softer spread — so the card reads as resting on the
+     ivory ground rather than glowing. Deliberately NOT applied to
+     .line-item-card (a sub-card nested inside a wizard-card — stacking a
+     second elevation shadow on top of the first one it already sits
+     inside would read as visual noise, not polish, so it keeps its flat
+     border) or to semantic panels (.found-panel/.overdue-panel/
+     .empty-state's dashed border/.chat-bubble) which use color, not
+     elevation, to mean something specific. */
+  --shadow-card: 0 1px 2px rgba(43, 33, 41, 0.05), 0 6px 16px rgba(43, 33, 41, 0.07);
 }
 
 @font-face {
@@ -341,8 +356,13 @@ a {
   }
 
   .data-table tr {
-    border: 1px solid var(--line);
-    border-radius: var(--radius);
+    /* Same card language as .wizard-card/.stat-card/.booking-card above —
+       a stacked table row at this width IS a card, visually, so it gets
+       the same shadow-not-border treatment and radius rather than staying
+       on the old flat-bordered look while every other card in the app
+       moves off it. */
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-card);
     background: var(--surface);
     padding: 12px 14px;
     margin-bottom: 10px;
@@ -424,8 +444,8 @@ a {
 
 .wizard-card {
   background: var(--surface);
-  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   padding: 20px;
 }
 
@@ -528,7 +548,10 @@ a {
 }
 
 .btn-camera {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
   flex: 1;
   text-align: center;
   padding: 18px 10px;
@@ -664,6 +687,10 @@ a {
 
 /* ── Buttons ──────────────────────────────────────────────────────────── */
 
+/* Pill-shaped — echoes the .pill/.chip status-badge language already
+   used everywhere else in the app, rather than the plain-rectangle radius
+   still used by the separate toggle-btn/tab/type-gate-btn family (choice
+   selectors, not general buttons — deliberately left alone here). */
 .btn-primary,
 .btn-secondary,
 .btn-danger {
@@ -672,7 +699,7 @@ a {
   font-size: 15px;
   font-weight: 700;
   font-family: inherit;
-  border-radius: var(--radius);
+  border-radius: var(--radius-pill);
   cursor: pointer;
   border: 2px solid transparent;
   transition: background-color 100ms ease;
@@ -858,6 +885,27 @@ a {
   border: 1.5px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
+}
+
+/* ── Loading skeletons ────────────────────────────────────────────────── */
+/* Shaped placeholders replacing plain "Loading…" text — deliberately
+   STATIC in this stage, no shimmer/pulse, since a moving highlight is a
+   motion effect and this stage explicitly excludes motion/animation (that
+   lands in a later stage, layered on top of these same shapes rather than
+   changing them). frontend/src/components/common/Skeleton.tsx composes
+   page-specific layouts from this one shared block primitive, so a shape
+   only ever needs to be described once per page rather than duplicating
+   this rule. */
+
+.skeleton {
+  background: var(--line);
+  border-radius: var(--radius);
+}
+
+.skeleton-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
 }
 
 /* ── Empty states ─────────────────────────────────────────────────────── */
@@ -1172,8 +1220,12 @@ a {
 .stat-card {
   display: block;
   background: var(--surface);
-  border: 1px solid var(--line);
+  /* Transparent, not omitted — reserves the same 1px box as the visible
+     hover border below so hovering never shifts layout, while the resting
+     state itself now reads through --shadow-card instead of a line. */
+  border: 1px solid transparent;
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   padding: 16px 14px;
   text-align: center;
   text-decoration: none;
@@ -1183,7 +1235,7 @@ a {
 
 a.stat-card:hover {
   border-color: var(--gold);
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+  box-shadow: 0 1px 2px rgba(43, 33, 41, 0.05), 0 8px 20px rgba(43, 33, 41, 0.1);
 }
 
 a.stat-card:active {
@@ -1329,8 +1381,8 @@ a.stat-card:active {
 
 .booking-card {
   background: var(--surface);
-  border: 1px solid var(--line);
   border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
   padding: 16px;
   margin-bottom: 14px;
 }
@@ -1529,7 +1581,7 @@ a.stat-card:active {
   justify-content: center;
   background: var(--ivory);
   border: 1px solid var(--line);
-  font-size: 16px;
+  color: var(--ink-soft);
 }
 
 /* Only shown on a line whose type doesn't match the booking's primary

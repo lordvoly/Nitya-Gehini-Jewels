@@ -1,4 +1,5 @@
 import { useState } from "react";
+import { Camera, Image } from "lucide-react";
 import { uploadItemPhoto } from "../../lib/items";
 import { ApiError } from "../../lib/api";
 import { compressImageForUpload } from "../../lib/imageCompression";
@@ -77,7 +78,7 @@ export function PhotoPicker({
       {hint && <p className="wizard-hint">{hint}</p>}
       <div className="photo-picker-actions">
         <label className="btn-camera">
-          📷 Take Photo
+          <Camera size={18} strokeWidth={2} aria-hidden="true" /> Take Photo
           <input
             type="file"
             accept="image/*"
@@ -88,7 +89,7 @@ export function PhotoPicker({
           />
         </label>
         <label className="btn-camera">
-          🖼️ Choose Files
+          <Image size={18} strokeWidth={2} aria-hidden="true" /> Choose Files
           <input
             type="file"
             accept="image/*"
