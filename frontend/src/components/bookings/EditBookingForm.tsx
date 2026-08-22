@@ -109,6 +109,10 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   const [itemEdits, setItemEdits] = useState<Record<string, ItemEditState>>({});
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
   const [itemErrors, setItemErrors] = useState<Record<string, string>>({});
+  // Same inline-flag-plus-wizard-hint pattern as parentSaved above — keyed
+  // per booking_items.id (like itemErrors) since multiple line items can
+  // each be saved independently.
+  const [itemSaved, setItemSaved] = useState<Record<string, boolean>>({});
 
   const [confirmingRemoveId, setConfirmingRemoveId] = useState<string | null>(null);
   const [removingId, setRemovingId] = useState<string | null>(null);
@@ -214,6 +218,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   async function handleSaveItem(bi: BookingItem) {
     const state = itemEdits[bi.id];
     setItemErrors((e) => ({ ...e, [bi.id]: "" }));
+    setItemSaved((s) => ({ ...s, [bi.id]: false }));
     setSavingItemId(bi.id);
     try {
       // PATCH .../items/:bookingItemId returns only the raw booking_items row
@@ -231,6 +236,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
         is_foc: state.isFoc,
       });
       await load();
+      setItemSaved((s) => ({ ...s, [bi.id]: true }));
     } catch (err) {
       setItemErrors((e) => ({ ...e, [bi.id]: err instanceof Error ? err.message : "Failed to save" }));
     } finally {
@@ -577,6 +583,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
               )}
 
               {itemErrors[bi.id] && <p className="line-item-error">{itemErrors[bi.id]}</p>}
+              {itemSaved[bi.id] && <p className="wizard-hint">Item updated successfully.</p>}
 
               <div className="line-item-card-header" style={{ marginTop: 14 }}>
                 <button type="button" className="btn-primary" disabled={savingItemId === bi.id} onClick={() => handleSaveItem(bi)}>
