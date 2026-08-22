@@ -98,6 +98,13 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   const [taxRate, setTaxRate] = useState("");
   const [savingParent, setSavingParent] = useState(false);
   const [parentError, setParentError] = useState<string | null>(null);
+  // Same inline-flag-plus-wizard-hint pattern as ProfilePanel's nameSaved/
+  // passwordSaved — this form stays open for further edits after a save
+  // (unlike ConfirmPickupForm/ReturnForm's one-shot full-screen success
+  // swap, which doesn't fit here since there's more to do on this page
+  // afterward), so a persistent inline confirmation next to the button is
+  // the right match, not a full-page replace.
+  const [parentSaved, setParentSaved] = useState(false);
 
   const [itemEdits, setItemEdits] = useState<Record<string, ItemEditState>>({});
   const [savingItemId, setSavingItemId] = useState<string | null>(null);
@@ -165,6 +172,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     e.preventDefault();
     if (!customer) return;
     setParentError(null);
+    setParentSaved(false);
     setSavingParent(true);
     try {
       // PATCH /:id returns only the updated row's own columns (no
@@ -180,6 +188,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
         tax_rate: gstApplicable ? toNumberOrNull(taxRate) : null,
       });
       await load();
+      setParentSaved(true);
     } catch (err) {
       setParentError(err instanceof Error ? err.message : "Failed to save");
     } finally {
@@ -399,6 +408,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
             </>
           )}
           {parentError && <p className="wizard-error">{parentError}</p>}
+          {parentSaved && <p className="wizard-hint">Booking updated successfully.</p>}
           <div className="wizard-actions">
             <button type="submit" className="btn-primary" disabled={savingParent || !customer}>
               {savingParent ? "Saving…" : "Save Booking Details"}
