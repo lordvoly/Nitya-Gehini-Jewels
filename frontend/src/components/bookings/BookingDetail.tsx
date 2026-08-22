@@ -371,7 +371,7 @@ export function BookingDetail({
                           correction to this specific entry, not just the
                           most recent one. */}
                       {editsForThisPayment.map((e) => (
-                        <p key={e.id} className="wizard-hint">
+                        <p key={e.id} className="wizard-hint payment-edit-entry">
                           Edited: ₹{e.old_amount} → ₹{e.new_amount} — "{e.reason}" — {e.edited_by_name ?? "Unknown"} ·{" "}
                           {formatDateDisplay(e.edited_at.slice(0, 10))}
                         </p>

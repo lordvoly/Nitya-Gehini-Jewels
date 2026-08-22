@@ -776,6 +776,7 @@ a {
   font-weight: 700;
   color: var(--green);
   margin: 0;
+  animation: check-in 260ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 .success-code {
@@ -914,18 +915,19 @@ a {
 }
 
 /* ── Loading skeletons ────────────────────────────────────────────────── */
-/* Shaped placeholders replacing plain "Loading…" text — deliberately
-   STATIC in this stage, no shimmer/pulse, since a moving highlight is a
-   motion effect and this stage explicitly excludes motion/animation (that
-   lands in a later stage, layered on top of these same shapes rather than
-   changing them). frontend/src/components/common/Skeleton.tsx composes
-   page-specific layouts from this one shared block primitive, so a shape
-   only ever needs to be described once per page rather than duplicating
-   this rule. */
+/* Shaped placeholders replacing plain "Loading…" text.
+   frontend/src/components/common/Skeleton.tsx composes page-specific
+   layouts from this one shared block primitive, so a shape only ever
+   needs to be described once per page rather than duplicating this rule.
+   The shimmer sweep (Stage 3 motion) is layered on top of the same
+   static block Stage 1 shipped — prefers-reduced-motion reverts to
+   exactly that original flat --line block, not a different fallback. */
 
 .skeleton {
-  background: var(--line);
   border-radius: var(--radius);
+  background: linear-gradient(90deg, var(--line) 25%, var(--surface) 50%, var(--line) 75%);
+  background-size: 200% 100%;
+  animation: skeleton-sweep 1.4s ease-in-out infinite;
 }
 
 .skeleton-stack {
@@ -1063,6 +1065,7 @@ a {
   justify-content: center;
   padding: 16px;
   z-index: 100;
+  animation: overlay-in 150ms ease-out;
 }
 
 .modal-content {
@@ -1072,6 +1075,7 @@ a {
   width: 100%;
   max-height: 90vh;
   overflow-y: auto;
+  animation: modal-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
 }
 
 /* ── Photo lightbox ───────────────────────────────────────────────────── */
@@ -1805,6 +1809,8 @@ a.stat-card:active {
   display: flex;
   flex-direction: column;
   gap: 2px;
+  transform-origin: top;
+  animation: menu-open 140ms ease-out;
 }
 
 .filter-dropdown-menu-right {
@@ -2268,4 +2274,100 @@ a.stat-card:active {
 .wizard-step h2.item-detail-name {
   font-size: 26px;
   margin: 0 0 14px;
+}
+
+/* ── Motion (Phase 2 Stage 3) ─────────────────────────────────────────── */
+/* Four specific moments only — see the Phase 1 direction artifact. Every
+   animation here plays on an element that mounts AFTER its underlying
+   state change already completed (a success screen rendered post-await,
+   a new audit-trail row already saved into state, an already-open
+   dropdown/modal) — motion decorates a completed fact, it never gates or
+   delays one. Nothing here uses animationend/transitionend as a
+   completion signal for anything. */
+
+.payment-edit-entry {
+  animation: edit-in 220ms ease-out;
+}
+
+@keyframes check-in {
+  from {
+    opacity: 0;
+    transform: scale(0.9);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes skeleton-sweep {
+  from {
+    background-position: 200% 0;
+  }
+  to {
+    background-position: -200% 0;
+  }
+}
+
+@keyframes edit-in {
+  from {
+    opacity: 0;
+    transform: translateY(-4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes overlay-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes modal-in {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+@keyframes menu-open {
+  from {
+    opacity: 0;
+    transform: scale(0.96);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1);
+  }
+}
+
+/* prefers-reduced-motion: every Stage 3 animation collapses to its final
+   state instantly — not a partial-motion fallback. The skeleton shimmer
+   is the one exception worth naming explicitly: it has no "final state"
+   (loading is indefinite), so its reduced-motion fallback is Stage 1's
+   original flat --line block, i.e. exactly what shipped before this
+   stage existed, not a new invented state. */
+@media (prefers-reduced-motion: reduce) {
+  .success-check,
+  .payment-edit-entry,
+  .modal-overlay,
+  .modal-content,
+  .filter-dropdown-menu {
+    animation: none;
+  }
+
+  .skeleton {
+    animation: none;
+    background: var(--line);
+  }
 }
