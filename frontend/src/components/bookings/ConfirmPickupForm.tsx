@@ -54,7 +54,7 @@ export function ConfirmPickupForm({
       <div className="wizard-card wizard-success">
         <p className="success-check">✓ Pickup Confirmed</p>
         <p className="success-code">{booking.booking_code}</p>
-        <p>
+        <p className="success-detail">
           {item.items?.item_code} — {item.items?.name}
         </p>
         {numericAmount > 0 && (

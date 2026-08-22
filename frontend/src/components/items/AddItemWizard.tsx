@@ -144,7 +144,7 @@ export function AddItemWizard({
       <div className="wizard-card wizard-success">
         <p className="success-check">✓ Saved</p>
         <p className="success-code">{saved.item_code}</p>
-        <p>{saved.name}</p>
+        <p className="success-detail">{saved.name}</p>
         <div className="wizard-actions">
           <button className="btn-primary" onClick={startAnother}>
             Add Another

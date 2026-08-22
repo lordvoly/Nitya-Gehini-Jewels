@@ -130,15 +130,15 @@ export default function ReceiptPage() {
       <div className="receipt-totals">
         <div className="receipt-totals-row">
           <span>Total</span>
-          <span>₹{booking.price_charged}</span>
+          <span className="receipt-totals-value">₹{booking.price_charged}</span>
         </div>
         <div className="receipt-totals-row">
           <span>Amount Paid</span>
-          <span>₹{booking.total_paid}</span>
+          <span className="receipt-totals-value">₹{booking.total_paid}</span>
         </div>
         <div className="receipt-totals-row receipt-totals-balance">
           <span>Balance Due</span>
-          <span>₹{booking.balance_due}</span>
+          <span className="receipt-totals-value">₹{booking.balance_due}</span>
         </div>
       </div>
 

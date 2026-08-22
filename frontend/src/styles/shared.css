@@ -785,6 +785,20 @@ a {
   margin: 6px 0;
 }
 
+/* The item/customer name line under a success checkmark — one step below
+   .success-code's 24px (the code is still the headline identifier; this
+   is supporting context), but Fraunces rather than plain text, so the
+   "what actually succeeded" line reads as a real moment rather than
+   incidental detail. CustomersPage's own success screen doesn't need
+   this — it already repurposes .success-code itself for the customer's
+   name (there's no code to show instead), so it's already correct. */
+.success-detail {
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 17px;
+  font-weight: 600;
+  margin: 0 0 6px;
+}
+
 .wizard-actions {
   display: flex;
   flex-direction: column;
@@ -2101,6 +2115,20 @@ a.stat-card:active {
   padding-top: 8px;
 }
 
+/* The actual ₹ figures — Total/Amount Paid/Balance Due — the numbers a
+   customer actually looks at on the receipt, not the labels next to
+   them. Balance Due gets a further size bump on top of the family swap:
+   it's the one figure that still matters after everything else on the
+   page has been read. */
+.receipt-totals-value {
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 600;
+}
+
+.receipt-totals-balance .receipt-totals-value {
+  font-size: 20px;
+}
+
 .receipt-qr {
   text-align: center;
   margin-top: 28px;
@@ -2219,4 +2247,25 @@ a.stat-card:active {
   color: var(--ink-soft);
   font-size: 14px;
   font-weight: 600;
+}
+
+/* Splits the old single "CODE — Name" h2 into a small code kicker plus
+   the name as its own real display line — the name is what actually
+   identifies the piece to look at; the code is a lookup label, not the
+   headline. h2.item-detail-name needs to out-specificity the generic
+   .wizard-step h2 rule (same font-size/margin collision class as the
+   .data-table td white-space bug elsewhere in this file — matched
+   specificity here on purpose rather than relying on source order). */
+.item-detail-code {
+  font-size: 12.5px;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  color: var(--ink-soft);
+  margin: 0 0 4px;
+}
+
+.wizard-step h2.item-detail-name {
+  font-size: 26px;
+  margin: 0 0 14px;
 }

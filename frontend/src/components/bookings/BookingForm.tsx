@@ -239,7 +239,7 @@ export function BookingForm() {
       <div className="wizard-card wizard-success">
         <p className="success-check">✓ Booking Created</p>
         <p className="success-code">{saved.booking_code}</p>
-        <p>{customer?.name}</p>
+        <p className="success-detail">{customer?.name}</p>
         <p className="wizard-hint">
           {saved.booking_items.length} item{saved.booking_items.length === 1 ? "" : "s"} · ₹{saved.price_charged}
         </p>

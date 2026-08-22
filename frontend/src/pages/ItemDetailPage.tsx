@@ -66,9 +66,8 @@ export default function ItemDetailPage() {
             <div className="item-detail-photo item-detail-photo-placeholder">No Photo</div>
           )}
 
-          <h2>
-            {item.item_code} — {item.name}
-          </h2>
+          <p className="item-detail-code">{item.item_code}</p>
+          <h2 className="item-detail-name">{item.name}</h2>
           <ul className="review-list">
             <li>Category: {item.category}</li>
             <li>

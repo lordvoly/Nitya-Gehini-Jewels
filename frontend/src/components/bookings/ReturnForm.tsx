@@ -96,7 +96,7 @@ export function ReturnForm({
       <div className="wizard-card wizard-success">
         <p className="success-check">✓ Marked Returned</p>
         <p className="success-code">{booking.booking_code}</p>
-        <p>{item.items?.item_code} — {item.items?.name}</p>
+        <p className="success-detail">{item.items?.item_code} — {item.items?.name}</p>
         {result.warning && (
           <div className="found-panel">
             <p>{result.warning}</p>
