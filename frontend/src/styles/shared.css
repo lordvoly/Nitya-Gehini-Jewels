@@ -521,6 +521,16 @@ a {
   flex-wrap: wrap;
 }
 
+/* overflow-wrap/word-break: normal — a genuinely different bug from
+   .line-item-card-header's above, confirmed live rather than assumed
+   related: with flex: 1 splitting 4 buttons evenly (ItemsList's
+   All/Active/Retired/Currently Out filter), "Currently Out" doesn't fit
+   one line at ~79px and has to wrap — but the base-level global rule
+   (html, body { overflow-wrap: break-word; word-break: break-word; }, set
+   for free-text values like addresses/notes) was letting it break
+   mid-word ("Currentl"/"y Out") instead of at the space. Overridden back
+   to normal here specifically, so a short fixed-vocabulary button label
+   wraps the same way normal prose would. */
 .toggle-btn {
   flex: 1;
   min-height: var(--tap);
@@ -528,6 +538,8 @@ a {
   font-size: 14px;
   font-weight: 600;
   font-family: inherit;
+  overflow-wrap: normal;
+  word-break: normal;
   border: 1.5px solid var(--line);
   border-radius: var(--radius);
   background: var(--surface);
@@ -1532,8 +1544,25 @@ a.stat-card:active {
   position: relative;
 }
 
+/* flex-wrap: wrap — the one thing this shared class was missing relative
+   to its two closest siblings, .booking-card-header and .wizard-nav, both
+   of which already wrap for the identical "title/name next to a pill or
+   button that might not both fit" shape. Real bug found live (see
+   CLAUDE.md): a long item code+name paired with the app's longest status
+   label ("Pickup Overdue — Not Confirmed", white-space: nowrap, no width
+   ceiling) squeezed .line-item-title-group down to single-digit pixel
+   widths — its own min-width: 0 (already correct, added for the original
+   mobile-overflow fix) let it shrink exactly as designed, but with
+   nowhere for the pill to go, "shrink" collapsed all the way to one
+   character per line instead of stopping at something readable. Not the
+   same failure as the min-width:0-on-a-text-value cases documented
+   elsewhere in this file (.data-table td > *, .checklist-item-text) —
+   here the fix isn't a missing min-width, it's a missing escape valve:
+   letting the pill drop to its own line below the title, exactly what
+   .booking-card-header already does for the same reason. */
 .line-item-card-header {
   display: flex;
+  flex-wrap: wrap;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
