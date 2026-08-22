@@ -241,8 +241,8 @@ export interface ReturnPayload {
   charges?: ReturnCharge[];
 }
 
-export function processReturn(bookingId: string, itemId: string, payload: ReturnPayload) {
-  return apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${itemId}/return`, {
+export function processReturn(bookingId: string, bookingItemId: string, payload: ReturnPayload) {
+  return apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${bookingItemId}/return`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -257,8 +257,8 @@ export interface ConfirmPickupPayload {
   payment_date?: string | null;
 }
 
-export function confirmPickup(bookingId: string, itemId: string, payload: ConfirmPickupPayload) {
-  return apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${itemId}/confirm-pickup`, {
+export function confirmPickup(bookingId: string, bookingItemId: string, payload: ConfirmPickupPayload) {
+  return apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${bookingItemId}/confirm-pickup`, {
     method: "POST",
     body: JSON.stringify(payload),
   });
@@ -280,9 +280,9 @@ export type CancelItemResult =
   | { type: "cancelled"; item: BookingItem }
   | { type: "refund_needed"; message: string; refundAmountNeeded: number };
 
-export async function cancelBookingItem(bookingId: string, itemId: string, refundAmount?: number): Promise<CancelItemResult> {
+export async function cancelBookingItem(bookingId: string, bookingItemId: string, refundAmount?: number): Promise<CancelItemResult> {
   try {
-    const item = await apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${itemId}/cancel`, {
+    const item = await apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${bookingItemId}/cancel`, {
       method: "POST",
       body: JSON.stringify(refundAmount != null ? { refund_amount: refundAmount } : {}),
     });
@@ -341,8 +341,8 @@ export interface UpdateBookingItemInput {
   is_foc?: boolean;
 }
 
-export function updateBookingItem(bookingId: string, itemId: string, patch: UpdateBookingItemInput) {
-  return apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${itemId}`, {
+export function updateBookingItem(bookingId: string, bookingItemId: string, patch: UpdateBookingItemInput) {
+  return apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${bookingItemId}`, {
     method: "PATCH",
     body: JSON.stringify(patch),
   });

@@ -36,7 +36,7 @@ export function ConfirmPickupForm({
     setError(null);
     setSaving(true);
     try {
-      const updated = await confirmPickup(booking.id, item.item_id, {
+      const updated = await confirmPickup(booking.id, item.id, {
         amount: numericAmount > 0 ? numericAmount : undefined,
         method: numericAmount > 0 ? method : undefined,
         payment_date: numericAmount > 0 ? paymentDate || null : null,

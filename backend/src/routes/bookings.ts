@@ -460,7 +460,7 @@ interface ItemConflict {
 // a second, transaction-safe layer for the small race window this pre-check
 // alone can't close.
 // excludeBookingItemId: when re-checking an existing booking_item being
-// edited (PATCH /:bookingId/items/:itemId), that row is still sitting in the
+// edited (PATCH /:bookingId/items/:bookingItemId), that row is still sitting in the
 // DB with its old dates/quantity during this check and would otherwise count
 // against itself — for a unique item that's a false "overlapping booking"
 // against its own current row, for a quantity item it's the row's own
@@ -653,28 +653,27 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
     return res.status(400).json({ error: "advance_method is required when recording an advance payment" });
   }
 
-  // Every downstream per-item route (edit/cancel/return) looks a line item
-  // up by (booking_id, item_id) and expects exactly one row back — the same
-  // physical item can never appear twice in one family booking, or those
-  // routes become ambiguous. The RPC only catches this incidentally (when
-  // the duplicate would also fail its own date/quantity check), so it's
-  // enforced explicitly here regardless of whether the two entries would
-  // otherwise conflict. Reported through the same item_conflicts shape as
-  // the checks below so the frontend surfaces it inline on the same row.
+  // The same physical item CAN appear more than once in one family booking
+  // now — separate non-overlapping cycles (e.g. rented 22-28 Aug, then
+  // again 7-9 Sep) — per-item routes (edit/cancel/confirm-pickup/return)
+  // are keyed by the booking_items row's own id, not item_id, so they're
+  // no longer ambiguous when this happens (see the route handlers below).
+  // Genuine overlap between two entries for the same item is still
+  // rejected — not by an explicit "same item twice" rule (removed), but
+  // because it's real double-booking, caught the same way as any other
+  // conflict.
+  //
+  // Known, accepted gap in this fast pre-check specifically: it checks
+  // each line item against the DATABASE only, not against the other line
+  // items in this same request — so two entries for the same item that
+  // overlap EACH OTHER within one single request won't be caught here.
+  // The RPC below still correctly rejects that case (it checks live
+  // table state including rows inserted earlier in the same transaction,
+  // confirmed empirically before this was built) — just as a slower
+  // whole-request 409 rather than a specific inline per-row error.
   const itemConflicts: ItemConflict[] = [];
   const warnings: string[] = [];
-  const seenItemIds = new Set<string>();
   for (let i = 0; i < lineItems.length; i++) {
-    if (seenItemIds.has(lineItems[i].item_id)) {
-      itemConflicts.push({
-        index: i,
-        item_id: lineItems[i].item_id,
-        error: "This item is already included elsewhere in this booking",
-      });
-      continue;
-    }
-    seenItemIds.add(lineItems[i].item_id);
-
     const conflict = await checkItemConflict(lineItems[i]);
     if (conflict) {
       itemConflicts.push({ index: i, item_id: lineItems[i].item_id, error: conflict.error, conflicts: conflict.conflicts });
@@ -822,23 +821,12 @@ bookingsRouter.post("/:bookingId/items", async (req, res) => {
     return res.status(400).json({ error: "price_charged is required" });
   }
 
-  // Same invariant as POST / (create): a physical item can only appear once
-  // per family booking, since every per-item route below looks a line item
-  // up by (booking_id, item_id) and expects exactly one row. Scoped to
-  // non-cancelled rows — a cancelled line for this item doesn't block
-  // re-adding it.
-  const { data: existingForItem, error: existingError } = await supabase
-    .from("booking_items")
-    .select("id")
-    .eq("booking_id", req.params.bookingId)
-    .eq("item_id", input.item_id)
-    .neq("status", "cancelled")
-    .limit(1);
-  if (existingError) return res.status(500).json({ error: existingError.message });
-  if (existingForItem && existingForItem.length > 0) {
-    return res.status(409).json({ error: "This item is already included in this booking" });
-  }
-
+  // The same physical item can appear more than once in one booking now —
+  // no "already included" gate here. checkItemConflict below (checked
+  // against live DB state, no other line items in this single-item
+  // request to worry about) is the sole, sufficient gatekeeper: a
+  // non-overlapping second cycle passes, a genuinely overlapping one
+  // still correctly fails as a real conflict.
   const conflict = await checkItemConflict(input);
   if (conflict) {
     return res.status(409).json({ error: conflict.error, conflicts: conflict.conflicts });
@@ -872,11 +860,15 @@ bookingsRouter.post("/:bookingId/items", async (req, res) => {
   res.status(201).json({ ...data, warning });
 });
 
-// POST /api/bookings/:bookingId/items/:itemId/cancel — remove a line item
-// (§8 decision 4). Never a hard delete — status -> 'cancelled', same
+// POST /api/bookings/:bookingId/items/:bookingItemId/cancel — remove a line
+// item (§8 decision 4). Never a hard delete — status -> 'cancelled', same
 // "never destroy booking history" rule used everywhere else in this
 // schema. Only while the item is still booked/out (an already-returned
 // item can't be retroactively un-booked).
+//
+// Scoped by the booking_items row's own id, not item_id — the same
+// physical item can now appear more than once in one booking as separate
+// non-overlapping cycles, so item_id alone would be ambiguous.
 //
 // No longer blocks on a negative balance (refund infrastructure): if
 // removing this item would leave the customer overpaid, the first call
@@ -885,12 +877,12 @@ bookingsRouter.post("/:bookingId/items", async (req, res) => {
 // records that as a real refund — payments row, type='refund', NEGATIVE
 // amount, since actual money is leaving the shop (see the migration's
 // sign-convention note) — before the item is cancelled.
-bookingsRouter.post("/:bookingId/items/:itemId/cancel", async (req: AuthedRequest, res) => {
+bookingsRouter.post("/:bookingId/items/:bookingItemId/cancel", async (req: AuthedRequest, res) => {
   const { data: bookingItem, error: itemFetchError } = await supabase
     .from("booking_items")
     .select("*")
     .eq("booking_id", req.params.bookingId)
-    .eq("item_id", req.params.itemId)
+    .eq("id", req.params.bookingItemId)
     .single();
   if (itemFetchError || !bookingItem) return res.status(404).json({ error: "Booking item not found" });
 
@@ -1035,17 +1027,21 @@ bookingsRouter.patch("/:id", async (req, res) => {
   res.status(200).json(data);
 });
 
-// PATCH /api/bookings/:bookingId/items/:itemId — edit an existing line
-// item's editable fields (§8 decision 4). Re-runs the same conflict check
-// as creation whenever dates/quantity change. Blocked for a
+// PATCH /api/bookings/:bookingId/items/:bookingItemId — edit an existing
+// line item's editable fields (§8 decision 4). Re-runs the same conflict
+// check as creation whenever dates/quantity change. Blocked for a
 // returned/cancelled item — nothing to conflict-check against, and it
 // would rewrite history.
-bookingsRouter.patch("/:bookingId/items/:itemId", async (req, res) => {
+//
+// Scoped by the booking_items row's own id, not item_id — the same
+// physical item can now appear more than once in one booking as separate
+// non-overlapping cycles, so item_id alone would be ambiguous.
+bookingsRouter.patch("/:bookingId/items/:bookingItemId", async (req, res) => {
   const { data: bookingItem, error: fetchError } = await supabase
     .from("booking_items")
     .select("*")
     .eq("booking_id", req.params.bookingId)
-    .eq("item_id", req.params.itemId)
+    .eq("id", req.params.bookingItemId)
     .single();
   if (fetchError || !bookingItem) return res.status(404).json({ error: "Booking item not found" });
 
@@ -1124,8 +1120,11 @@ bookingsRouter.patch("/:bookingId/items/:itemId", async (req, res) => {
   res.status(200).json(data);
 });
 
-// POST /api/bookings/:bookingId/items/:itemId/confirm-pickup — the first
-// real, explicit status='out' transition this app has ever had. Until now
+// POST /api/bookings/:bookingId/items/:bookingItemId/confirm-pickup — the
+// first real, explicit status='out' transition this app has ever had.
+// Scoped by the booking_items row's own id, not item_id — the same
+// physical item can now appear more than once in one booking as separate
+// non-overlapping cycles, so item_id alone would be ambiguous. Until now
 // "currently out" was pure inference (pickup_date <= today), which is what
 // itemsData.ts/attachChains()'s pickup_overdue still falls back to for
 // anything not yet confirmed — this endpoint is what actually clears that
@@ -1152,12 +1151,12 @@ bookingsRouter.patch("/:bookingId/items/:itemId", async (req, res) => {
 // warning-not-rollback pattern as every other secondary write in this
 // file) — the pickup confirmation itself already succeeded and shouldn't
 // be undone by a payments-table hiccup.
-bookingsRouter.post("/:bookingId/items/:itemId/confirm-pickup", async (req: AuthedRequest, res) => {
+bookingsRouter.post("/:bookingId/items/:bookingItemId/confirm-pickup", async (req: AuthedRequest, res) => {
   const { data: bookingItem, error: fetchError } = await supabase
     .from("booking_items")
     .select("*")
     .eq("booking_id", req.params.bookingId)
-    .eq("item_id", req.params.itemId)
+    .eq("id", req.params.bookingItemId)
     .single();
   if (fetchError || !bookingItem) return res.status(404).json({ error: "Booking item not found" });
 
@@ -1198,11 +1197,11 @@ bookingsRouter.post("/:bookingId/items/:itemId/confirm-pickup", async (req: Auth
   res.status(200).json({ ...data, warning });
 });
 
-// POST /api/bookings/:bookingId/items/:itemId/return — returns processing,
-// now scoped to one booking_items row (§8 decision D) rather than a whole
-// booking. Assumes an item appears at most once per booking — .single()
-// below is a data-integrity backstop for that assumption, not just a
-// convenience.
+// POST /api/bookings/:bookingId/items/:bookingItemId/return — returns
+// processing, scoped to one booking_items row by its own id (§8 decision
+// D) rather than a whole booking or an item_id — the same physical item
+// can now appear more than once in one booking as separate non-overlapping
+// cycles, each with its own independent return.
 //
 // Optional `charges: { description, amount }[]` — lost-and-found: one
 // unresolved item_charges row plus one linked payments row per entry (see
@@ -1214,12 +1213,12 @@ bookingsRouter.post("/:bookingId/items/:itemId/confirm-pickup", async (req: Auth
 // non-blocking-warning-on-secondary-failure pattern as the advance
 // payment at booking creation — a failed charge insert doesn't undo an
 // already-completed return.
-bookingsRouter.post("/:bookingId/items/:itemId/return", async (req: AuthedRequest, res) => {
+bookingsRouter.post("/:bookingId/items/:bookingItemId/return", async (req: AuthedRequest, res) => {
   const { data: bookingItem, error: bookingError } = await supabase
     .from("booking_items")
     .select(`*, items(${ITEMS_EMBED})`)
     .eq("booking_id", req.params.bookingId)
-    .eq("item_id", req.params.itemId)
+    .eq("id", req.params.bookingItemId)
     .single();
   if (bookingError || !bookingItem) return res.status(404).json({ error: "Booking item not found" });
 
@@ -1270,7 +1269,7 @@ bookingsRouter.post("/:bookingId/items/:itemId/return", async (req: AuthedReques
   if (error) return res.status(400).json({ error: error.message });
 
   if (item?.tracking_type === "unique") {
-    await supabase.from("items").update({ status: "available" }).eq("id", req.params.itemId);
+    await supabase.from("items").update({ status: "available" }).eq("id", bookingItem.item_id);
   }
 
   const charges = Array.isArray(req.body?.charges) ? (req.body.charges as { description?: string; amount?: number }[]) : [];

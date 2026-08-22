@@ -207,11 +207,11 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     setItemErrors((e) => ({ ...e, [bi.id]: "" }));
     setSavingItemId(bi.id);
     try {
-      // PATCH .../items/:itemId returns only the raw booking_items row (no
-      // nested items(item_code, name, ...) embed) — re-fetch via load()
+      // PATCH .../items/:bookingItemId returns only the raw booking_items row
+      // (no nested items(item_code, name, ...) embed) — re-fetch via load()
       // rather than splicing that response into state, which would blank
       // out this row's item name/code in the header above.
-      await updateBookingItem(bookingId, bi.item_id, {
+      await updateBookingItem(bookingId, bi.id, {
         pickup_date: state.pickupDate,
         return_date: bi.type === "rental" ? state.returnDate || null : null,
         price_charged: toNumberOrNull(state.price) ?? 0,
@@ -240,7 +240,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     setRemovingId(bi.id);
     try {
       const pending = refundNeeded[bi.id];
-      const result = await cancelBookingItem(bookingId, bi.item_id, pending ? toNumberOrNull(pending.amount) ?? 0 : undefined);
+      const result = await cancelBookingItem(bookingId, bi.id, pending ? toNumberOrNull(pending.amount) ?? 0 : undefined);
       if (result.type === "refund_needed") {
         setRefundNeeded((all) => ({ ...all, [bi.id]: { message: result.message, amount: String(result.refundAmountNeeded) } }));
         return;

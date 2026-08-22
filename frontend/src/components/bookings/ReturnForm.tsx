@@ -75,7 +75,7 @@ export function ReturnForm({
         }))
         .filter((c) => c.amount > 0);
 
-      const updated = await processReturn(booking.id, item.item_id, {
+      const updated = await processReturn(booking.id, item.id, {
         return_checklist: checklistNames.length > 0 ? checklist : null,
         return_notes: returnNotes.trim() || null,
         actual_return_date: actualReturnDate || null,
