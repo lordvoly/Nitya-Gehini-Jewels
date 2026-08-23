@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { fetchItem, fetchItemHistory, type Item, type ItemHistoryRow } from "../lib/items";
+import { fetchItem, fetchItemHistory, fetchItemRevenue, type Item, type ItemHistoryRow, type ItemRevenue } from "../lib/items";
 import { PhotoLightbox } from "../components/items/PhotoLightbox";
 import { itemStatusPill, bookingItemStatusPill } from "../lib/statusPill";
 import { formatDateDisplay } from "../lib/dates";
@@ -19,6 +19,7 @@ export default function ItemDetailPage() {
   const navigate = useNavigate();
   const [item, setItem] = useState<Item | null>(null);
   const [history, setHistory] = useState<ItemHistoryRow[]>([]);
+  const [revenue, setRevenue] = useState<ItemRevenue | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
@@ -28,11 +29,12 @@ export default function ItemDetailPage() {
     let cancelled = false;
     setLoading(true);
     setError(null);
-    Promise.all([fetchItem(id), fetchItemHistory(id)])
-      .then(([i, h]) => {
+    Promise.all([fetchItem(id), fetchItemHistory(id), fetchItemRevenue(id)])
+      .then(([i, h, r]) => {
         if (cancelled) return;
         setItem(i);
         setHistory(h);
+        setRevenue(r);
       })
       .catch((e) => {
         if (cancelled) return;
@@ -97,6 +99,13 @@ export default function ItemDetailPage() {
             </li>
             <li>Rental price: {item.rental_price != null ? `₹${item.rental_price}` : "—"}</li>
             <li>Sale price: {item.sale_price != null ? `₹${item.sale_price}` : "—"}</li>
+            {/* Total agreed value earned across every non-cancelled booking,
+                all-time — not cash collected so far, see ItemRevenue's own
+                doc comment. The one figure this page exists to answer:
+                "has this item paid for itself." */}
+            <li>
+              <strong>Total Earnings: ₹{revenue?.grand_total ?? 0}</strong>
+            </li>
             {item.components && item.components.length > 0 && <li>Components: {item.components.join(", ")}</li>}
           </ul>
 

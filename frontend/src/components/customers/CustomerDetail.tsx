@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { fetchCustomer, CUSTOMER_TYPE_LABELS, type Customer } from "../../lib/customers";
+import { fetchCustomer, fetchCustomerRevenue, CUSTOMER_TYPE_LABELS, type Customer, type CustomerRevenue } from "../../lib/customers";
 import { BookingsList } from "../bookings/BookingsList";
 
 // Minimal by design: this customer's own fields, plus their booking
@@ -18,6 +18,7 @@ export function CustomerDetail({
 }) {
   const navigate = useNavigate();
   const [customer, setCustomer] = useState<Customer | null>(null);
+  const [revenue, setRevenue] = useState<CustomerRevenue | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,9 +26,12 @@ export function CustomerDetail({
     let cancelled = false;
     setLoading(true);
     setError(null);
-    fetchCustomer(customerId)
-      .then((c) => {
-        if (!cancelled) setCustomer(c);
+    Promise.all([fetchCustomer(customerId), fetchCustomerRevenue(customerId)])
+      .then(([c, r]) => {
+        if (!cancelled) {
+          setCustomer(c);
+          setRevenue(r);
+        }
       })
       .catch((e) => {
         if (!cancelled) setError(e instanceof Error ? e.message : "Failed to load customer");
@@ -54,6 +58,13 @@ export function CustomerDetail({
               <li>Email: {customer.email ?? "—"}</li>
               <li>Address: {customer.address}</li>
               <li>Type: {CUSTOMER_TYPE_LABELS[customer.customer_type]}</li>
+              {/* Total agreed value across every one of their bookings,
+                  all-time — not cash actually collected (see
+                  CustomerRevenue's own doc comment), same "earned" figure
+                  Item Detail's own Total Earnings shows for one item. */}
+              <li>
+                <strong>Total Business: ₹{revenue?.total_business ?? 0}</strong>
+              </li>
               {customer.notes && <li>Notes: {customer.notes}</li>}
             </ul>
 

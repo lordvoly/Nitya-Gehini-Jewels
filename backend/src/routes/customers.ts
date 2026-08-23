@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
-import { searchCustomers } from "../lib/customersData.js";
+import { searchCustomers, getCustomerHistory } from "../lib/customersData.js";
 
 export const customersRouter = Router();
 
@@ -52,6 +52,29 @@ customersRouter.get("/", async (req, res) => {
   }
 
   res.json(result);
+});
+
+// GET /api/customers/:id/revenue — this customer's all-time "Total
+// Business" figure for CustomerDetail. Reuses getCustomerHistory (already
+// backing the AI assistant's get_customer_history tool) rather than a new
+// query — each booking's price_charged there already comes from
+// booking_financials, which itself excludes cancelled items and zeroes out
+// FOC ones (see 20260818000000_foc_items.sql), so a fully-cancelled
+// booking already contributes ₹0 with no extra filtering needed here.
+// This is total agreed value across every booking, not total_paid (cash
+// actually collected so far) — a customer with an open balance still
+// counts their full booking value here, same "earned" vs "received"
+// distinction items.ts's own revenue route draws.
+// Registered above GET /:id, same "specific route before general"
+// convention used throughout this file and items.ts.
+customersRouter.get("/:id/revenue", async (req, res) => {
+  try {
+    const history = await getCustomerHistory(req.params.id);
+    const total_business = history.reduce((sum, b) => sum + b.price_charged, 0);
+    res.json({ total_business, booking_count: history.length });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : "Failed to compute customer revenue" });
+  }
 });
 
 customersRouter.get("/:id", async (req, res) => {

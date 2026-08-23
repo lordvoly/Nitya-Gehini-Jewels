@@ -1359,6 +1359,39 @@ against a real item and resolving correctly into real content afterward. Confirm
 `git diff` that no temporary test delay was left in any of the three routes touched
 for this. Throwaway admin account used for the auth-gated checks deleted after.
 
+Total Earnings (Item Detail) / Total Business (Customer Detail), same session — an
+ROI-style figure per the explicit ask, computed rather than stored, reusing logic
+that already existed rather than inventing a new definition of "revenue". New `GET
+/api/items/:id/revenue` calls the exact same `getItemBookingItems` +
+`getRevenueBreakdown` (`backend/src/lib/reportsData.ts`) already backing the AI
+assistant's `get_item_revenue` tool — same cancelled-exclusion and FOC-zeroing rules
+(`effectivePrice()`), so the two can never quietly diverge. New `GET
+/api/customers/:id/revenue` sums `price_charged` across `getCustomerHistory()`'s
+per-booking `booking_financials` figures (already backing `get_customer_history`) —
+no extra filtering needed there since that view already excludes cancelled items and
+zeroes out FOC ones per-booking. Both are all-time, agreed-value totals — "earned",
+not "collected" (`total_paid`/`received` are the separate, already-existing figures
+for that). Displayed as a bolded `<li><strong>` line, same treatment
+`BookingDetail`'s own "Balance due" line already uses for an equally load-bearing
+number: "Total Earnings" between Sale price and Components on Item Detail, "Total
+Business" between Type and Notes on Customer Detail. Customer label deliberately
+avoids "Total Spent" — that could read as cash actually paid (`total_paid`), which
+this isn't, especially for a customer with an open balance.
+
+Verified live against real production data, not just typechecked: found the real
+item from the request's own screenshot (`NGJ-0009` / Polki Semi Bridal #1800 (Alia),
+sale price ₹14000, components Necklace/Earrings/Tika — an exact match) and hand-
+computed its expected total directly via Supabase (₹1250 + ₹800 = ₹2050, both real
+non-cancelled non-FOC bookings) before ever loading the page — the rendered "Total
+Earnings: ₹2050" matched exactly. Same for the customer side: Ruchi Arora's one real
+booking (`C/050`), hand-computed via `booking_financials` as ₹1250, matched the
+rendered "Total Business: ₹1250" exactly. Both exclusion rules also verified against
+a throwaway item/customer with three bookings — one real (₹500), one cancelled
+(₹9999, would visibly break the test if wrongly included), one FOC (₹8888 real
+price) — both new endpoints correctly returned exactly ₹500. All throwaway data and
+the throwaway admin account used for the auth-gated checks cleaned up after; real
+data (`NGJ-0009`, Ruchi Arora's real ₹1250 booking) confirmed untouched throughout.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.

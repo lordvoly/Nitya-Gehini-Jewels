@@ -107,6 +107,20 @@ export function fetchItemHistory(id: string) {
   return apiFetch<ItemHistoryRow[]>(`/api/items/${id}/history`);
 }
 
+// grand_total is the "Total Earnings" figure — total agreed price across
+// every non-cancelled booking, all-time, FOC items contributing ₹0. Not
+// the same as received (cash actually collected so far).
+export interface ItemRevenue {
+  booking_count: number;
+  grand_total: number;
+  received: number;
+  balance_remaining: number;
+}
+
+export function fetchItemRevenue(id: string) {
+  return apiFetch<ItemRevenue>(`/api/items/${id}/revenue`);
+}
+
 // The suggested next auto-generated code — used to pre-fill the (editable)
 // item_code field in the add-item wizard. Doesn't reserve anything.
 export function fetchNextItemCode() {

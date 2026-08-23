@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase.js";
 import { getItemAvailability } from "../lib/itemsData.js";
 import { imageUpload } from "../lib/upload.js";
 import { istToday } from "../lib/dates.js";
+import { getItemBookingItems, getRevenueBreakdown } from "../lib/reportsData.js";
 
 export const itemsRouter = Router();
 
@@ -41,6 +42,29 @@ itemsRouter.get("/next-code", async (_req, res) => {
     res.json({ item_code: await nextItemCode() });
   } catch (e) {
     res.status(500).json({ error: e instanceof Error ? e.message : "Failed to compute next item code" });
+  }
+});
+
+// GET /api/items/:id/revenue — this item's own all-time revenue, for the
+// "Total Earnings" figure on Item Detail. Exact same
+// getItemBookingItems + getRevenueBreakdown call already backing the AI
+// assistant's get_item_revenue tool (backend/src/tools/index.ts), reused
+// here rather than reimplemented, so the two can never quietly diverge.
+// grand_total is the ROI-relevant figure — total agreed price across every
+// non-cancelled booking, FOC items contributing ₹0 (see effectivePrice in
+// reportsData.ts) — never money actually collected, which is what
+// `received` is for; this route hands back both since either could be
+// useful, but the frontend only surfaces grand_total under "Total
+// Earnings" per the explicit ask. Registered above GET /:id/history and
+// GET /:id for the same "specific route before general" reason as
+// next-code above.
+itemsRouter.get("/:id/revenue", async (req, res) => {
+  try {
+    const itemItems = await getItemBookingItems(req.params.id);
+    const breakdown = await getRevenueBreakdown(itemItems);
+    res.json({ booking_count: new Set(itemItems.map((i) => i.booking_id)).size, ...breakdown });
+  } catch (e) {
+    res.status(500).json({ error: e instanceof Error ? e.message : "Failed to compute item revenue" });
   }
 });
 

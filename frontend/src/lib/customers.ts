@@ -52,6 +52,20 @@ export function fetchCustomer(id: string) {
   return apiFetch<Customer>(`/api/customers/${id}`);
 }
 
+// total_business is total agreed price across every one of this
+// customer's bookings, all-time — cancelled bookings/items already
+// contribute ₹0 (booking_financials excludes them) and FOC items too, so
+// no extra filtering is needed here. Not the same as how much they've
+// actually paid so far (an open balance still counts in full).
+export interface CustomerRevenue {
+  total_business: number;
+  booking_count: number;
+}
+
+export function fetchCustomerRevenue(id: string) {
+  return apiFetch<CustomerRevenue>(`/api/customers/${id}/revenue`);
+}
+
 // Plain PATCH, matching updateItem's pattern — a duplicate-phone 409 here
 // just surfaces as a normal error message (unlike create's dedupe flow,
 // there's no "use this customer instead" affordance while editing).
