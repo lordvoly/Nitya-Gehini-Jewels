@@ -3,6 +3,8 @@ import { istMonthRange } from "../lib/dates.js";
 import {
   getPeriodBookingItems,
   rankMostBookedItems,
+  getAllBookingItems,
+  rankRepeatCustomers,
   getIdleInventory,
   getFinancialSummary,
   getOutstandingDues,
@@ -106,7 +108,7 @@ export const toolDefinitions = [
   {
     name: "get_financial_summary",
     description:
-      "OUR revenue — the whole shop's, across every item — plus expenses, net profit, and a received/balance-remaining breakdown for a period. Defaults to the current IST calendar month if no dates are given. The period filters by pickup/rental start date (pickup_date), same as everything else in this app that's scoped to 'this week'/'this month'. revenue and grand_total are the same figure (total agreed price, cancelled items excluded entirely) — received is how much of that has actually been paid so far, balance_remaining is what's still owed; received + balance_remaining always equals grand_total exactly. Covers both rentals and sales, and both unique and quantity-tracked items. For ONE item's own revenue instead of the whole shop's, use get_item_revenue, never this.",
+      "OUR revenue — the whole shop's, across every item — plus expenses, net profit, a received/balance-remaining breakdown, AND how many bookings happened (total_bookings, plus rental_count/sale_count) for a period. This is also the right tool for a plain 'how many bookings did we have this month/week' question, not just money questions. Defaults to the current IST calendar month if no dates are given. The period filters by pickup/rental start date (pickup_date), same as everything else in this app that's scoped to 'this week'/'this month'. revenue and grand_total are the same figure (total agreed price, cancelled items excluded entirely) — received is how much of that has actually been paid so far, balance_remaining is what's still owed; received + balance_remaining always equals grand_total exactly. total_bookings counts family transactions (one visit, however many items); rental_count/sale_count count individual items instead, so a visit with one rental and one sale adds 1 to both. Covers both rentals and sales, and both unique and quantity-tracked items. For ONE item's own revenue instead of the whole shop's, use get_item_revenue, never this.",
     input_schema: {
       type: "object" as const,
       properties: {
@@ -156,6 +158,17 @@ export const toolDefinitions = [
     name: "get_idle_inventory",
     description: "Active items with no booking in the last 90 days, or never booked at all. Retired items are excluded.",
     input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "get_repeat_customers",
+    description:
+      "Customers with more than one booking, ranked by booking count (highest first) — this is THE tool for 'who is our most repeated/frequent/loyal customer' or 'which customers have booked more than once'. All-time by design, never scoped to a date range (a customer's repeat status is a lifetime fact, not a this-month one) — ignore any dates mentioned in the question. Excludes influencer/MUA bookings unless include_collabs is explicitly set, same convention as get_popular_items. Do NOT answer this kind of question by calling get_customer_summary followed by get_customer_history on every customer one by one — always reach for this tool directly instead, in a single call.",
+    input_schema: {
+      type: "object" as const,
+      properties: {
+        include_collabs: { type: "boolean", description: "Include influencer/MUA bookings. Defaults to false." },
+      },
+    },
   },
   {
     name: "get_daily_briefing",
@@ -314,6 +327,11 @@ export async function runTool(name: string, input: Record<string, unknown>) {
     }
     case "get_idle_inventory": {
       return await getIdleInventory();
+    }
+    case "get_repeat_customers": {
+      const includeCollabs = input.include_collabs === true;
+      const allItems = await getAllBookingItems();
+      return { include_collabs: includeCollabs, repeat_customers: rankRepeatCustomers(allItems, includeCollabs) };
     }
     case "get_daily_briefing": {
       return await getDailyBriefingData();

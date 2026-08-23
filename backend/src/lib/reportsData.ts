@@ -85,6 +85,55 @@ export function rankMostBookedItems(periodItems: BookingItemRow[], includeCollab
   return [...itemCounts.values()].sort((a, b) => b.booking_count - a.booking_count);
 }
 
+// All-time, non-cancelled booking_items — no date bound, unlike
+// getPeriodBookingItems. Backs repeat-customer ranking below, which is
+// deliberately never scoped to a report's date range (a customer's repeat
+// status is a lifetime fact, not a this-month one — see rankRepeatCustomers).
+export async function getAllBookingItems(): Promise<BookingItemRow[]> {
+  const { data, error } = await supabase
+    .from("booking_items")
+    .select("id, booking_id, type, price_charged, is_foc, item_id, items(item_code, name), bookings(customer_id, customers(name, phone, customer_type))")
+    .neq("status", "cancelled")
+    .returns<BookingItemRow[]>();
+  if (error) throw error;
+  return data;
+}
+
+// Originally inline in reports.ts (GET /api/reports) — extracted once the AI
+// assistant's own get_repeat_customers tool needed the exact same
+// aggregation, same reasoning as every other shared function in this file:
+// one query, not two that could quietly drift. Filters to customers with
+// more than one (non-cancelled) booking, sorted by booking_count descending.
+export function rankRepeatCustomers(allItems: BookingItemRow[], includeCollabs: boolean) {
+  const rankingRows = includeCollabs ? allItems : allItems.filter(isRegular);
+  const customerAgg = new Map<
+    string,
+    { customer_id: string; name: string; phone: string; bookingIds: Set<string>; total_spend: number }
+  >();
+  for (const b of rankingRows) {
+    const customerId = b.bookings?.customer_id;
+    const customer = b.bookings?.customers;
+    if (!customerId || !customer) continue;
+    const existing = customerAgg.get(customerId);
+    if (existing) {
+      existing.bookingIds.add(b.booking_id);
+      existing.total_spend += effectivePrice(b);
+    } else {
+      customerAgg.set(customerId, {
+        customer_id: customerId,
+        name: customer.name,
+        phone: customer.phone,
+        bookingIds: new Set([b.booking_id]),
+        total_spend: effectivePrice(b),
+      });
+    }
+  }
+  return [...customerAgg.values()]
+    .map((c) => ({ customer_id: c.customer_id, name: c.name, phone: c.phone, booking_count: c.bookingIds.size, total_spend: c.total_spend }))
+    .filter((c) => c.booking_count > 1)
+    .sort((a, b) => b.booking_count - a.booking_count);
+}
+
 // Active items with no real booking in the last 90 days (fixed window from
 // today, independent of any report date range). Retired items (is_active =
 // false) stay excluded — a retired item was already taken out of rotation
@@ -211,10 +260,19 @@ export async function getRevenueBreakdown(periodItems: BookingItemRow[]) {
 // both reports.ts and get_financial_summary call, so they can never drift.
 export async function getFinancialSummary(from: string, to: string) {
   const periodItems = await getPeriodBookingItems(from, to);
-  const { total_revenue } = summarizeBookingItems(periodItems);
+  const { total_bookings, rental_count, sale_count, total_revenue } = summarizeBookingItems(periodItems);
   const { expenses_total, by_category } = await getExpensesForPeriod(from, to);
   const { grand_total, received, balance_remaining } = await getRevenueBreakdown(periodItems);
   return {
+    // Family-transaction and item-level counts — the same "Bookings This
+    // Period" figures Reports' own stat-grid shows, previously computed by
+    // summarizeBookingItems() here but discarded before reaching either
+    // reports.ts's response or the AI assistant's get_financial_summary
+    // tool. Additive fields, so nothing existing that reads this object
+    // breaks.
+    total_bookings,
+    rental_count,
+    sale_count,
     revenue: total_revenue,
     expenses: expenses_total,
     net: total_revenue - expenses_total,

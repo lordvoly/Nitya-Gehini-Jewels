@@ -5,10 +5,11 @@ import {
   getPeriodBookingItems,
   summarizeBookingItems,
   rankMostBookedItems,
+  getAllBookingItems,
+  rankRepeatCustomers,
   getIdleInventory,
   getFinancialSummary,
   getOutstandingDues,
-  effectivePrice,
 } from "../lib/reportsData.js";
 
 export const reportsRouter = Router();
@@ -46,55 +47,11 @@ reportsRouter.get("/", async (req, res) => {
     const summary = summarizeBookingItems(periodItems);
     const most_booked_items = rankMostBookedItems(periodItems, includeCollabs);
 
-    // Repeat customers — all-time, never scoped to the date range. Not
-    // shared via reportsData.ts since nothing else (route or tool) needs
-    // this specific aggregation yet.
-    const { data: allItems, error: allError } = await supabase
-      .from("booking_items")
-      .select("id, booking_id, type, price_charged, is_foc, item_id, items(item_code, name), bookings(customer_id, customers(name, phone, customer_type))")
-      .neq("status", "cancelled")
-      .returns<
-        {
-          id: string;
-          booking_id: string;
-          type: "rental" | "sale";
-          price_charged: number;
-          is_foc: boolean;
-          item_id: string;
-          items: { item_code: string; name: string } | null;
-          bookings: { customer_id: string; customers: { name: string; phone: string; customer_type: "regular" | "influencer" | "mua" } | null } | null;
-        }[]
-      >();
-    if (allError) throw allError;
-
-    const isRegular = (b: (typeof allItems)[number]) => (b.bookings?.customers?.customer_type ?? "regular") === "regular";
-    const repeatRows = includeCollabs ? allItems : allItems.filter(isRegular);
-    const customerAgg = new Map<
-      string,
-      { customer_id: string; name: string; phone: string; bookingIds: Set<string>; total_spend: number }
-    >();
-    for (const b of repeatRows) {
-      const customerId = b.bookings?.customer_id;
-      const customer = b.bookings?.customers;
-      if (!customerId || !customer) continue;
-      const existing = customerAgg.get(customerId);
-      if (existing) {
-        existing.bookingIds.add(b.booking_id);
-        existing.total_spend += effectivePrice(b);
-      } else {
-        customerAgg.set(customerId, {
-          customer_id: customerId,
-          name: customer.name,
-          phone: customer.phone,
-          bookingIds: new Set([b.booking_id]),
-          total_spend: effectivePrice(b),
-        });
-      }
-    }
-    const repeat_customers = [...customerAgg.values()]
-      .map((c) => ({ customer_id: c.customer_id, name: c.name, phone: c.phone, booking_count: c.bookingIds.size, total_spend: c.total_spend }))
-      .filter((c) => c.booking_count > 1)
-      .sort((a, b) => b.booking_count - a.booking_count);
+    // Repeat customers — all-time, never scoped to the date range. Now
+    // shared with the AI assistant's get_repeat_customers tool via
+    // reportsData.ts, same reasoning as every other extraction in this file.
+    const allItems = await getAllBookingItems();
+    const repeat_customers = rankRepeatCustomers(allItems, includeCollabs);
 
     const idle_inventory = await getIdleInventory();
     const pnl = await getFinancialSummary(from, to);

@@ -1489,6 +1489,57 @@ delayed `GET /api/items`; delay reverted and confirmed via `grep` that no test
 code was left behind. Typecheck and build clean on both workspaces after the
 revert. Throwaway admin account used for the auth-gated check deleted after.
 
+AI assistant: `get_repeat_customers` tool + a real crash fix, new session — the user
+hit a genuine, reproducible failure asking the assistant "Who is the most repeated
+customer?" then "Yes do that": a 400 from Anthropic itself,
+`tool_use ids were found without tool_result blocks immediately after`, with a long
+list of orphaned tool ids. Two real, distinct things going on, both addressed.
+
+**Missing tool, the proximate trigger.** No tool covered "who's our repeat/most
+frequent customer" at all — Reports' own `repeat_customers` section had no AI
+equivalent, so the model's only path was `get_customer_summary` (all 24 customers)
+then, on "yes do that", apparently trying to call `get_customer_history` once per
+customer in a single turn — a large batch of parallel tool calls that's exactly the
+shape that exposed the underlying bug below. New `get_repeat_customers` tool closes
+this — same ranking Reports already computes (booking_count > 1, sorted
+descending), all-time by design like the Reports section it mirrors (never scoped to
+a date range someone might mention in the question). The underlying aggregation
+(previously inline in `reports.ts`, per its own comment "nothing else needs this
+yet") is now extracted to `reportsData.ts` as `getAllBookingItems` +
+`rankRepeatCustomers`, same one-shared-function-not-two-that-could-drift pattern as
+everything else in that file — `reports.ts` now calls the shared version instead of
+its own copy. The tool's own description explicitly tells the model not to fall back
+to the per-customer-history approach, closing the trigger at the prompt level too.
+Also closed a second, smaller gap found while auditing every tool against every
+Reports section: `get_financial_summary` computed `total_bookings`/`rental_count`/
+`sale_count` internally (via `summarizeBookingItems`) but discarded them before
+either its own response or `reports.ts` ever saw them — a plain "how many bookings
+this month" question had no tool that could answer it. Added as three more fields
+on the same response (additive, nothing existing breaks).
+
+**The actual crash — a real robustness gap in `chat.ts`'s tool loop, not just the
+missing tool.** The loop's tool-resolution step awaited a plain `Promise.all` over
+`runTool()` calls with no per-call error handling: if even one tool call in a batch
+threw, `Promise.all` rejected as a whole, and neither the assistant's tool_use
+message nor any tool_result got pushed to `messages` for that round — but by then
+`messages` (the very array reference from `req.body.messages`, mutated in place) had
+already been mutated by any *earlier, successful* rounds in the same request, so a
+half-completed exchange could reach the next request in a state Anthropic's own API
+then rejects. Fixed by wrapping each individual `runTool()` call in its own
+try/catch, returning a `tool_result` with `is_error: true` on failure instead of
+letting the exception propagate — this guarantees `toolResults.length ===
+toolUses.length` always holds, regardless of what any single tool call does, so a
+`tool_use` block can never end up without a matching `tool_result`. Also added a
+`MAX_TOOL_ITERATIONS` (8) cap on the while loop itself, as cheap insurance against a
+genuinely runaway multi-round tool conversation, separate from the large-single-
+batch failure mode above.
+
+Not fully independently verified this session: local `backend/.env` has no real
+`ANTHROPIC_API_KEY` (same gap noted in earlier AI-assistant sessions — only Render's
+production env var has one), so this shipped and needs testing against the deployed
+site rather than local dev, same as every previous chat-feature change in this
+project.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.
