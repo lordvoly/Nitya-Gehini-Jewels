@@ -47,7 +47,7 @@ export default function ReceiptPage() {
 
   return (
     <div className="page receipt-page">
-      <div className="no-print wizard-actions" style={{ marginBottom: 20 }}>
+      <div className="no-print receipt-actions">
         <button className="btn-primary" onClick={() => window.print()}>
           Print / Save as PDF
         </button>

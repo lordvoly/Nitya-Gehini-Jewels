@@ -2029,6 +2029,26 @@ a.stat-card:active {
   max-width: 480px;
 }
 
+/* The on-screen toolbar (Print/WhatsApp) sits above the receipt's own
+   centered content — .wizard-actions' column layout plus .btn-primary's
+   margin-left: auto (meant for Cancel/Submit form pairs) pushed a lone
+   button hard right instead, visually disconnected from the centered
+   logo/shop-name/meta below it. Centered here instead, so the toolbar and
+   the receipt content share one visual axis. Both buttons carry
+   .no-print, so none of this affects the actual printed/saved page. */
+.receipt-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.receipt-actions .btn-primary,
+.receipt-actions .btn-secondary {
+  margin-left: 0;
+}
+
 .receipt-header {
   text-align: center;
   margin-bottom: 18px;
