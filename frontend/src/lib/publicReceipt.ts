@@ -14,6 +14,7 @@ export interface PublicReceiptItem {
   status: "booked" | "out" | "returned" | "cancelled";
   price_charged: number | null;
   is_foc: boolean;
+  custom_addons: string[];
   deposit: { amount: number; refunded: boolean; refund_date: string | null } | null;
 }
 

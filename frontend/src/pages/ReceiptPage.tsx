@@ -6,6 +6,7 @@ import { fetchShopSettings, type ShopSettings } from "../lib/shopSettings";
 import { formatDateDisplay } from "../lib/dates";
 import { bookingItemStatusPill } from "../lib/statusPill";
 import { buildWhatsAppLink } from "../lib/whatsapp";
+import ngjLogo from "../assets/images/ngj-logo.png";
 import "../styles/shared.css";
 
 // Printable receipt — deliberately plain, no GST section (per explicit
@@ -66,6 +67,7 @@ export default function ReceiptPage() {
       {!("url" in whatsapp) && <p className="wizard-hint no-print">{whatsapp.error} — can't send via WhatsApp.</p>}
 
       <div className="receipt-header">
+        <img src={ngjLogo} alt="Nitya Gehini Jewels" className="receipt-logo" />
         <div className="receipt-shop-name">{shop.name}</div>
         {shop.address && <div className="receipt-shop-line">{shop.address}</div>}
         {shop.phone && <div className="receipt-shop-line">{shop.phone}</div>}
@@ -73,10 +75,12 @@ export default function ReceiptPage() {
 
       <div className="receipt-meta">
         <div>
+          <div className="receipt-meta-label">Booking No.</div>
           <strong>{booking.booking_code}</strong>
           <div className="wizard-hint">{formatDateDisplay(booking.created_at.slice(0, 10))}</div>
         </div>
         <div className="receipt-meta-right">
+          <div className="receipt-meta-label">Customer</div>
           <div>{booking.customers?.name}</div>
           <div className="wizard-hint">{booking.customers?.phone}</div>
         </div>
@@ -102,6 +106,14 @@ export default function ReceiptPage() {
                     {bi.items?.item_code} — {bi.items?.name}
                   </span>
                   {cancelled && <span className={`pill ${pill.className} receipt-item-pill`}>{pill.label}</span>}
+                  {/* Free-text extras added at booking time (nath, sheeshpatti,
+                      etc.) — booking_items.custom_addons, distinct from
+                      items.components (the item's own reusable template).
+                      Shown regardless of cancelled, same as everything else in
+                      this cell, so a cancelled line's own history stays intact. */}
+                  {bi.custom_addons.length > 0 && (
+                    <div className="receipt-item-addons">Additional: {bi.custom_addons.join(", ")}</div>
+                  )}
                   {/* Deliberately outside the Total/Paid/Balance figures below —
                       a deposit never flows through booking_financials (see
                       CLAUDE.md), this is purely a paper record of what was

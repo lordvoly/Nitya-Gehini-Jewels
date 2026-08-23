@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import QRCode from "qrcode";
 import { fetchPublicReceipt, type PublicReceipt } from "../lib/publicReceipt";
 import { formatDateDisplay } from "../lib/dates";
+import ngjLogo from "../assets/images/ngj-logo.png";
 import "../styles/shared.css";
 
 // The public counterpart to ReceiptPage.tsx — reachable with no login at
@@ -46,6 +47,7 @@ export default function PublicReceiptPage() {
       </div>
 
       <div className="receipt-header">
+        <img src={ngjLogo} alt="Nitya Gehini Jewels" className="receipt-logo" />
         <div className="receipt-shop-name">{receipt.shop.name}</div>
         {receipt.shop.address && <div className="receipt-shop-line">{receipt.shop.address}</div>}
         {receipt.shop.phone && <div className="receipt-shop-line">{receipt.shop.phone}</div>}
@@ -53,10 +55,12 @@ export default function PublicReceiptPage() {
 
       <div className="receipt-meta">
         <div>
+          <div className="receipt-meta-label">Booking No.</div>
           <strong>{receipt.booking_code}</strong>
           <div className="wizard-hint">{formatDateDisplay(receipt.created_at.slice(0, 10))}</div>
         </div>
         <div className="receipt-meta-right">
+          <div className="receipt-meta-label">Customer</div>
           <div>{receipt.customer_name}</div>
         </div>
       </div>
@@ -80,6 +84,9 @@ export default function PublicReceiptPage() {
                     {bi.item_code} — {bi.name}
                   </span>
                   {cancelled && <span className="pill pill-neutral receipt-item-pill">Cancelled</span>}
+                  {bi.custom_addons.length > 0 && (
+                    <div className="receipt-item-addons">Additional: {bi.custom_addons.join(", ")}</div>
+                  )}
                   {!cancelled && bi.deposit && (
                     <div className="receipt-item-deposit">
                       Security Deposit: ₹{bi.deposit.amount}

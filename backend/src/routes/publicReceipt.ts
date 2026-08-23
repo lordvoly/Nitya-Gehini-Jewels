@@ -36,7 +36,7 @@ publicReceiptRouter.get("/receipt/:token", publicReceiptLimiter, async (req, res
        customers(name),
        booking_items(type, pickup_date, return_date, status, price_charged, is_foc,
                       deposit_amount, deposit_collected, deposit_refunded, deposit_refund_date,
-                      items(item_code, name))`,
+                      custom_addons, items(item_code, name))`,
     )
     .eq("share_token", req.params.token)
     .maybeSingle();
@@ -66,6 +66,7 @@ publicReceiptRouter.get("/receipt/:token", publicReceiptLimiter, async (req, res
         status: bi.status,
         price_charged: bi.is_foc ? null : bi.price_charged,
         is_foc: bi.is_foc,
+        custom_addons: bi.custom_addons ?? [],
         deposit: bi.deposit_collected
           ? { amount: bi.deposit_amount, refunded: bi.deposit_refunded, refund_date: bi.deposit_refund_date }
           : null,

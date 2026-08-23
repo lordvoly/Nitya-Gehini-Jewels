@@ -1251,6 +1251,34 @@ verified zero remaining by a fresh `ilike` sweep; the throwaway admin account
 deleted; real data (`C/059`'s live `share_token`, `NGJ-0001`) confirmed untouched
 throughout.
 
+Invoice cosmetic pass, same day — three small requests against both receipt views
+(`ReceiptPage.tsx` staff view and `PublicReceiptPage.tsx`). (1) `booking_items.custom_addons`
+(the free-text extras added at booking time — nath, sheeshpatti, etc., distinct from
+`items.components`) now renders as a small muted "Additional: ..." line under each
+item, on both views — the public endpoint's select previously omitted this field
+entirely (deliberate at the time, since nothing rendered it yet) and now includes it;
+still nowhere near the excluded-fields list from the WhatsApp session (notes, payment
+history, phone numbers) since these are booking-specific extras the customer already
+knows they booked, not internal data. (2) `receipt-meta`'s booking code/customer name
+gained small uppercase kicker labels ("Booking No." / "Customer") via a new
+`.receipt-meta-label` class mirroring `.item-detail-code`'s existing treatment. (3)
+The shop's real logo (`NON Tech/NGJ logo.png`, outside the repo) is now on both
+receipt views' header. The source file has a solid black background — pasted as-is
+it would've shown a black square on the ivory receipt, so it was processed once
+(scratch-directory Node script using `sharp`'s raw pixel buffer, luminance-threshold
+chroma key with a soft falloff band to avoid a jagged cutout edge) into a transparent
+PNG, saved at `frontend/src/assets/images/ngj-logo.png` (54.5KB, mirrors the Fraunces
+font asset's storage pattern) — a one-time asset-prep step, not a build-time
+transform, so no image-processing dependency was added to the app itself.
+
+Verified live: the public endpoint's raw JSON re-checked to confirm `custom_addons`
+now present; both receipt views re-rendered against the real `C/059` (Kanu Priya)
+booking showing the labeled headers, both items' real additional-items lists, and
+the logo blending cleanly against the ivory background with no visible dark fringing
+at zoom (checked directly, not assumed from the processing script alone); confirmed
+the `@media print` rule doesn't hide or otherwise target the new logo. Throwaway
+admin account used for the staff-view check deleted after.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.
