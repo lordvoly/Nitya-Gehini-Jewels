@@ -106,6 +106,10 @@ export interface BookingItem {
 export interface Booking {
   id: string;
   booking_code: string;
+  // Unguessable identifier for the public /r/:token receipt view — never
+  // the booking's own id and never the visible booking_code. See
+  // 20260823010000_booking_share_token.sql.
+  share_token: string;
   customer_id: string;
   gst_applicable: boolean;
   gst_invoice_number: string | null;

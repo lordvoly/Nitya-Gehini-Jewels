@@ -1164,6 +1164,93 @@ correctly rejected with `409`. Done through a throwaway admin account against th
 real booking (not a raw DB script) so the fix and the feature verification were the
 same action; throwaway account deleted after.
 
+"Send via WhatsApp" on the invoice/receipt, new session (2026-08-23) — investigated
+before building, since the two things that mattered ("is phone storage clean?", "does
+the shareable link actually work signed-out?") weren't obvious from the feature
+request alone.
+
+**Finding that changed the plan:** the suspected risk was a guessable URL (booking
+codes look sequential, e.g. `C/059`) — but `/receipt/:bookingId` already keys off
+`bookings.id`, a real UUID, not the visible code, so that specific worry didn't apply.
+The actual blocker was the opposite problem: `/receipt/:bookingId` is wrapped in
+`ProtectedRoute`, *and* every backend route including `/api/bookings/*` sits behind
+global `requireAuth` (`backend/src/index.ts`) — a signed-out customer tapping the
+link would be bounced straight to `/login` with no account to log into. Not "too
+open," too closed for the one audience this feature is for.
+
+**Fix, reviewed before building:** new `bookings.share_token`
+(`supabase/migrations/20260823010000_booking_share_token.sql`) — 24 bytes from
+pgcrypto's `gen_random_bytes()` (already enabled), hex-encoded, `NOT NULL DEFAULT`
+so every booking gets one automatically and — because a volatile default forces
+Postgres off the fast metadata-only `ADD COLUMN` path — every *existing* booking was
+backfilled with its own independently-random token in the same statement, confirmed
+live (10 sampled rows, 10 distinct 48-hex-char tokens). New `GET
+/api/public/receipt/:token` (`backend/src/routes/publicReceipt.ts`) is the one route
+in this app with no `requireAuth` at all, keyed only by `share_token` — never
+`booking.id`, never `booking_code` — and returns an explicitly whitelisted narrow
+shape (shop info, booking code/date, customer *name* only, per-item type/dates/price/
+deposit, aggregate totals), never `{...booking}` minus some fields. Deliberately
+excluded: notes, payment/audit history, both phone fields, GST fields, the booking
+chain (would leak scheduling info about other customers' bookings on the same item),
+and — the one non-obvious exclusion — an FOC item's `price_charged`, which the
+`BookingItem` type's own comment confirms is the untouched original "what it would
+have cost" value; nulled out here since a comped item's market value showing up on a
+forwardable public link is a real business-sensitivity concern, not something this
+project had needed to think about before this was public-facing. Gets its own
+`express-rate-limit` (30 req/min/IP) since it's the first endpoint reachable with no
+session at all — no rate limiting exists anywhere else in this backend, this wasn't
+a gap worth closing until a route existed that didn't at least require a valid
+Supabase token first. New public frontend route `/r/:token`
+(`PublicReceiptPage.tsx`), deliberately outside `ProtectedRoute`, sitting alongside
+(not replacing) the existing staff `/receipt/:bookingId` view — that one is untouched,
+still auth-gated, still what "Print/Download Receipt" on Booking Detail links to. The
+public page's QR code points at itself (`window.location.href`) rather than the
+internal `/bookings?booking=` deep link the staff receipt's QR uses, since that
+internal link would just bounce a signed-out scanner to `/login`.
+
+`ReceiptPage.tsx` gained the "Send via WhatsApp" button itself — a real `<a
+href="https://wa.me/91...&text=..." target="_blank">`, not `window.location`, so
+mobile browsers treat it as genuine user-initiated navigation. New
+`lib/whatsapp.ts`'s `buildWhatsAppLink()` re-validates the phone defensively (strip
+non-digits, require exactly 10) rather than trusting the stored value — `phone` has
+no DB-level length constraint, only "non-empty after normalization," and a real
+9-digit `phone_secondary` value already existed in production (Kanu Priya's, an
+operator typo) proving this isn't a theoretical gap. No valid phone → the button
+renders as a genuine disabled `<button>` with a `title` reason, never a broken link.
+
+**Real, unrelated bug found and fixed along the way:** live-testing the new button
+showed it underlined like a plain text link, not styled like every other button in
+the app. Root cause: `.btn-primary/.btn-secondary/.btn-danger` in `shared.css` never
+set `text-decoration: none` — harmless for every past use since they were always
+applied to real `<button>` elements (which have no underline to begin with), but the
+one pre-existing exception, `BookingDetail.tsx`'s "Print/Download Receipt" `<Link
+className="btn-secondary">`, had silently carried this exact same underline the whole
+time. Confirmed live before fixing (computed `text-decoration-line: underline` on
+both), fixed once at the shared class level (plus `display: inline-block` so an `<a>`
+sizes identically to a `<button>` under the same padding/min-height rules) rather
+than patching just the new instance.
+
+Verified live, not just typechecked: 10 real bookings' tokens sampled directly via
+Supabase, confirmed unique and correctly formatted. `curl` with zero auth headers
+against the real `C/059` (Kanu Priya) token returned exactly the whitelisted shape —
+raw JSON diffed field-by-field against the intended list, nothing extra. A throwaway
+FOC booking confirmed `price_charged` arrives `null` for `is_foc: true` items
+specifically (not just asserted from reading the code). `/r/:token` loaded correctly
+in a tab with `localStorage` explicitly cleared first (not just assumed signed-out) —
+full real data rendered, no header actions, no bottom nav; the old `/receipt/:bookingId`
+on the same real booking, hit the same way, correctly bounced to `/login`, confirming
+the staff route's gate is untouched. The WhatsApp button was clicked for real (not
+just its `href` inspected) — opened a genuine new tab to WhatsApp's own
+`api.whatsapp.com/send` page, which independently confirmed `+91 78388 74270` (Kanu
+Priya's real number) and the exact pre-filled message text, screenshotted. A
+throwaway customer with a direct-DB-inserted 5-digit phone (bypassing the API's own
+validation, the same way the real `phone_secondary` edge case arose) confirmed the
+button renders genuinely `disabled` with the correct `title`, not just visually
+greyed out. All throwaway items/customers/bookings/booking_items cleaned up after,
+verified zero remaining by a fresh `ilike` sweep; the throwaway admin account
+deleted; real data (`C/059`'s live `share_token`, `NGJ-0001`) confirmed untouched
+throughout.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.
@@ -1273,7 +1360,9 @@ and `20260813120000_shop_settings.sql` after that. Eight tables:
   (`regular`/`influencer`/`mua`, default `regular`) drives the Reports collab toggle.
 - **bookings** — the per-transaction parent record (one per family pickup visit, not
   per item): `customer_id`, `booking_code`, GST fields (`gst_applicable`,
-  `gst_invoice_number`, `hsn_code`, `tax_rate`, whole-transaction level). No
+  `gst_invoice_number`, `hsn_code`, `tax_rate`, whole-transaction level), and
+  `share_token` (random, unique, DB-generated — the public `/r/:token` receipt link's
+  identifier; never expose `id` or `booking_code` for that purpose instead). No
   price/date/status fields of its own since the Stage 2 cutover — those all moved to
   `booking_items`.
 - **booking_items** — one row per physical item within a booking: `booking_id`,

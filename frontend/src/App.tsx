@@ -12,6 +12,7 @@ import ChargesPage from "./pages/ChargesPage";
 import AssistantPage from "./pages/AssistantPage";
 import SettingsPage from "./pages/SettingsPage";
 import ReceiptPage from "./pages/ReceiptPage";
+import PublicReceiptPage from "./pages/PublicReceiptPage";
 import ItemDetailPage from "./pages/ItemDetailPage";
 import ProtectedRoute from "./components/ProtectedRoute";
 import { Modal } from "./components/common/Modal";
@@ -114,6 +115,10 @@ export default function App() {
       <main className={session ? "app-content" : undefined}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
+          {/* Deliberately outside ProtectedRoute — this is the one page a
+              customer reaches with no account at all, via a WhatsApp-shared
+              link. See lib/publicReceipt.ts and backend/src/routes/publicReceipt.ts. */}
+          <Route path="/r/:token" element={<PublicReceiptPage />} />
           <Route
             path="/"
             element={

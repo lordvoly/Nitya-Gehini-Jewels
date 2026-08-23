@@ -706,6 +706,7 @@ a {
 .btn-primary,
 .btn-secondary,
 .btn-danger {
+  display: inline-block;
   min-height: var(--tap);
   padding: 12px 20px;
   font-size: 15px;
@@ -714,6 +715,7 @@ a {
   border-radius: var(--radius-pill);
   cursor: pointer;
   border: 2px solid transparent;
+  text-decoration: none;
   transition: background-color 100ms ease;
 }
 

@@ -19,6 +19,7 @@ import { dashboardRouter } from "./routes/dashboard.js";
 import { reportsRouter } from "./routes/reports.js";
 import { shopSettingsRouter } from "./routes/shopSettings.js";
 import { meRouter } from "./routes/me.js";
+import { publicReceiptRouter } from "./routes/publicReceipt.js";
 import { requireAuth } from "./middleware/auth.js";
 
 const app = express();
@@ -52,6 +53,12 @@ app.use("/api/chat", requireAuth, chatRouter);
 app.use("/api/dashboard", requireAuth, dashboardRouter);
 app.use("/api/reports", requireAuth, reportsRouter);
 app.use("/api/shop-settings", requireAuth, shopSettingsRouter);
+
+// Deliberately NOT behind requireAuth — this is the one route a customer
+// reaches from a WhatsApp link with no account at all. See
+// routes/publicReceipt.ts for the narrow, explicitly whitelisted response
+// shape and its own per-route rate limiter.
+app.use("/api/public", publicReceiptRouter);
 
 // Global error handler — must be registered last (Express identifies
 // error-handling middleware by its 4-argument signature) and after every

@@ -5,6 +5,7 @@ import { fetchBooking, type Booking } from "../lib/bookings";
 import { fetchShopSettings, type ShopSettings } from "../lib/shopSettings";
 import { formatDateDisplay } from "../lib/dates";
 import { bookingItemStatusPill } from "../lib/statusPill";
+import { buildWhatsAppLink } from "../lib/whatsapp";
 import "../styles/shared.css";
 
 // Printable receipt — deliberately plain, no GST section (per explicit
@@ -39,13 +40,30 @@ export default function ReceiptPage() {
   if (error) return <div className="page wizard-error">{error}</div>;
   if (!booking || !shop) return null;
 
+  const publicUrl = `${window.location.origin}/r/${booking.share_token}`;
+  const message = `Hi ${booking.customers?.name ?? ""}, here's your invoice from ${shop.name}: ${publicUrl}`;
+  const whatsapp = buildWhatsAppLink(booking.customers?.phone, message);
+
   return (
     <div className="page receipt-page">
       <div className="no-print wizard-actions" style={{ marginBottom: 20 }}>
         <button className="btn-primary" onClick={() => window.print()}>
           Print / Save as PDF
         </button>
+        {/* A real <a> with target="_blank", not window.location — so this
+            behaves as a genuine user-initiated navigation on mobile
+            browsers rather than something that can get blocked or racy. */}
+        {"url" in whatsapp ? (
+          <a href={whatsapp.url} target="_blank" rel="noopener noreferrer" className="btn-secondary">
+            Send via WhatsApp
+          </a>
+        ) : (
+          <button className="btn-secondary" disabled title={whatsapp.error}>
+            Send via WhatsApp
+          </button>
+        )}
       </div>
+      {!("url" in whatsapp) && <p className="wizard-hint no-print">{whatsapp.error} — can't send via WhatsApp.</p>}
 
       <div className="receipt-header">
         <div className="receipt-shop-name">{shop.name}</div>
