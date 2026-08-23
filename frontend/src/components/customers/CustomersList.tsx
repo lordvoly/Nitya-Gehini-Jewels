@@ -8,6 +8,8 @@ import {
   type CustomerCategoryFilter,
 } from "../../lib/customers";
 import { FilterDropdown } from "../common/FilterDropdown";
+import { TableRowsSkeleton } from "../common/Skeleton";
+import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
 
 export function CustomersList({
   onEdit,
@@ -59,6 +61,13 @@ export function CustomersList({
     }
   }
 
+  // Only a genuinely empty first load (nothing ever fetched yet) gets the
+  // heavier skeleton treatment — a subsequent search/filter change over
+  // data already on screen keeps the existing lightweight "Searching…"
+  // text instead, since that's a fast, already-warm-backend case.
+  const showSkeleton = loading && customers.length === 0;
+  const showSlowHint = useSlowLoadHint(showSkeleton);
+
   return (
     <div>
       <input
@@ -85,12 +94,24 @@ export function CustomersList({
               ? `${CUSTOMER_CATEGORY_FILTER_LABELS[categoryFilter]} (${customers.length})`
               : `All Customers (${customers.length})`}
         </h2>
-        {loading && <span className="wizard-hint">Searching…</span>}
+        {loading && !showSkeleton && <span className="wizard-hint">Searching…</span>}
       </div>
 
       {actionError && <p className="wizard-error">{actionError}</p>}
 
-      {customers.length === 0 && !loading && (
+      {showSkeleton && (
+        <>
+          <TableRowsSkeleton />
+          {showSlowHint && (
+            <p className="wizard-hint slow-load-hint">
+              Still loading. The server may be waking up after a period of inactivity, which can take up to a
+              minute.
+            </p>
+          )}
+        </>
+      )}
+
+      {!showSkeleton && customers.length === 0 && !loading && (
         <div className="empty-state">
           {term ? (
             <>

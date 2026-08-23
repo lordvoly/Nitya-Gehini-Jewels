@@ -148,6 +148,35 @@ export function FormSkeleton() {
   );
 }
 
+// ItemsList/CustomersList's shared .data-table row shape — reused by both
+// rather than two near-identical components. Meant for a genuinely empty
+// FIRST load only (loading && rows.length === 0) — each list keeps its own
+// lighter inline "Searching…" text for a subsequent search/filter refresh
+// over data it's already shown once, since that's a fast, warm-backend
+// case that doesn't need the heavier treatment.
+export function TableRowsSkeleton({ rows = 5 }: { rows?: number }) {
+  return (
+    <div className="skeleton-stack">
+      {Array.from({ length: rows }).map((_, i) => (
+        <Skeleton key={i} height={54} radius="var(--radius-lg)" />
+      ))}
+    </div>
+  );
+}
+
+// BookingsList's .booking-card shape — taller than a table row since each
+// card packs in title/customer/status/financials/item lines. Same
+// empty-first-load-only scoping as TableRowsSkeleton above.
+export function BookingCardsSkeleton({ cards = 3 }: { cards?: number }) {
+  return (
+    <div className="skeleton-stack">
+      {Array.from({ length: cards }).map((_, i) => (
+        <Skeleton key={i} height={180} radius="var(--radius-lg)" />
+      ))}
+    </div>
+  );
+}
+
 // Reports/Expenses/Charges' shared shape: heading, a filter row, then a
 // handful of list/table-style rows — close enough across all three that
 // one skeleton serves all of them rather than three near-identical ones.

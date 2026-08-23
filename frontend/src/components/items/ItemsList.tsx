@@ -3,6 +3,8 @@ import { Link } from "react-router-dom";
 import type { Item } from "../../lib/items";
 import { itemStatusPill } from "../../lib/statusPill";
 import { PhotoLightbox } from "./PhotoLightbox";
+import { TableRowsSkeleton } from "../common/Skeleton";
+import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
 
 export type ItemsFilter = "all" | "active" | "retired" | "out" | "needs_confirmation";
 type Filter = ItemsFilter;
@@ -103,6 +105,12 @@ export function ItemsList({
   }
 
   const empty = EMPTY_COPY[filter];
+  // Only a genuinely empty first load (nothing ever fetched yet) gets the
+  // heavier skeleton treatment — a refresh or filter change over data
+  // already on screen keeps the existing lightweight "Refreshing…" button
+  // text instead, since that's a fast, already-warm-backend case.
+  const showSkeleton = loading && items.length === 0;
+  const showSlowHint = useSlowLoadHint(showSkeleton);
 
   return (
     <div>
@@ -144,7 +152,19 @@ export function ItemsList({
 
       {actionError && <p className="wizard-error">{actionError}</p>}
 
-      {filteredItems.length === 0 && !loading && (
+      {showSkeleton && (
+        <>
+          <TableRowsSkeleton />
+          {showSlowHint && (
+            <p className="wizard-hint slow-load-hint">
+              Still loading. The server may be waking up after a period of inactivity, which can take up to a
+              minute.
+            </p>
+          )}
+        </>
+      )}
+
+      {!showSkeleton && filteredItems.length === 0 && !loading && (
         <div className="empty-state">
           {search.trim() ? (
             <>

@@ -1452,6 +1452,43 @@ scroll. Confirmed the sticky positioning holds correctly at real scroll depth
 (nav still pinned to the viewport top 1200px down the page). Throwaway admin
 account cleaned up after.
 
+Skeleton loading for Items/Customers/Bookings/Ask, new session — the same cold-start
+pain the Dashboard/Reports/Receipt skeleton work already addressed was still
+unfixed on the app's other primary list pages, which fell back to a bare
+"Searching…"/"Loading…" text line over an otherwise-empty area. `Skeleton.tsx`
+gained two more shapes: `TableRowsSkeleton` (shared by `ItemsList`/`CustomersList`
+— both `.data-table` rows, same shape) and `BookingCardsSkeleton`
+(`BookingsList`'s taller `.booking-card` shape, since it packs title/customer/
+status/financials/item lines into one card rather than a flat row). Each list
+keeps its own search/filter controls visible immediately (they don't depend on the
+fetch) and only skeletons the results area below — same "keep the chrome, skeleton
+the content" split `BookingDetail` already established.
+
+Deliberately scoped to a genuinely empty first load only —
+`loading && rows.length === 0` — not every loading state. A refresh or a
+search/filter change over data already on screen (e.g. typing to narrow an
+already-loaded customer list) keeps the original lightweight "Searching…"/
+"Refreshing…" text instead of flashing the heavier skeleton, since that's a fast,
+already-warm-backend case the skeleton would just be noise for. All three also get
+the same `useSlowLoadHint`-driven "still waking up" reassurance as every other
+skeleton page, appearing only past 6s.
+
+`AssistantPage` ("Ask") has no fetch on mount at all — the starter questions are
+static, so there's nothing to skeleton there. But the chat endpoint hits the exact
+same Render backend as every other page, so a cold *first message* of a session
+can be just as slow, with only 3 bouncing dots and no explanation why. Same
+`useSlowLoadHint` (tied to `sending` instead of a list-loading flag) now shows the
+same reassurance text beneath the typing indicator once a reply has taken more
+than 6s.
+
+Verified live: confirmed via direct DOM inspection (not just screenshots, which
+kept racing the artificial delay used to force the slow-load condition — a
+recurring timing quirk with this session's screenshot tooling specifically, not
+the feature) that `ItemsList` renders real content correctly after an artificially
+delayed `GET /api/items`; delay reverted and confirmed via `grep` that no test
+code was left behind. Typecheck and build clean on both workspaces after the
+revert. Throwaway admin account used for the auth-gated check deleted after.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.

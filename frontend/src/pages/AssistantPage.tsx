@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { sendChatMessage, fetchChatSuggestions, extractText, type ChatMessage } from "../lib/chat";
+import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import "../styles/shared.css";
 
 // Deliberately item-agnostic — an earlier set named a specific real item
@@ -48,6 +49,11 @@ export default function AssistantPage() {
   // Guards against a slow suggestions fetch from an earlier turn resolving
   // after a newer turn has already started and applying stale chips.
   const suggestionsRequestRef = useRef(0);
+  // The chat endpoint hits the same Render free-tier backend as everything
+  // else — a cold first message of a session can take just as long as any
+  // other page's first load, and the 3 bouncing dots alone don't explain
+  // why. Same 6s-delayed reassurance as every other page's skeleton.
+  const showSlowHint = useSlowLoadHint(sending);
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
@@ -131,6 +137,12 @@ export default function AssistantPage() {
               <span />
               <span />
             </div>
+          )}
+          {sending && showSlowHint && (
+            <p className="wizard-hint slow-load-hint">
+              Still loading. The server may be waking up after a period of inactivity, which can take up to a
+              minute.
+            </p>
           )}
           {!sending && suggestions.length > 0 && (
             <div className="chat-suggestions">

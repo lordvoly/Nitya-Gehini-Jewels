@@ -12,6 +12,8 @@ import {
 import { bookingItemStatusPill, bookingComputedStatusPill } from "../../lib/statusPill";
 import { formatDateDisplay } from "../../lib/dates";
 import { FilterDropdown } from "../common/FilterDropdown";
+import { BookingCardsSkeleton } from "../common/Skeleton";
+import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
 
 const DATE_BASIS_LABELS: Record<BookingDateBasis, string> = {
   pickup: "Pickup Date",
@@ -156,6 +158,13 @@ export function BookingsList({
     };
   }, [term, filterItemId, filterCustomerId, category, typeFilter, dateBasis, timeRange]);
 
+  // Only a genuinely empty first load (nothing ever fetched yet) gets the
+  // heavier skeleton treatment — a subsequent search/filter change over
+  // data already on screen keeps the existing lightweight "Searching…"/
+  // "Loading…" text instead, since that's a fast, already-warm-backend case.
+  const showSkeleton = loading && bookings.length === 0;
+  const showSlowHint = useSlowLoadHint(showSkeleton);
+
   return (
     <div>
       {filterItemId ? (
@@ -221,10 +230,24 @@ export function BookingsList({
                   ? `${CATEGORY_LABELS[category]} (${bookings.length})`
                   : `All Bookings (${bookings.length})`}
         </h2>
-        {loading && <span className="wizard-hint">{filterItemId || filterCustomerId ? "Loading…" : "Searching…"}</span>}
+        {loading && !showSkeleton && (
+          <span className="wizard-hint">{filterItemId || filterCustomerId ? "Loading…" : "Searching…"}</span>
+        )}
       </div>
 
-      {bookings.length === 0 && !loading && (
+      {showSkeleton && (
+        <>
+          <BookingCardsSkeleton />
+          {showSlowHint && (
+            <p className="wizard-hint slow-load-hint">
+              Still loading. The server may be waking up after a period of inactivity, which can take up to a
+              minute.
+            </p>
+          )}
+        </>
+      )}
+
+      {!showSkeleton && bookings.length === 0 && !loading && (
         <div className="empty-state">
           {filterItemId ? (
             <>
