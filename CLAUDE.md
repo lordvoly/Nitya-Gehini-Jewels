@@ -1070,6 +1070,100 @@ favicon through it even though the underlying files and links are proven correct
 Same category of gap as the QR-code phone-scan verification earlier — needs the
 user's own eyes/device once live.
 
+Design-pass follow-up, "Phase 2" of the redesign (three stages, new session,
+2026-08-13 onward) — the original design pass above shipped tokens/typography/nav;
+this round layered in the remaining foundational polish and motion, each stage
+proposed and confirmed before building, per explicit instruction.
+
+**Stage 1 — foundational tokens** (`shared.css`): `--shadow-card` replacing flat
+borders on `.wizard-card`/`.stat-card`/`.booking-card`/mobile `.data-table` rows;
+`--radius-lg` bumped 14→16px; pill-shaped `border-radius: var(--radius-pill)` on all
+three button classes; remaining raw emoji swapped for `lucide-react` icons
+(`ImageOff`, `Camera`, `Image`); a new shared `Skeleton.tsx` (`Skeleton`,
+`DashboardSkeleton`, `BookingDetailSkeleton`) replacing "Loading…" text, deliberately
+static in this stage (shimmer explicitly deferred to the motion stage).
+
+**Real overflow bug found and fixed between stages** (live phone screenshot from the
+user): an item name rendered one character per line. Root cause was **not** the
+original systemic min-width:0 fix's scope gap — `.line-item-card-header` was simply
+missing `flex-wrap: wrap`, so a long nowrap status pill (`"Pickup Overdue — Not
+Confirmed"`, 237px) squeezed the title to near-zero instead of wrapping to its own
+line. Confirmed via `git diff` this predated Stage 1 (not a regression it introduced).
+A second, bundled bug — `ItemsList`'s "Currently Out" filter button wrapping
+mid-word — was confirmed via DOM inspection to be a **different, unrelated** cause:
+the global `overflow-wrap: break-word` rule (meant for free-text) also applying to
+short fixed-vocabulary button labels. Fixed independently: `flex-wrap: wrap` added to
+`.line-item-card-header`; `overflow-wrap: normal; word-break: normal;` scoped onto
+`.toggle-btn`.
+
+**Stage 2 — Fraunces typography extension**, three confirmed locations only:
+receipt/invoice totals (`.receipt-totals-value`), the item/customer name line under a
+success checkmark (new `.success-detail` class, used by every `.success-check`
+screen), and Item Detail's item name split from its code into its own larger line
+(`.item-detail-code` + `h2.item-detail-name`, the latter over-specific on purpose —
+`0,2,1` — to unambiguously beat `.wizard-step h2`'s `0,1,1`, same specificity-discipline
+lesson as the overflow bug above). Stress-tested with a 111-character throwaway name —
+zero overflow at any level.
+
+**Stage 3 — motion (final stage)**, four moments from the original Phase 1 proposal,
+each an entrance-only CSS `@keyframes` on an element that mounts *after* its
+underlying state change already completed (motion decorates a finished action, never
+gates one): `.success-check` (`check-in`, 260ms — shared class, so this covers Confirm
+Pickup, Process Return, BookingForm, and AddItemWizard's success screens for free);
+`.skeleton` (`skeleton-sweep`, 1.4s infinite gradient sweep, layered onto Stage 1's
+static block); a new `.payment-edit-entry` class on `BookingDetail`'s audit-trail rows
+(`edit-in`, 220ms, plays only on the newly-mounted row); `.modal-overlay`/
+`.modal-content`/`.filter-dropdown-menu` (`overlay-in`/`modal-in`/`menu-open`,
+140–180ms scale+opacity open, no exit animation so rapid open/close can't leave a
+stuck element). `prefers-reduced-motion` sets `animation: none` on all of the above
+(skeleton additionally reverts its gradient to the flat `--line` color — the original
+pre-shimmer state, not a new fallback).
+
+All three stages verified live against real Supabase data with throwaway `ZZTEST`
+fixtures, cleaned up after; real data confirmed untouched throughout. Stage 3 in
+particular: `prefers-reduced-motion` was toggled via a **real Windows OS-level
+setting** (`SystemParametersInfo`/`SPI_SETCLIENTAREAANIMATION`), not DevTools
+emulation, confirmed picked up live by `matchMedia`; rapid triple-click on Mark
+Returned confirmed (via direct Supabase query) exactly one return was processed, no
+double-submission; rapid open/close on the filter dropdown and lightbox left zero
+stuck DOM nodes. All 8 previously-flagged interactive components (FOC toggle, filter
+popovers, success screens, lightbox/Modal, photo picker's capture split, Edit
+Payment's audit trail, mobile nav, Assistant page) re-tested live at every stage.
+
+**The redesign (Phases 1 and 2, all stages) is now complete.** Not yet done: verified
+only via browser automation at an emulated 390px viewport, not an actual phone — real
+touch-target sizing and iOS/Android rendering still need a check on a real device
+(same recurring caveat as every earlier mobile-viewport verification this project has
+done). Three items explicitly deferred to pick up separately, not part of the
+redesign: role-based access (still open, see below), "Add New Item" from within
+`BookingForm`, and remaining tablet-breakpoint work.
+
+Undo Pickup, new session (2026-08-23) — real operator mistake, reported live: the
+same physical item can legitimately be booked twice within one transaction (one
+already-completed cycle, one still-upcoming), and an operator tapping Confirm Pickup
+on the wrong line flips the *upcoming* booking to `status: 'out'` with no way back
+except a direct DB edit. New `POST /api/bookings/:bookingId/items/:bookingItemId/undo-pickup`
+(`backend/src/routes/bookings.ts`, placed directly after `confirm-pickup`) is an exact
+mirror in reverse: only valid from `status === 'out'` (`409` otherwise, with a message
+naming the actual current status rather than a silent no-op), reverts to `'booked'`
+and clears `actual_pickup_date`. Deliberately does **not** touch `payments` — reversing
+a pickup status is a separate concern from reversing money collected at that moment
+(none was, in the case this was built for), matching the scoping return processing
+already keeps. Frontend: `BookingDetail.tsx` gets a matching "Undo Pickup" button
+(shown whenever a line is `'out'`) using the same inline confirm-before-acting pattern
+(`btn-danger` "Yes, Undo Pickup" / "Cancel") as Delete elsewhere in the app.
+
+Used live to fix the real case that prompted it — booking `C/059` (Kanu Priya), item
+`NGJ-0026`, booked twice in one transaction (one cycle already `returned`, the
+`05/09→07/09` cycle accidentally flipped to `out` today). Verified via direct
+Supabase query before and after: the accidentally-confirmed line reverted to
+`status: 'booked'`, `actual_pickup_date: null`, its completed sibling booking on the
+same item untouched, the single real `payments` row (₹1000 advance from booking
+creation) untouched throughout, and a second undo attempt on the now-`'booked'` line
+correctly rejected with `409`. Done through a throwaway admin account against the
+real booking (not a raw DB script) so the fix and the feature verification were the
+same action; throwaway account deleted after.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.
