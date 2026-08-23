@@ -32,11 +32,11 @@ publicReceiptRouter.get("/receipt/:token", publicReceiptLimiter, async (req, res
   const { data: booking, error } = await supabase
     .from("bookings")
     .select(
-      `id, booking_code, created_at,
+      `id, booking_code, booking_date,
        customers(name),
        booking_items(type, pickup_date, return_date, status, price_charged, is_foc,
                       deposit_amount, deposit_collected, deposit_refunded, deposit_refund_date,
-                      custom_addons, items(item_code, name))`,
+                      custom_addons, quantity_booked, items(item_code, name, item_type, components))`,
     )
     .eq("share_token", req.params.token)
     .maybeSingle();
@@ -53,7 +53,10 @@ publicReceiptRouter.get("/receipt/:token", publicReceiptLimiter, async (req, res
   res.json({
     shop: { name: shop?.name ?? "", address: shop?.address ?? null, phone: shop?.phone ?? null },
     booking_code: booking.booking_code,
-    created_at: booking.created_at,
+    // The operator-editable "date the booking was actually made" — not
+    // created_at, an untouched system timestamp that was never what this
+    // field was meant to show (see ReceiptPage.tsx's matching fix).
+    booking_date: booking.booking_date,
     customer_name: customer?.name ?? null,
     items: (booking.booking_items ?? []).map((bi) => {
       const item = Array.isArray(bi.items) ? bi.items[0] : bi.items;
@@ -66,6 +69,10 @@ publicReceiptRouter.get("/receipt/:token", publicReceiptLimiter, async (req, res
         status: bi.status,
         price_charged: bi.is_foc ? null : bi.price_charged,
         is_foc: bi.is_foc,
+        quantity_booked: bi.quantity_booked,
+        // The set's own reusable template — items.components — same field
+        // BookingForm itself shows read-only at booking time.
+        components: item?.item_type === "set" ? (item?.components ?? []) : [],
         custom_addons: bi.custom_addons ?? [],
         deposit: bi.deposit_collected
           ? { amount: bi.deposit_amount, refunded: bi.deposit_refunded, refund_date: bi.deposit_refund_date }

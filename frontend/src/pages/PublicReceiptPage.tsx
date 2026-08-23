@@ -57,7 +57,7 @@ export default function PublicReceiptPage() {
         <div>
           <div className="receipt-meta-label">Booking No.</div>
           <strong>{receipt.booking_code}</strong>
-          <div className="wizard-hint">{formatDateDisplay(receipt.created_at.slice(0, 10))}</div>
+          <div className="wizard-hint">{formatDateDisplay(receipt.booking_date)}</div>
         </div>
         <div className="receipt-meta-right">
           <div className="receipt-meta-label">Customer</div>
@@ -82,8 +82,12 @@ export default function PublicReceiptPage() {
                 <td data-label="Item">
                   <span className={cancelled ? "receipt-item-name-cancelled" : undefined}>
                     {bi.item_code} — {bi.name}
+                    {bi.quantity_booked > 1 && ` × ${bi.quantity_booked}`}
                   </span>
                   {cancelled && <span className="pill pill-neutral receipt-item-pill">Cancelled</span>}
+                  {bi.components.length > 0 && (
+                    <div className="receipt-item-addons">Components: {bi.components.join(", ")}</div>
+                  )}
                   {bi.custom_addons.length > 0 && (
                     <div className="receipt-item-addons">Additional: {bi.custom_addons.join(", ")}</div>
                   )}

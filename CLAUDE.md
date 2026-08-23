@@ -1279,6 +1279,43 @@ at zoom (checked directly, not assumed from the processing script alone); confir
 the `@media print` rule doesn't hide or otherwise target the new logo. Throwaway
 admin account used for the staff-view check deleted after.
 
+Receipt toolbar alignment fix, same day — a live look at the invoice surfaced a real
+layout bug: the Print/WhatsApp buttons sat inside `.wizard-actions` (column layout)
+with `.btn-primary`'s own `margin-left: auto` (meant for Cancel/Submit form pairs
+elsewhere in the app) pushing a lone button hard right, while everything below it —
+logo, shop name, booking meta — is `text-align: center`. Two different alignment axes
+on the same narrow (480px) receipt column, most visible on mobile. New
+`.receipt-actions` class (flex row, wrap, `justify-content: center`, margin reset on
+its buttons) replaces `.wizard-actions` on both receipt views — toolbar and content
+now share one visual axis on any width. Purely cosmetic; both buttons still carry
+`.no-print`.
+
+Invoice fields pass 2, same session — "pull everything from the booking form" request
+surfaced two more gaps. (1) `items.components` (the set's own reusable template —
+Necklace/Earrings/Tika/…, shown read-only on `BookingForm` itself) was never on the
+invoice at all, only `custom_addons` (this booking's own one-off extras) was — added
+as a "Components: ..." line, same treatment, clearly distinct from "Additional: ...".
+(2) `quantity_booked` (shown on `BookingForm` for `quantity`-tracked items) wasn't on
+the invoice either — added as "× N" after the item name, only when > 1. (3) A real,
+previously-unnoticed bug: the invoice's date was `booking.created_at` (an untouched
+system timestamp) instead of `booking.booking_date` (the operator-editable "date the
+booking was actually made" — the actual field BookingForm calls "Booking Date" and
+the one an invoice date should reflect). Confirmed live on the real `C/059` booking
+that these aren't the same value — `booking_date` is `2026-08-17`, `created_at` is
+`2026-08-22`, a real 5-day gap that was showing the wrong date on every invoice sent
+out. Switched on both receipt views; the public endpoint's response field was
+renamed `booking_date` accordingly (was `created_at`). GST fields, deliberately
+*not* added despite also being on `BookingForm` — the "plain invoice, no GST section"
+decision above still stands; this wasn't an oversight, called out explicitly rather
+than silently left out.
+
+Verified live: public endpoint's raw JSON re-checked for `components`/`quantity_booked`/
+`booking_date`; the real `C/059` booking (a `set` item with real `components:
+["Earrings"]`) confirmed rendering correctly on both views; a throwaway
+`quantity`-tracked booking (`quantity_booked: 4`) confirmed the "× 4" display and
+confirmed a `single`-type item correctly shows no Components line. Throwaway data
+cleaned up after.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.

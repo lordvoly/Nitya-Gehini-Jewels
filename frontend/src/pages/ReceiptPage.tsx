@@ -77,7 +77,12 @@ export default function ReceiptPage() {
         <div>
           <div className="receipt-meta-label">Booking No.</div>
           <strong>{booking.booking_code}</strong>
-          <div className="wizard-hint">{formatDateDisplay(booking.created_at.slice(0, 10))}</div>
+          {/* booking_date, not created_at — the former is the operator-
+              editable "date the booking was actually made" (can be
+              backdated/corrected), matching what BookingForm itself calls
+              "Booking Date"; created_at is an untouched system timestamp,
+              not what an invoice date should reflect. */}
+          <div className="wizard-hint">{formatDateDisplay(booking.booking_date)}</div>
         </div>
         <div className="receipt-meta-right">
           <div className="receipt-meta-label">Customer</div>
@@ -104,8 +109,17 @@ export default function ReceiptPage() {
                 <td data-label="Item">
                   <span className={cancelled ? "receipt-item-name-cancelled" : undefined}>
                     {bi.items?.item_code} — {bi.items?.name}
+                    {bi.quantity_booked > 1 && ` × ${bi.quantity_booked}`}
                   </span>
                   {cancelled && <span className={`pill ${pill.className} receipt-item-pill`}>{pill.label}</span>}
+                  {/* The set's own reusable template (Necklace/Earrings/Tika/…) —
+                      items.components, distinct from custom_addons below (this
+                      booking's own one-off extras). Same "what's included"
+                      question BookingForm itself answers at booking time, per
+                      its own hint text there. */}
+                  {bi.items?.item_type === "set" && bi.items.components && bi.items.components.length > 0 && (
+                    <div className="receipt-item-addons">Components: {bi.items.components.join(", ")}</div>
+                  )}
                   {/* Free-text extras added at booking time (nath, sheeshpatti,
                       etc.) — booking_items.custom_addons, distinct from
                       items.components (the item's own reusable template).

@@ -14,6 +14,8 @@ export interface PublicReceiptItem {
   status: "booked" | "out" | "returned" | "cancelled";
   price_charged: number | null;
   is_foc: boolean;
+  quantity_booked: number;
+  components: string[];
   custom_addons: string[];
   deposit: { amount: number; refunded: boolean; refund_date: string | null } | null;
 }
@@ -21,7 +23,7 @@ export interface PublicReceiptItem {
 export interface PublicReceipt {
   shop: { name: string; address: string | null; phone: string | null };
   booking_code: string;
-  created_at: string;
+  booking_date: string;
   customer_name: string | null;
   items: PublicReceiptItem[];
   total_paid: number;
