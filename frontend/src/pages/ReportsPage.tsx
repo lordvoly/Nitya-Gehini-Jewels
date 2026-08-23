@@ -77,9 +77,29 @@ export default function ReportsPage() {
 
   const { summary, most_booked_items, repeat_customers, idle_inventory, pnl, outstanding_dues } = data;
 
+  const sections = [
+    { id: "overview-section", label: "Overview" },
+    { id: "pnl-section", label: "P&L" },
+    { id: "most-booked-section", label: "Most-Booked" },
+    { id: "repeat-customers-section", label: "Repeat Customers" },
+    { id: "idle-inventory-section", label: "Idle Inventory" },
+    { id: "outstanding-dues-section", label: "Outstanding Dues" },
+  ];
+  function jumpTo(id: string) {
+    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
+  }
+
   return (
     <div className="page">
       <h2>Reports</h2>
+
+      <nav className="report-nav" aria-label="Jump to report section">
+        {sections.map((s) => (
+          <button key={s.id} type="button" className="report-nav-pill" onClick={() => jumpTo(s.id)}>
+            {s.label}
+          </button>
+        ))}
+      </nav>
 
       <div className="button-grid date-range-row">
         <label className="field-label">
@@ -95,7 +115,7 @@ export default function ReportsPage() {
       {error && <p className="wizard-error">{error}</p>}
       {loading && <p className="wizard-hint">Refreshing…</p>}
 
-      <div className="dashboard-section">
+      <div id="overview-section" className="dashboard-section">
         <h2>Bookings This Period</h2>
         <div className="stat-grid">
           <div className="stat-card">
@@ -119,7 +139,7 @@ export default function ReportsPage() {
         </p>
       </div>
 
-      <div className="dashboard-section">
+      <div id="pnl-section" className="dashboard-section">
         <h2>Profit &amp; Loss</h2>
         <div className="stat-grid">
           <div className="stat-card">
@@ -170,7 +190,7 @@ export default function ReportsPage() {
         everything.
       </p>
 
-      <div className="dashboard-section">
+      <div id="most-booked-section" className="dashboard-section">
         <h2>Most-Booked Items</h2>
         {most_booked_items.length === 0 ? (
           <div className="empty-state">
@@ -191,7 +211,9 @@ export default function ReportsPage() {
                 {most_booked_items.map((i) => (
                   <tr key={i.item_id}>
                     <td data-label="Code">{i.item_code}</td>
-                    <td data-label="Name">{i.name}</td>
+                    <td data-label="Name">
+                      <Link to={`/items/${i.item_id}`}>{i.name}</Link>
+                    </td>
                     <td data-label="Bookings">{i.booking_count}</td>
                   </tr>
                 ))}
@@ -201,7 +223,7 @@ export default function ReportsPage() {
         )}
       </div>
 
-      <div className="dashboard-section">
+      <div id="repeat-customers-section" className="dashboard-section">
         <h2>Repeat Customers</h2>
         {repeat_customers.length === 0 ? (
           <div className="empty-state">
@@ -222,7 +244,9 @@ export default function ReportsPage() {
               <tbody>
                 {repeat_customers.map((c) => (
                   <tr key={c.customer_id}>
-                    <td data-label="Name">{c.name}</td>
+                    <td data-label="Name">
+                      <Link to={`/customers?customer=${c.customer_id}`}>{c.name}</Link>
+                    </td>
                     <td data-label="Phone">{c.phone}</td>
                     <td data-label="Bookings">{c.booking_count}</td>
                     <td data-label="Total Spend">₹{c.total_spend}</td>
@@ -234,7 +258,7 @@ export default function ReportsPage() {
         )}
       </div>
 
-      <div className="dashboard-section">
+      <div id="idle-inventory-section" className="dashboard-section">
         <h2>Idle Inventory</h2>
         <p className="wizard-hint">Active items with no booking in the last 90 days.</p>
         {idle_inventory.length === 0 ? (
@@ -256,7 +280,9 @@ export default function ReportsPage() {
                 {idle_inventory.map((i) => (
                   <tr key={i.id}>
                     <td data-label="Code">{i.item_code}</td>
-                    <td data-label="Name">{i.name}</td>
+                    <td data-label="Name">
+                      <Link to={`/items/${i.id}`}>{i.name}</Link>
+                    </td>
                     <td data-label="Category">{i.category}</td>
                   </tr>
                 ))}
@@ -292,7 +318,13 @@ export default function ReportsPage() {
                     <td data-label="Booking">
                       <Link to={`/bookings?booking=${d.booking_id}`}>{d.booking_code}</Link>
                     </td>
-                    <td data-label="Customer">{d.customer_name}</td>
+                    <td data-label="Customer">
+                      {d.customer_id ? (
+                        <Link to={`/customers?customer=${d.customer_id}`}>{d.customer_name}</Link>
+                      ) : (
+                        d.customer_name
+                      )}
+                    </td>
                     <td data-label="Balance Due">₹{d.balance_due}</td>
                   </tr>
                 ))}

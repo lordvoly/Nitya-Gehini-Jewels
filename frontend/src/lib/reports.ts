@@ -49,6 +49,7 @@ export interface Pnl {
 export interface OutstandingDue {
   booking_id: string;
   booking_code: string;
+  customer_id: string | null;
   customer_name: string;
   balance_due: number;
 }

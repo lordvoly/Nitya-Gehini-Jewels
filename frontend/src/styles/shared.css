@@ -1345,6 +1345,47 @@ a.stat-card:active {
   margin: 0 0 10px;
 }
 
+/* ── Reports jump-nav ─────────────────────────────────────────────────── */
+/* Sticks to the viewport top once scrolled past (body's own background
+   color, so content sliding underneath never shows through the seam) —
+   lets a section be reached from wherever you already are on the page,
+   not just from the top, which is the actual "too much scrolling" pain
+   point this exists to fix. No scroll-spy/active-section tracking on
+   purpose — each pill just jumps, same smooth-scroll-to-id mechanism the
+   Dashboard's Outstanding Dues deep link already used before this existed. */
+.report-nav {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 10px 0;
+  margin: 0 0 16px;
+  background: var(--ivory);
+  border-bottom: 1.5px solid var(--line);
+}
+
+.report-nav-pill {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-height: var(--tap);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.report-nav-pill:hover {
+  border-color: var(--wine);
+  color: var(--wine);
+}
+
 .dashboard-link {
   display: block;
   text-decoration: none;

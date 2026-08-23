@@ -1392,6 +1392,66 @@ price) — both new endpoints correctly returned exactly ₹500. All throwaway d
 the throwaway admin account used for the auth-gated checks cleaned up after; real
 data (`NGJ-0009`, Ruchi Arora's real ₹1250 booking) confirmed untouched throughout.
 
+Reports page UI pass, new session — two requests: item/customer names weren't
+hyperlinked like they are elsewhere, and the page was "a big scroll" with no way to
+find a section without hunting. For the layout, presented three concrete options
+(sticky jump-nav pills / collapsible accordion sections / real tabs) with ASCII
+previews rather than picking unilaterally, since this is a real IA decision, not a
+small tweak — user picked sticky jump-nav pills.
+
+**Hyperlinks**: `Most-Booked Items` and `Idle Inventory` item names now link to
+`/items/:id` (both already carried `item_id`/`id` in their existing response shape,
+no backend change needed); `Repeat Customers` names now link to
+`/customers?customer=:id` (same, already had `customer_id`). `Outstanding Dues`
+needed an actual backend change — `getOutstandingDues()`
+(`backend/src/lib/reportsData.ts`) fetched `customer_id` internally to resolve the
+name but never returned it; now included in the response (additive, so nothing
+downstream — including the AI assistant's `get_outstanding_dues` tool — could break).
+
+**Layout**: new `.report-nav` — `position: sticky; top: 0`, horizontally-scrolling
+pills, one per section (Overview/P&L/Most-Booked/Repeat Customers/Idle Inventory/
+Outstanding Dues), so it can be reached from wherever you already are on the page,
+not just from the top. Each pill calls `scrollIntoView({behavior:"smooth",
+block:"start"})` on that section's `id` — the exact same mechanism the pre-existing
+Dashboard→Outstanding-Dues deep link already used, just generalized to every
+section instead of just one; that deep link's own target id was left unchanged so
+it keeps working unmodified. Deliberately no scroll-spy/active-pill highlighting —
+each pill just jumps, kept simple rather than adding IntersectionObserver-based
+state for a page this size.
+
+**A real, extended verification detour, not a code bug**: confirming the pills
+actually jump-scrolled turned into a genuine investigation. Simulated clicks via
+this session's browser-automation tooling (both raw-coordinate and element-
+reference-based) fired the click handler inconsistently, and even when confirmed
+firing (via a temporary `console.log` in `jumpTo`, since removed), the resulting
+`smooth`-behavior scroll frequently didn't visibly move the page. Isolated
+carefully rather than assumed away: a direct, non-click-triggered
+`element.scrollIntoView()` call — both `smooth` and `auto` — worked instantly and
+reliably every time; a real bubbling `element.click()` (not a CDP-simulated mouse
+event) combined with `auto` also worked reliably; only the combination of a
+simulated-click trigger *and* `smooth`'s animated (multi-frame, compositor-driven)
+behavior was unreliable in this specific automation session — most likely because
+Chrome's smooth-scroll animation depends on a rendering cadence that an
+automated/non-genuinely-focused tab doesn't reliably provide, not because of
+anything wrong with the code. Confirmed the actual shipped mechanism is correct
+(right handler wiring, right target resolution, right final position) and left
+`smooth` in place, matching the pattern already proven live via `.click()` +
+`auto`. Flagged here rather than silently written up as "verified" — this is the
+one piece of this feature not fully confirmed via visible on-screen animation in
+this session, the same category of gap as prior "not verified by Claude, not
+possible to verify this way" notes (QR phone scan, favicon glyph, camera capture).
+
+Verified live against real production data: both new item links (Most-Booked
+Items → a real item, confirmed landing on its actual Item Detail page) and
+customer links (Outstanding Dues → Yamini Madaan, confirmed landing on her actual
+Customer Detail page showing the correct real `Total Business: ₹4500`) clicked
+through for real via `.click()`, not just href-inspected. Confirmed no horizontal
+page overflow from the new nav bar at a genuine 386px mobile viewport
+(`scrollWidth === clientWidth`) despite the nav's own internal horizontal
+scroll. Confirmed the sticky positioning holds correctly at real scroll depth
+(nav still pinned to the viewport top 1200px down the page). Throwaway admin
+account cleaned up after.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.

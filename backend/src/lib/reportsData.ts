@@ -262,6 +262,7 @@ export async function getOutstandingDues() {
       return {
         booking_id: d.booking_id,
         booking_code: booking?.booking_code ?? "—",
+        customer_id: booking?.customer_id ?? null,
         customer_name: customer?.name ?? "—",
         balance_due: Number(d.balance_due),
       };
