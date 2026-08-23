@@ -66,7 +66,7 @@ export default function SettingsPage() {
         <FormSkeleton />
         {showSlowHint && (
           <p className="wizard-hint slow-load-hint">
-            Still loading — the server may be waking up after a period of inactivity. This can take up to a minute.
+            Still loading. The server may be waking up after a period of inactivity, which can take up to a minute.
           </p>
         )}
       </>
