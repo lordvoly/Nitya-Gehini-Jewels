@@ -1534,11 +1534,23 @@ toolUses.length` always holds, regardless of what any single tool call does, so 
 genuinely runaway multi-round tool conversation, separate from the large-single-
 batch failure mode above.
 
-Not fully independently verified this session: local `backend/.env` has no real
-`ANTHROPIC_API_KEY` (same gap noted in earlier AI-assistant sessions — only Render's
-production env var has one), so this shipped and needs testing against the deployed
-site rather than local dev, same as every previous chat-feature change in this
-project.
+Verified live against the deployed site (local `backend/.env` has no real
+`ANTHROPIC_API_KEY` — same gap as every earlier AI-assistant session, only Render's
+production env var has one — so this had to ship first): via a throwaway admin
+account, "Who is the most repeated customer?" now answers directly in one turn —
+"Manisha Bhatia (9899914323) with 2 bookings and a total spend of ₹800" — cross-
+checked exactly against a direct call to `rankRepeatCustomers` itself, byte for
+byte. "How many bookings did we have this month?" correctly answered using
+`get_financial_summary`'s new fields (20 bookings, 31 rentals/0 sales, ₹20,150
+revenue), matching Reports' own already-verified figures for the same period. Most
+importantly, the actual crash class was reproduced and confirmed fixed: asked about
+three item codes at once, one of them (`NGJ-9999`) deliberately nonexistent so
+`get_item_status` genuinely throws for it inside the same parallel tool-call batch
+as the other two — exactly the failure shape from the original bug report. The
+assistant answered correctly for both real items and cleanly reported "NGJ-9999 —
+This item code could not be found in the system" for the bad one, with no crash and
+no `.chat-error` panel, confirming a single failing tool call inside a batch can no
+longer take down the whole conversation. Throwaway admin account deleted after.
 
 ## Tech stack
 
