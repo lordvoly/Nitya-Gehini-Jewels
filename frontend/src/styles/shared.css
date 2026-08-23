@@ -938,6 +938,14 @@ a {
   gap: 10px;
 }
 
+/* Shown only once a load has genuinely been running a few seconds (see
+   useSlowLoadHint) — reassurance during a Render free-tier cold start,
+   not a normal-load element. */
+.slow-load-hint {
+  text-align: center;
+  margin-top: 16px;
+}
+
 /* ── Empty states ─────────────────────────────────────────────────────── */
 
 .empty-state {

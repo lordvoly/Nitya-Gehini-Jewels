@@ -6,6 +6,8 @@ import { fetchShopSettings, type ShopSettings } from "../lib/shopSettings";
 import { formatDateDisplay } from "../lib/dates";
 import { bookingItemStatusPill } from "../lib/statusPill";
 import { buildWhatsAppLink } from "../lib/whatsapp";
+import { useSlowLoadHint } from "../lib/useSlowLoadHint";
+import { ReceiptSkeleton } from "../components/common/Skeleton";
 import ngjLogo from "../assets/images/ngj-logo.png";
 import "../styles/shared.css";
 
@@ -37,7 +39,19 @@ export default function ReceiptPage() {
       .finally(() => setLoading(false));
   }, [bookingId]);
 
-  if (loading) return <div className="page">Loading…</div>;
+  const showSlowHint = useSlowLoadHint(loading);
+
+  if (loading)
+    return (
+      <>
+        <ReceiptSkeleton />
+        {showSlowHint && (
+          <p className="wizard-hint slow-load-hint">
+            Still loading — the server may be waking up after a period of inactivity. This can take up to a minute.
+          </p>
+        )}
+      </>
+    );
   if (error) return <div className="page wizard-error">{error}</div>;
   if (!booking || !shop) return null;
 

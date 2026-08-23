@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth";
 import { fetchShopSettings, updateShopSettings, type ShopSettings } from "../lib/shopSettings";
+import { useSlowLoadHint } from "../lib/useSlowLoadHint";
+import { FormSkeleton } from "../components/common/Skeleton";
 import "../styles/shared.css";
 
 export default function SettingsPage() {
@@ -41,6 +43,8 @@ export default function SettingsPage() {
     }
   }
 
+  const showSlowHint = useSlowLoadHint(loading);
+
   // profile is null both while it's still loading and if the /api/me call
   // ever fails — only gate once we know for sure it resolved to a non-admin,
   // so a slow profile fetch doesn't flash "Admins only" at a real admin.
@@ -56,7 +60,17 @@ export default function SettingsPage() {
     );
   }
 
-  if (loading) return <div className="page">Loading…</div>;
+  if (loading)
+    return (
+      <>
+        <FormSkeleton />
+        {showSlowHint && (
+          <p className="wizard-hint slow-load-hint">
+            Still loading — the server may be waking up after a period of inactivity. This can take up to a minute.
+          </p>
+        )}
+      </>
+    );
 
   const incomplete = settings && (!settings.address || !settings.phone);
 

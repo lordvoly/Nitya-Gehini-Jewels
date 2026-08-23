@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { ImageOff } from "lucide-react";
 import { fetchBooking, updateBooking, undoPickup, type Booking, type BookingItem } from "../../lib/bookings";
 import { BookingDetailSkeleton } from "../common/Skeleton";
+import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
 import {
   fetchPayments,
   recordPayment,
@@ -185,11 +186,17 @@ export function BookingDetail({
   const statusPill = booking
     ? bookingComputedStatusPill(booking.computed_status, booking.resolved_item_count, booking.active_item_count)
     : null;
+  const showSlowHint = useSlowLoadHint(loading);
 
   return (
     <div className="wizard-card">
       <div className="wizard-step">
         {loading && <BookingDetailSkeleton />}
+        {loading && showSlowHint && (
+          <p className="wizard-hint slow-load-hint">
+            Still loading — the server may be waking up after a period of inactivity. This can take up to a minute.
+          </p>
+        )}
         {!loading && <h2>{booking?.booking_code}</h2>}
         {!loading && error && <p className="wizard-error">{error}</p>}
         {!loading && booking && statusPill && (

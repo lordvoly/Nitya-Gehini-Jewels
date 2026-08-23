@@ -3,6 +3,8 @@ import { useParams } from "react-router-dom";
 import QRCode from "qrcode";
 import { fetchPublicReceipt, type PublicReceipt } from "../lib/publicReceipt";
 import { formatDateDisplay } from "../lib/dates";
+import { useSlowLoadHint } from "../lib/useSlowLoadHint";
+import { ReceiptSkeleton } from "../components/common/Skeleton";
 import ngjLogo from "../assets/images/ngj-logo.png";
 import "../styles/shared.css";
 
@@ -34,7 +36,19 @@ export default function PublicReceiptPage() {
       .finally(() => setLoading(false));
   }, [token]);
 
-  if (loading) return <div className="page">Loading…</div>;
+  const showSlowHint = useSlowLoadHint(loading);
+
+  if (loading)
+    return (
+      <>
+        <ReceiptSkeleton />
+        {showSlowHint && (
+          <p className="wizard-hint slow-load-hint">
+            Still loading — the server may be waking up after a period of inactivity. This can take up to a minute.
+          </p>
+        )}
+      </>
+    );
   if (error) return <div className="page wizard-error">{error}</div>;
   if (!receipt) return null;
 

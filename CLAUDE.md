@@ -1316,6 +1316,49 @@ Verified live: public endpoint's raw JSON re-checked for `components`/`quantity_
 confirmed a `single`-type item correctly shows no Components line. Throwaway data
 cleaned up after.
 
+Cold-start loading states, new session (2026-08-25) — real user pain, not cosmetic
+polish: Render's free tier spins the backend down after a period of inactivity, so
+the first request after that can take up to ~50s. Several pages (most visibly the
+invoice link customers get via WhatsApp) still fell back to plain "Loading…" text for
+that entire wait, which reads as broken rather than in-progress. `Skeleton.tsx` gained
+four new page-shaped layouts alongside the existing `DashboardSkeleton`/
+`BookingDetailSkeleton` (its stale "static on purpose, no shimmer" doc comment was
+also fixed — the shimmer landed in the Phase 2 Stage 3 motion work and was never
+updated here): `ReceiptSkeleton` (shared by both `ReceiptPage.tsx` and
+`PublicReceiptPage.tsx` — deliberately one shape since they're already the same
+layout, and this is the most externally-visible loading state in the app),
+`ItemDetailSkeleton`, `FormSkeleton` (`SettingsPage.tsx`), and `ListPageSkeleton`
+(shared by `ReportsPage.tsx`/`ExpensesPage.tsx`/`ChargesPage.tsx` — close enough in
+shape across all three that one skeleton serves them rather than three near-identical
+ones). Every remaining plain-text `Loading…` page now uses one of these.
+
+New `lib/useSlowLoadHint.ts` — a small hook, true once `loading` has been true for
+longer than 6s (default), false immediately whenever `loading` goes false. Every
+skeleton page now conditionally shows "Still loading — the server may be waking up
+after a period of inactivity. This can take up to a minute." beneath the skeleton
+once this fires, via a new shared `.slow-load-hint` class — not shown on a normal
+sub-second load, only once a wait is genuinely long enough that a silent skeleton
+would itself start to look stuck. Also added to `DashboardPage.tsx` and
+`BookingDetail.tsx`, which already had skeletons from earlier sessions but no
+explanation for a long wait either. One real Rules-of-Hooks bug caught while wiring
+this in, not shipped: `SettingsPage.tsx` has an early return for the non-admin
+"Admins only" gate *before* its old loading check — placing `useSlowLoadHint` after
+that gate (where the plain `if (loading)` line used to be) would only call the hook
+conditionally, undefined behavior in React. Fixed by moving the hook call to the top
+of the component, above every early return, same rule every other page here already
+had to follow structurally.
+
+Verified live, not just by reading the JSX: a temporary artificial delay was added to
+the public receipt route (8s) and confirmed via real screenshots, then reverted —
+first screenshot showed the shimmering `ReceiptSkeleton` mid-load with no hint text
+yet (under 6s in), a later screenshot of the same load showed the "waking up" hint
+correctly appended once past 6s, and a final screenshot after the delay cleared
+showed the real content with neither skeleton nor hint present. Same technique
+(temporary delay, screenshot, revert) independently confirmed `ItemDetailSkeleton`
+against a real item and resolving correctly into real content afterward. Confirmed via
+`git diff` that no temporary test delay was left in any of the three routes touched
+for this. Throwaway admin account used for the auth-gated checks deleted after.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.

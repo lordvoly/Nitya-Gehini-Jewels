@@ -2,6 +2,8 @@ import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { fetchItemCharges, resolveItemCharge, type ItemCharge } from "../lib/itemCharges";
 import { formatDateDisplay } from "../lib/dates";
+import { useSlowLoadHint } from "../lib/useSlowLoadHint";
+import { ListPageSkeleton } from "../components/common/Skeleton";
 import "../styles/shared.css";
 
 // Universal view across ALL bookings, not scoped to any one booking — the
@@ -49,7 +51,19 @@ export default function ChargesPage() {
     }
   }
 
-  if (!charges && !error) return <div className="page">Loading…</div>;
+  const showSlowHint = useSlowLoadHint(!charges && !error);
+
+  if (!charges && !error)
+    return (
+      <>
+        <ListPageSkeleton />
+        {showSlowHint && (
+          <p className="wizard-hint slow-load-hint">
+            Still loading — the server may be waking up after a period of inactivity. This can take up to a minute.
+          </p>
+        )}
+      </>
+    );
 
   return (
     <div className="page">

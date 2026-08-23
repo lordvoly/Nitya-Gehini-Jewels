@@ -5,6 +5,7 @@ import { fetchDashboardSummary, type DashboardSummary, type PickupDueBookingItem
 import { useAuth } from "../lib/auth";
 import { DashboardAlerts } from "../components/dashboard/DashboardAlerts";
 import { DashboardSkeleton } from "../components/common/Skeleton";
+import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { formatDateDisplay, addDaysToDateString, formatWeekdayDate } from "../lib/dates";
 import "../styles/shared.css";
 
@@ -75,7 +76,19 @@ export default function DashboardPage() {
       .finally(() => setLoading(false));
   }, []);
 
-  if (loading) return <DashboardSkeleton />;
+  const showSlowHint = useSlowLoadHint(loading);
+
+  if (loading)
+    return (
+      <>
+        <DashboardSkeleton />
+        {showSlowHint && (
+          <p className="wizard-hint slow-load-hint">
+            Still loading — the server may be waking up after a period of inactivity. This can take up to a minute.
+          </p>
+        )}
+      </>
+    );
   if (error || !summary) return <div className="page wizard-error">{error ?? "Failed to load dashboard"}</div>;
 
   const { due_today, overdue, pickups_due_today, pickups_due_this_week, outstanding_balance, stats } = summary;

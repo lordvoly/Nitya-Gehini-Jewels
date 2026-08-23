@@ -8,6 +8,8 @@ import {
   type ExpenseCategory,
 } from "../lib/expenses";
 import { formatDateDisplay } from "../lib/dates";
+import { useSlowLoadHint } from "../lib/useSlowLoadHint";
+import { ListPageSkeleton } from "../components/common/Skeleton";
 import "../styles/shared.css";
 
 export default function ExpensesPage() {
@@ -85,7 +87,19 @@ export default function ExpensesPage() {
     }
   }
 
-  if (loading && !expenses) return <div className="page">Loading…</div>;
+  const showSlowHint = useSlowLoadHint(loading && !expenses);
+
+  if (loading && !expenses)
+    return (
+      <>
+        <ListPageSkeleton />
+        {showSlowHint && (
+          <p className="wizard-hint slow-load-hint">
+            Still loading — the server may be waking up after a period of inactivity. This can take up to a minute.
+          </p>
+        )}
+      </>
+    );
   if (error && !expenses) return <div className="page wizard-error">{error}</div>;
   if (!expenses) return null;
 

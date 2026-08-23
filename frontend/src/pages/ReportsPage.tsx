@@ -1,6 +1,8 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { fetchReports, type ReportsResponse } from "../lib/reports";
+import { useSlowLoadHint } from "../lib/useSlowLoadHint";
+import { ListPageSkeleton } from "../components/common/Skeleton";
 import "../styles/shared.css";
 
 export default function ReportsPage() {
@@ -57,7 +59,19 @@ export default function ReportsPage() {
     if (from && to) refresh(from, to, checked);
   }
 
-  if (loading && !data) return <div className="page">Loading…</div>;
+  const showSlowHint = useSlowLoadHint(loading && !data);
+
+  if (loading && !data)
+    return (
+      <>
+        <ListPageSkeleton />
+        {showSlowHint && (
+          <p className="wizard-hint slow-load-hint">
+            Still loading — the server may be waking up after a period of inactivity. This can take up to a minute.
+          </p>
+        )}
+      </>
+    );
   if (error && !data) return <div className="page wizard-error">{error}</div>;
   if (!data) return null;
 

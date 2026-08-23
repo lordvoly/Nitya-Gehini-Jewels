@@ -4,6 +4,8 @@ import { fetchItem, fetchItemHistory, type Item, type ItemHistoryRow } from "../
 import { PhotoLightbox } from "../components/items/PhotoLightbox";
 import { itemStatusPill, bookingItemStatusPill } from "../lib/statusPill";
 import { formatDateDisplay } from "../lib/dates";
+import { useSlowLoadHint } from "../lib/useSlowLoadHint";
+import { ItemDetailSkeleton } from "../components/common/Skeleton";
 import "../styles/shared.css";
 
 // A real route (/items/:id), not a query-param-embedded view like
@@ -44,7 +46,19 @@ export default function ItemDetailPage() {
     };
   }, [id]);
 
-  if (loading) return <div className="page">Loading…</div>;
+  const showSlowHint = useSlowLoadHint(loading);
+
+  if (loading)
+    return (
+      <>
+        <ItemDetailSkeleton />
+        {showSlowHint && (
+          <p className="wizard-hint slow-load-hint">
+            Still loading — the server may be waking up after a period of inactivity. This can take up to a minute.
+          </p>
+        )}
+      </>
+    );
   if (error || !item) return <div className="page wizard-error">{error ?? "Item not found"}</div>;
 
   const pill = itemStatusPill(item.status);
