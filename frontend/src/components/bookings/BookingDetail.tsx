@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ImageOff } from "lucide-react";
-import { fetchBooking, updateBooking, type Booking, type BookingItem } from "../../lib/bookings";
+import { fetchBooking, updateBooking, undoPickup, type Booking, type BookingItem } from "../../lib/bookings";
 import { BookingDetailSkeleton } from "../common/Skeleton";
 import {
   fetchPayments,
@@ -66,6 +66,14 @@ export function BookingDetail({
   const [notesInput, setNotesInput] = useState("");
   const [savingNotes, setSavingNotes] = useState(false);
   const [notesError, setNotesError] = useState<string | null>(null);
+
+  // Undo Pickup — reverses an accidental Confirm Pickup tap (e.g. the same
+  // item booked twice in one transaction, once already completed and once
+  // still upcoming, and the wrong line got confirmed). Keyed per
+  // booking_items.id since more than one line can be 'out' at once.
+  const [undoConfirmId, setUndoConfirmId] = useState<string | null>(null);
+  const [undoSavingId, setUndoSavingId] = useState<string | null>(null);
+  const [undoError, setUndoError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -157,6 +165,20 @@ export function BookingDetail({
       setEditError(err instanceof Error ? err.message : "Failed to edit payment");
     } finally {
       setSavingEdit(false);
+    }
+  }
+
+  async function handleUndoPickup(bi: BookingItem) {
+    setUndoError(null);
+    setUndoSavingId(bi.id);
+    try {
+      await undoPickup(bookingId, bi.id);
+      setUndoConfirmId(null);
+      await load();
+    } catch (err) {
+      setUndoError(err instanceof Error ? err.message : "Failed to undo pickup");
+    } finally {
+      setUndoSavingId(null);
     }
   }
 
@@ -254,6 +276,7 @@ export function BookingDetail({
               const itemPill = bookingItemStatusPill(bi);
               const canReturn = bi.type === "rental" && (bi.status === "booked" || bi.status === "out");
               const canConfirmPickup = bi.status === "booked";
+              const canUndoPickup = bi.status === "out";
               return (
                 <div className="line-item-card" key={bi.id}>
                   <div className="line-item-card-header">
@@ -334,7 +357,7 @@ export function BookingDetail({
                     </div>
                   )}
 
-                  {(canConfirmPickup || canReturn) && (
+                  {(canConfirmPickup || canReturn || canUndoPickup) && (
                     <div className="wizard-actions">
                       {canConfirmPickup && (
                         <button className="btn-secondary" onClick={() => onConfirmPickup(booking, bi)}>
@@ -346,8 +369,30 @@ export function BookingDetail({
                           Process Return
                         </button>
                       )}
+                      {canUndoPickup &&
+                        (undoConfirmId === bi.id ? (
+                          <>
+                            <span>Undo this pickup? The item goes back to booked, not out.</span>
+                            <button
+                              type="button"
+                              className="btn-danger"
+                              onClick={() => handleUndoPickup(bi)}
+                              disabled={undoSavingId === bi.id}
+                            >
+                              {undoSavingId === bi.id ? "…" : "Yes, Undo Pickup"}
+                            </button>
+                            <button type="button" className="btn-secondary" onClick={() => setUndoConfirmId(null)}>
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <button type="button" className="btn-secondary" onClick={() => setUndoConfirmId(bi.id)}>
+                            Undo Pickup
+                          </button>
+                        ))}
                     </div>
                   )}
+                  {canUndoPickup && undoConfirmId === bi.id && undoError && <p className="wizard-error">{undoError}</p>}
                 </div>
               );
             })}

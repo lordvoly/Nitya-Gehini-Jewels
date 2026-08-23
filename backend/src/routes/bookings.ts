@@ -1220,6 +1220,41 @@ bookingsRouter.post("/:bookingId/items/:bookingItemId/confirm-pickup", async (re
   res.status(200).json({ ...data, warning });
 });
 
+// POST /api/bookings/:bookingId/items/:bookingItemId/undo-pickup — reverses
+// an accidental confirm-pickup (e.g. the operator tapped the wrong line
+// when the same item is booked twice in one transaction — once already
+// completed, once still upcoming). Exact mirror of confirm-pickup: only
+// valid from 'out' (409 otherwise, so an already-returned or never-picked
+// item gives a clear reason rather than a silent no-op), reverts to
+// 'booked' and clears actual_pickup_date. Deliberately does NOT touch
+// payments — if a payment really was collected at pickup, reversing the
+// pickup status is a separate concern from reversing money; that stays a
+// manual Edit Payment correction, same scoping as return processing never
+// reaching into payments either.
+bookingsRouter.post("/:bookingId/items/:bookingItemId/undo-pickup", async (req: AuthedRequest, res) => {
+  const { data: bookingItem, error: fetchError } = await supabase
+    .from("booking_items")
+    .select("*")
+    .eq("booking_id", req.params.bookingId)
+    .eq("id", req.params.bookingItemId)
+    .single();
+  if (fetchError || !bookingItem) return res.status(404).json({ error: "Booking item not found" });
+
+  if (bookingItem.status !== "out") {
+    return res.status(409).json({ error: `This item is '${bookingItem.status}', not out — nothing to undo` });
+  }
+
+  const { data, error } = await supabase
+    .from("booking_items")
+    .update({ status: "booked", actual_pickup_date: null })
+    .eq("id", bookingItem.id)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+
+  res.status(200).json(data);
+});
+
 // POST /api/bookings/:bookingId/items/:bookingItemId/return — returns
 // processing, scoped to one booking_items row by its own id (§8 decision
 // D) rather than a whole booking or an item_id — the same physical item

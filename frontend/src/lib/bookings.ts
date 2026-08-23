@@ -264,6 +264,14 @@ export function confirmPickup(bookingId: string, bookingItemId: string, payload:
   });
 }
 
+// Reverses an accidental confirm-pickup — see the backend route's comment
+// for why this stays scoped to status only and never touches payments.
+export function undoPickup(bookingId: string, bookingItemId: string) {
+  return apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${bookingItemId}/undo-pickup`, {
+    method: "POST",
+  });
+}
+
 export function addBookingItem(bookingId: string, item: NewBookingItem) {
   return apiFetch<BookingItem>(`/api/bookings/${bookingId}/items`, {
     method: "POST",
