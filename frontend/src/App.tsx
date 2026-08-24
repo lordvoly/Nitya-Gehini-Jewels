@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Routes, Route, NavLink, Link } from "react-router-dom";
-import { Home, Calendar, Gem, Users, Sparkles, Menu, BarChart3, Wallet, AlertCircle, Settings } from "lucide-react";
+import { Home, Calendar, Gem, Users, Sparkles, Menu, BarChart3, Wallet, AlertCircle, Settings, HelpCircle } from "lucide-react";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import ItemsPage from "./pages/ItemsPage";
@@ -11,6 +11,7 @@ import ExpensesPage from "./pages/ExpensesPage";
 import ChargesPage from "./pages/ChargesPage";
 import AssistantPage from "./pages/AssistantPage";
 import SettingsPage from "./pages/SettingsPage";
+import HelpPage from "./pages/HelpPage";
 import ReceiptPage from "./pages/ReceiptPage";
 import PublicReceiptPage from "./pages/PublicReceiptPage";
 import ItemDetailPage from "./pages/ItemDetailPage";
@@ -35,6 +36,7 @@ const BASE_TABS = [
   { to: "/expenses", label: "Expenses" },
   { to: "/charges", label: "Charges" },
   { to: "/assistant", label: "Ask" },
+  { to: "/help", label: "Help" },
 ];
 
 // Mobile's primary bar only has room for the 4 highest-frequency
@@ -59,6 +61,7 @@ const BASE_MOBILE_MORE_ITEMS = [
   { to: "/reports", label: "Reports", Icon: BarChart3 },
   { to: "/expenses", label: "Expenses", Icon: Wallet },
   { to: "/charges", label: "Charges", Icon: AlertCircle },
+  { to: "/help", label: "Help", Icon: HelpCircle },
 ];
 
 export default function App() {
@@ -188,6 +191,14 @@ export default function App() {
             element={
               <ProtectedRoute>
                 <SettingsPage />
+              </ProtectedRoute>
+            }
+          />
+          <Route
+            path="/help"
+            element={
+              <ProtectedRoute>
+                <HelpPage />
               </ProtectedRoute>
             }
           />
