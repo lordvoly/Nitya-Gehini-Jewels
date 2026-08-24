@@ -26,6 +26,14 @@
   --green-soft: #e4eee6;
   --clay: #b3402b;
   --clay-soft: #f7e5e0;
+  /* A fifth, deliberately calmer status color — "settled/done" without the
+     celebratory weight of green, which the "whole family transaction is
+     Completed" pill keeps for itself. Needed once a single Returned item
+     and the whole booking's Completed status could both be on screen at
+     the same time, both rendering pill-good — visually indistinguishable
+     from each other despite meaning different things at different grains. */
+  --blue: #3a5f7a;
+  --blue-soft: #e6edf1;
   --amber: #f0c14b;
   --amber-soft: #fffaf0;
   --focus: #7a5d1f;
@@ -474,6 +482,15 @@ a {
   margin: 0 0 8px;
 }
 
+/* The customer name directly under a booking's own code — one step up
+   from .wizard-hint's small muted default, since this is the answer to
+   "whose booking is this," not incidental supporting text. */
+.booking-detail-customer {
+  font-size: 16px;
+  font-weight: 600;
+  margin: 2px 0 12px;
+}
+
 /* ── Forms ────────────────────────────────────────────────────────────── */
 
 .field-label {
@@ -762,6 +779,47 @@ a {
   cursor: not-allowed;
 }
 
+/* Back/View/Edit, icon-only — same wine outline language as .btn-secondary
+   (these are neutral navigation/edit actions, not primary/danger), just
+   circular and sized to sit comfortably in a compact action row without
+   the width a labeled button needs. The label moves to aria-label only —
+   fine once the icon alone is a recognizable, single-purpose glyph. */
+.btn-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  min-height: 36px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid var(--wine);
+  background: var(--surface);
+  color: var(--wine);
+  cursor: pointer;
+  flex-shrink: 0;
+  transition: background-color 100ms ease;
+}
+
+.btn-icon:hover:not(:disabled) {
+  background: var(--wine-soft);
+}
+
+.btn-icon:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+/* A smaller footprint for a lone CTA that doesn't need
+   .btn-primary/.btn-secondary/.btn-danger's full default size (Record
+   Payment, Print/Download Receipt, Edit Booking) — sizing only, so
+   .btn-primary's own margin-left: auto right-alignment still applies. */
+.btn-compact {
+  min-height: 38px;
+  padding: 8px 16px;
+  font-size: 13px;
+}
+
 .btn-save {
   width: 100%;
   padding: 14px;
@@ -1040,6 +1098,16 @@ a {
   color: var(--ink);
 }
 
+/* A single returned item is "settled," not the same achievement as the
+   whole family transaction reaching Completed (pill-good) — the two can
+   sit on the same screen at once (a booking's own status pill next to one
+   of its item's own status pills), so they need to actually look
+   different from each other, not just mean something different. */
+.pill-info {
+  background: var(--blue-soft);
+  color: var(--blue);
+}
+
 /* Deliberately not reusing pill-good/active/attention/neutral's palette —
    FOC sits next to a real status pill in several places (receipt line
    items, item history rows) and must never be mistaken for one at a
@@ -1062,6 +1130,34 @@ a {
 
 .found-panel p {
   margin: 4px 0;
+}
+
+/* The "When Returns" panel on a unique item's own booking line, but only
+   once there's an actual next booking queued for it — a genuinely urgent,
+   time-sensitive fact (this exact item needs to go straight back out),
+   not just informational, so it gets its own bolder red treatment rather
+   than .found-panel's calm amber. Same clay red already used for
+   pill-attention/the Dashboard's overdue badge, just pushed further —
+   solid border plus bold red text, not merely a tinted background — since
+   this needs to read as unmistakably urgent at a glance. When there's no
+   next booking queued, the panel stays plain .found-panel (nothing urgent
+   to flag).*/
+.when-returns-panel {
+  border: 1.5px solid var(--clay);
+  background: var(--clay-soft);
+  border-radius: var(--radius);
+  padding: 14px 16px;
+  margin-top: 14px;
+}
+
+.when-returns-panel p {
+  margin: 4px 0;
+}
+
+.when-returns-panel strong,
+.when-returns-panel li {
+  color: var(--clay);
+  font-weight: 700;
 }
 
 /* ── Modal ────────────────────────────────────────────────────────────── */
@@ -1524,7 +1620,12 @@ a.stat-card:active {
 .booking-card-item {
   display: flex;
   justify-content: space-between;
-  align-items: center;
+  /* flex-start, not center — the info column (name/dates/next-booking
+     line) and the actions column (pill + buttons) are rarely the same
+     height, and centering the shorter one against the taller made the
+     pill/buttons land at an unpredictable vertical spot from card to
+     card. Top-aligning both keeps every row starting at the same line. */
+  align-items: flex-start;
   gap: 10px;
   flex-wrap: wrap;
 }
@@ -1578,6 +1679,13 @@ a.stat-card:active {
   flex-wrap: wrap;
 }
 
+/* Pushes whatever follows it (Confirm Pickup / Process Return) into their
+   own group on the right, keeping the status pill anchored left instead
+   of all three sitting wherever flex-wrap happens to land them. */
+.booking-card-item-actions .pill {
+  margin-right: auto;
+}
+
 .booking-card-item-actions .btn-primary,
 .booking-card-item-actions .btn-secondary,
 .booking-card-item-actions .btn-danger {
@@ -1589,6 +1697,7 @@ a.stat-card:active {
 
 .booking-card-actions {
   display: flex;
+  justify-content: space-between;
   gap: 8px;
   margin-top: 14px;
   padding-top: 12px;
@@ -1611,6 +1720,30 @@ a.stat-card:active {
   padding: 14px;
   margin-top: 14px;
   position: relative;
+}
+
+/* Confirm Pickup / Process Return / Undo Pickup on a booking's own line
+   item (BookingDetail), plus the lone Edit Payment button below it — a
+   compact row instead of .wizard-actions' column layout, which was built
+   for stacked Cancel/Save form pairs and, reused here, both stretched a
+   single button (Edit Payment) to the full column width via flex's
+   default align-items: stretch, and forced two genuinely independent
+   actions onto two full-width bars instead of sitting side by side. */
+.line-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-top: 12px;
+}
+
+.line-item-actions .btn-primary,
+.line-item-actions .btn-secondary,
+.line-item-actions .btn-danger {
+  min-height: 38px;
+  padding: 7px 12px;
+  font-size: 12.5px;
+  margin-left: 0;
 }
 
 /* flex-wrap: wrap — the one thing this shared class was missing relative

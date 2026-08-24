@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
+import { Eye, Pencil } from "lucide-react";
 import {
   fetchBookings,
   type Booking,
@@ -358,12 +359,12 @@ export function BookingsList({
             </div>
 
             <div className="booking-card-actions">
-              <button className="btn-secondary" onClick={() => onViewDetail(b.id)}>
-                View
+              <button className="btn-icon" aria-label="View" onClick={() => onViewDetail(b.id)}>
+                <Eye size={17} strokeWidth={2} aria-hidden="true" />
               </button>
               {!readOnly && onEditBooking && (
-                <button className="btn-secondary" onClick={() => onEditBooking(b.id)}>
-                  Edit
+                <button className="btn-icon" aria-label="Edit" onClick={() => onEditBooking(b.id)}>
+                  <Pencil size={16} strokeWidth={2} aria-hidden="true" />
                 </button>
               )}
             </div>

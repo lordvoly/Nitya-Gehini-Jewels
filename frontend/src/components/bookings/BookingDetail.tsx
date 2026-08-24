@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ImageOff } from "lucide-react";
+import { ImageOff, ArrowLeft } from "lucide-react";
 import { fetchBooking, updateBooking, undoPickup, type Booking, type BookingItem } from "../../lib/bookings";
 import { BookingDetailSkeleton } from "../common/Skeleton";
 import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
@@ -201,7 +201,7 @@ export function BookingDetail({
         {!loading && error && <p className="wizard-error">{error}</p>}
         {!loading && booking && statusPill && (
           <>
-            <p className="wizard-hint">
+            <p className="booking-detail-customer">
               {booking.customers?.name && (
                 <Link to={`/customers?customer=${booking.customer_id}`}>{booking.customers.name}</Link>
               )}
@@ -346,7 +346,11 @@ export function BookingDetail({
                       have many bookings active at once, so "next in line" isn't
                       a single well-defined thing there. */}
                   {bi.items?.tracking_type === "unique" && (
-                    <div className="found-panel">
+                    // Bright red (.when-returns-panel) only once there's an
+                    // actual next booking waiting on this exact item —
+                    // genuinely urgent. "No bookings ahead" stays the plain,
+                    // calm .found-panel — nothing to flag.
+                    <div className={bi.future_booking_items && bi.future_booking_items.length > 0 ? "when-returns-panel" : "found-panel"}>
                       <p>
                         <strong>When Returns →</strong>
                       </p>
@@ -365,7 +369,7 @@ export function BookingDetail({
                   )}
 
                   {(canConfirmPickup || canReturn || canUndoPickup) && (
-                    <div className="wizard-actions">
+                    <div className="line-item-actions">
                       {canConfirmPickup && (
                         <button className="btn-secondary" onClick={() => onConfirmPickup(booking, bi)}>
                           Confirm Pickup
@@ -465,7 +469,7 @@ export function BookingDetail({
                             </div>
                           </div>
                         ) : (
-                          <div className="wizard-actions">
+                          <div className="line-item-actions">
                             <button type="button" className="btn-secondary" onClick={() => startEditPayment(p)}>
                               Edit Payment
                             </button>
@@ -514,7 +518,7 @@ export function BookingDetail({
               </form>
             ) : (
               <div className="wizard-actions">
-                <button className="btn-primary" onClick={() => setShowPaymentForm(true)}>
+                <button className="btn-primary btn-compact" onClick={() => setShowPaymentForm(true)}>
                   Record Payment
                 </button>
               </div>
@@ -523,15 +527,15 @@ export function BookingDetail({
         )}
       </div>
       <div className="wizard-nav">
-        <button className="btn-secondary" onClick={onBack}>
-          Back
+        <button className="btn-icon" aria-label="Back" onClick={onBack}>
+          <ArrowLeft size={17} strokeWidth={2} aria-hidden="true" />
         </button>
         {booking && (
           <>
-            <Link to={`/receipt/${booking.id}`} target="_blank" className="btn-secondary">
+            <Link to={`/receipt/${booking.id}`} target="_blank" className="btn-secondary btn-compact">
               Print/Download Receipt
             </Link>
-            <button className="btn-primary" onClick={onEdit}>
+            <button className="btn-primary btn-compact" onClick={onEdit}>
               Edit Booking
             </button>
           </>

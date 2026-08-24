@@ -38,7 +38,11 @@ export function bookingItemStatusPill(bi: {
 }): PillInfo {
   switch (bi.status) {
     case "returned":
-      return { className: "pill-good", label: "Returned" };
+      // Deliberately not pill-good — a booking's own computed_status can
+      // read "Completed" (pill-good) right next to one of its items
+      // reading "Returned" on the same screen, and those are two
+      // different-grain achievements that shouldn't look identical.
+      return { className: "pill-info", label: "Returned" };
     case "cancelled":
       return { className: "pill-neutral", label: "Cancelled" };
     case "out":

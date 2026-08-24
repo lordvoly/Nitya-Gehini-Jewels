@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
+import { Pencil } from "lucide-react";
 import type { Item } from "../../lib/items";
 import { itemStatusPill } from "../../lib/statusPill";
 import { PhotoLightbox } from "./PhotoLightbox";
@@ -267,8 +268,8 @@ export function ItemsList({
                         </>
                       ) : (
                         <>
-                          <button className="btn-secondary" onClick={() => onEdit(item)}>
-                            Edit
+                          <button className="btn-icon" aria-label="Edit" onClick={() => onEdit(item)}>
+                            <Pencil size={16} strokeWidth={2} aria-hidden="true" />
                           </button>
                           {item.is_active ? (
                             <button

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { ArrowLeft } from "lucide-react";
 import {
   ITEM_CATEGORIES,
   ITEM_STATUSES,
@@ -410,8 +411,8 @@ export function AddItemWizard({
 
       <div className="wizard-nav">
         {stepIndex > 0 && (
-          <button className="btn-secondary" onClick={back}>
-            Back
+          <button className="btn-icon" aria-label="Back" onClick={back}>
+            <ArrowLeft size={17} strokeWidth={2} aria-hidden="true" />
           </button>
         )}
         {step !== "review" && (

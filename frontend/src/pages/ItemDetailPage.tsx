@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
+import { ArrowLeft } from "lucide-react";
 import { fetchItem, fetchItemHistory, fetchItemRevenue, type Item, type ItemHistoryRow, type ItemRevenue } from "../lib/items";
 import { PhotoLightbox } from "../components/items/PhotoLightbox";
 import { itemStatusPill, bookingItemStatusPill } from "../lib/statusPill";
@@ -110,8 +111,8 @@ export default function ItemDetailPage() {
           </ul>
 
           <div className="wizard-nav">
-            <button type="button" className="btn-secondary" onClick={() => navigate(-1)}>
-              Back
+            <button type="button" className="btn-icon" aria-label="Back" onClick={() => navigate(-1)}>
+              <ArrowLeft size={17} strokeWidth={2} aria-hidden="true" />
             </button>
           </div>
         </div>

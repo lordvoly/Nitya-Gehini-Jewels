@@ -12,9 +12,12 @@ import {
   type BookingItem,
   type BookingItemType,
 } from "../../lib/bookings";
+import { ArrowLeft } from "lucide-react";
 import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
 import { CustomerPicker } from "./CustomerPicker";
 import { bookingItemStatusPill } from "../../lib/statusPill";
+import { BookingDetailSkeleton } from "../common/Skeleton";
+import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
 
 interface NewItemDraft {
   type: BookingItemType;
@@ -86,6 +89,7 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   const [items, setItems] = useState<Item[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const showSlowHint = useSlowLoadHint(loading);
 
   const [customer, setCustomer] = useState<Customer | null>(null);
   // Real typo-fix support — previously there was no way to correct a
@@ -369,7 +373,14 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   if (loading) {
     return (
       <div className="wizard-card">
-        <p>Loading…</p>
+        <div className="wizard-step">
+          <BookingDetailSkeleton />
+          {showSlowHint && (
+            <p className="wizard-hint slow-load-hint">
+              Still loading. The server may be waking up after a period of inactivity, which can take up to a minute.
+            </p>
+          )}
+        </div>
       </div>
     );
   }
@@ -379,8 +390,8 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
       <div className="wizard-card">
         <p className="wizard-error">{error ?? "Booking not found"}</p>
         <div className="wizard-nav">
-          <button className="btn-secondary" onClick={onCancel}>
-            Back
+          <button className="btn-icon" aria-label="Back" onClick={onCancel}>
+            <ArrowLeft size={17} strokeWidth={2} aria-hidden="true" />
           </button>
         </div>
       </div>
@@ -856,8 +867,8 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
       </div>
 
       <div className="wizard-nav">
-        <button className="btn-secondary" onClick={onCancel}>
-          Back
+        <button className="btn-icon" aria-label="Back" onClick={onCancel}>
+          <ArrowLeft size={17} strokeWidth={2} aria-hidden="true" />
         </button>
         <button className="btn-primary" onClick={onDone}>
           Done
