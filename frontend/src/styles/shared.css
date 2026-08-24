@@ -813,8 +813,16 @@ a {
 /* A smaller footprint for a lone CTA that doesn't need
    .btn-primary/.btn-secondary/.btn-danger's full default size (Record
    Payment, Print/Download Receipt, Edit Booking) — sizing only, so
-   .btn-primary's own margin-left: auto right-alignment still applies. */
+   .btn-primary's own margin-left: auto right-alignment still applies.
+   inline-flex + gap, rather than the base classes' plain inline-block, so
+   an icon placed directly before the label text lines up on the same
+   baseline instead of sitting slightly off per the browser's default SVG
+   vertical-align — scoped here rather than on the shared button classes
+   themselves, since only this trio currently pairs an icon with a label. */
 .btn-compact {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
   min-height: 38px;
   padding: 8px 16px;
   font-size: 13px;

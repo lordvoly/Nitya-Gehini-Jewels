@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ImageOff, ArrowLeft } from "lucide-react";
+import { ImageOff, ArrowLeft, IndianRupee, Printer, Pencil } from "lucide-react";
 import { fetchBooking, updateBooking, undoPickup, type Booking, type BookingItem } from "../../lib/bookings";
 import { BookingDetailSkeleton } from "../common/Skeleton";
 import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
@@ -481,7 +481,7 @@ export function BookingDetail({
               </ul>
             )}
 
-            {showPaymentForm ? (
+            {showPaymentForm && (
               <form className="wizard-step" onSubmit={handleRecordPayment}>
                 <label className="field-label">
                   Amount (₹)
@@ -516,12 +516,6 @@ export function BookingDetail({
                   </button>
                 </div>
               </form>
-            ) : (
-              <div className="wizard-actions">
-                <button className="btn-primary btn-compact" onClick={() => setShowPaymentForm(true)}>
-                  Record Payment
-                </button>
-              </div>
             )}
           </>
         )}
@@ -532,10 +526,18 @@ export function BookingDetail({
         </button>
         {booking && (
           <>
+            {!showPaymentForm && (
+              <button className="btn-secondary btn-compact" onClick={() => setShowPaymentForm(true)}>
+                <IndianRupee size={15} strokeWidth={2} aria-hidden="true" />
+                Record Payment
+              </button>
+            )}
             <Link to={`/receipt/${booking.id}`} target="_blank" className="btn-secondary btn-compact">
+              <Printer size={15} strokeWidth={2} aria-hidden="true" />
               Print/Download Receipt
             </Link>
             <button className="btn-primary btn-compact" onClick={onEdit}>
+              <Pencil size={15} strokeWidth={2} aria-hidden="true" />
               Edit Booking
             </button>
           </>
