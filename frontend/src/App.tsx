@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Routes, Route, NavLink, Link } from "react-router-dom";
+import { Routes, Route, NavLink, Link, useNavigate } from "react-router-dom";
 import { Home, Calendar, Gem, Users, Sparkles, Menu, BarChart3, Wallet, AlertCircle, Settings, HelpCircle } from "lucide-react";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
@@ -66,6 +66,7 @@ const BASE_MOBILE_MORE_ITEMS = [
 
 export default function App() {
   const { session, profile } = useAuth();
+  const navigate = useNavigate();
   const [moreOpen, setMoreOpen] = useState(false);
   const [profileOpen, setProfileOpen] = useState(false);
   const isAdmin = profile?.role === "admin";
@@ -80,6 +81,22 @@ export default function App() {
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [moreOpen]);
+
+  // An explicit Log Out must always land back on Dashboard next login, never
+  // wherever the visitor happened to be standing — but signOut() alone,
+  // followed passively by ProtectedRoute noticing session=null, redirects to
+  // /login with `state: { from: <the page they just logged out from> }`,
+  // the exact same mechanism LoginPage's resolveFrom() uses to send a QR-code
+  // deep-link visitor back to the booking they were trying to reach. That
+  // mechanism is correct for a genuinely logged-out visitor hitting a
+  // protected URL; it's just wrong for a deliberate logout, which isn't
+  // "trying to reach" the page it's leaving. Navigating to /login ourselves
+  // first — with no `state` — means ProtectedRoute's own redirect never
+  // fires for this page at all, so there's no `from` to send back to.
+  function handleLogOut() {
+    navigate("/login", { replace: true });
+    supabase.auth.signOut();
+  }
 
   return (
     <div>
@@ -102,7 +119,7 @@ export default function App() {
             <button type="button" className="avatar-btn" aria-label="Your profile" onClick={() => setProfileOpen(true)}>
               <Avatar name={profile?.name} photoUrl={profile?.photo_url} />
             </button>
-            <button className="btn-secondary" onClick={() => supabase.auth.signOut()}>
+            <button className="btn-secondary" onClick={handleLogOut}>
               Log Out
             </button>
           </div>
