@@ -62,11 +62,12 @@ export function CustomersList({
     }
   }
 
-  // Only a genuinely empty first load (nothing ever fetched yet) gets the
-  // heavier skeleton treatment — a subsequent search/filter change over
-  // data already on screen keeps the existing lightweight "Searching…"
-  // text instead, since that's a fast, already-warm-backend case.
-  const showSkeleton = loading && customers.length === 0;
+  // Every loading state gets the skeleton, including a filter/search change
+  // over rows already on screen — not just the first load. Previously a
+  // filter change kept the old (now-stale) rows visible under a plain
+  // "Searching…" line, which read as if nothing was happening; the
+  // skeleton makes the in-flight request visually obvious every time.
+  const showSkeleton = loading;
   const showSlowHint = useSlowLoadHint(showSkeleton);
 
   return (
@@ -95,7 +96,6 @@ export function CustomersList({
               ? `${CUSTOMER_CATEGORY_FILTER_LABELS[categoryFilter]} (${customers.length})`
               : `All Customers (${customers.length})`}
         </h2>
-        {loading && !showSkeleton && <span className="wizard-hint">Searching…</span>}
       </div>
 
       {actionError && <p className="wizard-error">{actionError}</p>}
@@ -112,7 +112,7 @@ export function CustomersList({
         </>
       )}
 
-      {!showSkeleton && customers.length === 0 && !loading && (
+      {!loading && customers.length === 0 && (
         <div className="empty-state">
           {term ? (
             <>
@@ -133,7 +133,7 @@ export function CustomersList({
         </div>
       )}
 
-      {customers.length > 0 && (
+      {!loading && customers.length > 0 && (
         <div className="table-wrap">
           <table className="data-table">
             <thead>
