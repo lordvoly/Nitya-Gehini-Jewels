@@ -1615,8 +1615,10 @@ a.stat-card:active {
 }
 
 .booking-card-customer {
-  color: var(--ink-soft);
-  font-size: 13.5px;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--ink);
   margin: 2px 0 0;
 }
 
@@ -1652,17 +1654,19 @@ a.stat-card:active {
   gap: 10px;
 }
 
+/* Column, not a row — a row (even top-aligned) puts the info and actions
+   as two flex siblings on the same line whenever there's room, so a short
+   item name (e.g. "AD 2 Layer Blue Necklace") left the Out pill sitting
+   inline on the right, while a longer one (e.g. "Polki Green Semi Bridal
+   (Atul Chauhan)") pushed the exact same pill down onto its own line —
+   the pill's position shifted card to card depending purely on name
+   length, which is the actual misalignment this was meant to fix and
+   didn't. Stacking unconditionally means the actions row sits in the same
+   place under every card, regardless of how long the item name is. */
 .booking-card-item {
   display: flex;
-  justify-content: space-between;
-  /* flex-start, not center — the info column (name/dates/next-booking
-     line) and the actions column (pill + buttons) are rarely the same
-     height, and centering the shorter one against the taller made the
-     pill/buttons land at an unpredictable vertical spot from card to
-     card. Top-aligning both keeps every row starting at the same line. */
-  align-items: flex-start;
-  gap: 10px;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: 8px;
 }
 
 .booking-card-item-info {
