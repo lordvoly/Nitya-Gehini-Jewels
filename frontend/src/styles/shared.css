@@ -1544,10 +1544,37 @@ a.stat-card:active {
   min-width: 0;
 }
 
-.dashboard-pickup-info p {
-  margin: 2px 0 0;
-  font-size: 13.5px;
+/* A row's own identity (item name) — Fraunces, the same "worth a glance"
+   treatment already given to an item/customer name elsewhere (a booking
+   line's own heading, a success screen's detail line), rather than the
+   plain system-sans paragraph these Dashboard rows used before. That
+   previous version packed a bolded booking code, item code/name, and
+   customer into one dense middot-separated line with no hierarchy — it
+   read like a log line, not designed content.
+
+   Qualified with the .dashboard-section ancestor every one of these rows
+   is always rendered inside — .found-panel p / .overdue-panel p (0,1,1)
+   would otherwise silently win their own margin/color over a same-specificity
+   (0,1,0) .dashboard-row-title/.dashboard-row-meta on the exact same <p>,
+   same specificity-discipline lesson as .item-detail-name elsewhere in
+   this file. */
+.dashboard-section .dashboard-row-title {
+  display: block;
+  font-family: "Fraunces", Georgia, serif;
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--ink);
+  margin: 0;
+}
+
+/* The secondary detail (customer, booking code, dates/overdue count) —
+   deliberately smaller and muted relative to .dashboard-row-title, so the
+   eye lands on "what item" first and "whose/when" second, not all at once. */
+.dashboard-section .dashboard-row-meta {
+  font-size: 12.5px;
   color: var(--ink-soft);
+  letter-spacing: 0.01em;
+  margin: 3px 0 0;
 }
 
 .dashboard-day-group-label {

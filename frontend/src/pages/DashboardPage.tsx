@@ -28,10 +28,10 @@ function PickupRow({ pickup }: { pickup: PickupDueBookingItem }) {
         )}
       </Link>
       <div className="dashboard-pickup-info">
-        <Link to={`/items/${pickup.item_id}`}>
+        <Link to={`/items/${pickup.item_id}`} className="dashboard-row-title">
           {pickup.items?.item_code} — {pickup.items?.name}
         </Link>
-        <p>
+        <p className="dashboard-row-meta">
           {pickup.customers?.name ?? "—"} ·{" "}
           <Link to={`/bookings?booking=${pickup.booking_id}`}>{pickup.bookings?.booking_code}</Link> ·{" "}
           {formatDateDisplay(pickup.pickup_date)}
@@ -146,8 +146,11 @@ export default function DashboardPage() {
           {due_today.length === 0 && <p className="wizard-hint">Nothing due back today.</p>}
           {due_today.map((b) => (
             <Link key={b.id} to={`/bookings?booking=${b.booking_id}`} className="found-panel dashboard-link">
-              <p>
-                <strong>{b.bookings?.booking_code}</strong> — {b.items?.item_code} {b.items?.name} · {b.customers?.name}
+              <p className="dashboard-row-title">
+                {b.items?.item_code} — {b.items?.name}
+              </p>
+              <p className="dashboard-row-meta">
+                {b.bookings?.booking_code} · {b.customers?.name}
               </p>
             </Link>
           ))}
@@ -161,20 +164,26 @@ export default function DashboardPage() {
               <p>
                 <span className="pill pill-attention">Next customer waiting</span>
               </p>
-              <p>
-                <strong>{b.booking_code}</strong> — {b.items?.item_code} {b.items?.name} · {b.customers?.name} ·{" "}
-                {Math.abs(b.days_until_return)} day{Math.abs(b.days_until_return) === 1 ? "" : "s"} overdue
+              <p className="dashboard-row-title">
+                {b.items?.item_code} — {b.items?.name}
               </p>
-              <p>
+              <p className="dashboard-row-meta">
+                {b.booking_code} · {b.customers?.name} · {Math.abs(b.days_until_return)} day
+                {Math.abs(b.days_until_return) === 1 ? "" : "s"} overdue
+              </p>
+              <p className="dashboard-row-meta">
                 Next: {b.next_booking_code} — {b.next_customer_name} ({b.next_pickup_date})
               </p>
             </Link>
           ))}
           {otherOverdue.map((b) => (
             <Link key={b.id} to={`/bookings?booking=${b.booking_id}`} className="overdue-panel dashboard-link">
-              <p>
-                <strong>{b.booking_code}</strong> — {b.items?.item_code} {b.items?.name} · {b.customers?.name} ·{" "}
-                {Math.abs(b.days_until_return)} day{Math.abs(b.days_until_return) === 1 ? "" : "s"} overdue
+              <p className="dashboard-row-title">
+                {b.items?.item_code} — {b.items?.name}
+              </p>
+              <p className="dashboard-row-meta">
+                {b.booking_code} · {b.customers?.name} · {Math.abs(b.days_until_return)} day
+                {Math.abs(b.days_until_return) === 1 ? "" : "s"} overdue
               </p>
             </Link>
           ))}
