@@ -159,11 +159,12 @@ export function BookingsList({
     };
   }, [term, filterItemId, filterCustomerId, category, typeFilter, dateBasis, timeRange]);
 
-  // Only a genuinely empty first load (nothing ever fetched yet) gets the
-  // heavier skeleton treatment — a subsequent search/filter change over
-  // data already on screen keeps the existing lightweight "Searching…"/
-  // "Loading…" text instead, since that's a fast, already-warm-backend case.
-  const showSkeleton = loading && bookings.length === 0;
+  // Every loading state gets the skeleton, including a filter/search change
+  // over cards already on screen — not just the first load. Previously a
+  // filter change kept the old (now-stale) cards visible under a plain
+  // "Searching…" line, which read as if nothing was happening; the
+  // skeleton makes the in-flight request visually obvious every time.
+  const showSkeleton = loading;
   const showSlowHint = useSlowLoadHint(showSkeleton);
 
   return (
@@ -231,9 +232,6 @@ export function BookingsList({
                   ? `${CATEGORY_LABELS[category]} (${bookings.length})`
                   : `All Bookings (${bookings.length})`}
         </h2>
-        {loading && !showSkeleton && (
-          <span className="wizard-hint">{filterItemId || filterCustomerId ? "Loading…" : "Searching…"}</span>
-        )}
       </div>
 
       {showSkeleton && (
@@ -248,7 +246,7 @@ export function BookingsList({
         </>
       )}
 
-      {!showSkeleton && bookings.length === 0 && !loading && (
+      {!loading && bookings.length === 0 && (
         <div className="empty-state">
           {filterItemId ? (
             <>
@@ -274,9 +272,10 @@ export function BookingsList({
         </div>
       )}
 
-      {bookings.map((b) => {
-        const statusPill = bookingComputedStatusPill(b.computed_status, b.resolved_item_count, b.active_item_count);
-        return (
+      {!loading &&
+        bookings.map((b) => {
+          const statusPill = bookingComputedStatusPill(b.computed_status, b.resolved_item_count, b.active_item_count);
+          return (
           <div className="booking-card" key={b.id}>
             <div className="booking-card-header">
               <div>
