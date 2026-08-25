@@ -155,3 +155,100 @@ export async function getUpcomingPickupsData() {
 export async function getUpcomingPickupsForDays(daysAhead: number) {
   return getPickupsInRange(istToday(), istDaysAhead(daysAhead));
 }
+
+// ── Upcoming Occasions (birthdays / wedding anniversaries) ────────────────
+
+export interface OccasionRow {
+  customer_id: string;
+  name: string;
+  phone: string;
+  type: "birthday" | "anniversary";
+  // This YEAR's real calendar occurrence (e.g. a 1990 date_of_birth still
+  // reports today's actual year here) — matches what the day-grouping on
+  // the Dashboard needs, distinct from the stored date_of_birth/
+  // date_of_wedding itself.
+  date: string;
+}
+
+function isLeapYear(year: number): boolean {
+  return (year % 4 === 0 && year % 100 !== 0) || year % 400 === 0;
+}
+
+// Every real calendar date from `from` through `to`, inclusive — both are
+// already-resolved IST YYYY-MM-DD strings (istToday()/istWeekEnd()/
+// istDaysAhead()), so plain UTC-anchored Date stepping here can't drift a
+// day the way it would if this were parsing a genuinely timezone-sensitive
+// instant (it isn't — these are calendar dates, not moments).
+function enumerateDates(from: string, to: string): string[] {
+  const dates: string[] = [];
+  let cursor = new Date(`${from}T00:00:00Z`);
+  const end = new Date(`${to}T00:00:00Z`);
+  while (cursor <= end) {
+    dates.push(cursor.toISOString().slice(0, 10));
+    cursor = new Date(cursor.getTime() + 86_400_000);
+  }
+  return dates;
+}
+
+function monthDay(dateStr: string): string {
+  return dateStr.slice(5, 10); // "MM-DD"
+}
+
+// Which "MM-DD" keys count as occurring on this real candidate date —
+// normally just its own, except Feb 28 in a non-leap year, which also
+// absorbs any Feb-29 birthday/anniversary. There's no real Feb 29 to land
+// on in a non-leap year, so it's observed the day before rather than
+// silently skipped for three years out of four (the more common
+// convention; "roll to Mar 1" would work just as well, but one had to be
+// picked — this is that choice, made explicit rather than left as an
+// accidental gap).
+function occasionKeysFor(candidateDate: string): string[] {
+  const [yearStr, mm, dd] = candidateDate.split("-");
+  const keys = [`${mm}-${dd}`];
+  if (mm === "02" && dd === "28" && !isLeapYear(Number(yearStr))) {
+    keys.push("02-29");
+  }
+  return keys;
+}
+
+type OccasionCustomer = { id: string; name: string; phone: string; date_of_birth: string | null; date_of_wedding: string | null };
+
+// Month+day match only, recurring yearly — never the exact stored date (a
+// customer born in 1990 still has a "birthday" every single year). Walks
+// the range day by day (at most 7 candidate dates for the Dashboard's own
+// windows) rather than a single SQL predicate, since PostgREST has no
+// clean way to express "month/day matches, ignore year" as a filter —
+// same fetch-then-filter-in-JS approach Reports already uses for anything
+// this app has no precedent for as a parameterized SQL view/function.
+function occasionsInRange(customers: OccasionCustomer[], fromDate: string, toDate: string): OccasionRow[] {
+  const rows: OccasionRow[] = [];
+  for (const candidateDate of enumerateDates(fromDate, toDate)) {
+    const keys = occasionKeysFor(candidateDate);
+    for (const c of customers) {
+      if (c.date_of_birth && keys.includes(monthDay(c.date_of_birth))) {
+        rows.push({ customer_id: c.id, name: c.name, phone: c.phone, type: "birthday", date: candidateDate });
+      }
+      if (c.date_of_wedding && keys.includes(monthDay(c.date_of_wedding))) {
+        rows.push({ customer_id: c.id, name: c.name, phone: c.phone, type: "anniversary", date: candidateDate });
+      }
+    }
+  }
+  return rows;
+}
+
+// Today's + this week's birthdays/anniversaries — mirrors
+// getUpcomingPickupsData's exact today/this-week split (today's own
+// occasions never duplicate into the this-week list).
+export async function getUpcomingOccasionsData() {
+  const today = istToday();
+  const weekEnd = istWeekEnd();
+
+  const { data: customers, error } = await supabase.from("customers").select("id, name, phone, date_of_birth, date_of_wedding");
+  if (error) throw error;
+  const withDates = (customers ?? []).filter((c) => c.date_of_birth || c.date_of_wedding);
+
+  return {
+    occasions_today: occasionsInRange(withDates, today, today),
+    occasions_this_week: occasionsInRange(withDates, istDaysAhead(1), weekEnd),
+  };
+}

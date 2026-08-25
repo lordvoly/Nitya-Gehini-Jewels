@@ -1,12 +1,14 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ImageOff } from "lucide-react";
-import { fetchDashboardSummary, type DashboardSummary, type PickupDueBookingItem } from "../lib/dashboard";
+import { fetchDashboardSummary, type DashboardSummary, type PickupDueBookingItem, type OccasionRow } from "../lib/dashboard";
 import { useAuth } from "../lib/auth";
 import { DashboardAlerts } from "../components/dashboard/DashboardAlerts";
 import { DashboardSkeleton } from "../components/common/Skeleton";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { formatDateDisplay, addDaysToDateString, formatWeekdayDate } from "../lib/dates";
+import { fetchShopSettings } from "../lib/shopSettings";
+import { buildWhatsAppLink, buildOccasionMessage } from "../lib/whatsapp";
 import "../styles/shared.css";
 
 // One card per physical item due for pickup — thumbnail+name link to the
@@ -63,17 +65,81 @@ function groupPickupsByDay(pickups: PickupDueBookingItem[], today: string) {
     }));
 }
 
+// Same day-grouping shape as groupPickupsByDay above, kept as its own
+// small parallel function rather than a shared generic — OccasionRow and
+// PickupDueBookingItem key their date under different field names
+// (date vs. pickup_date), and this app's own convention elsewhere already
+// favors a second small function over reshaping a working one.
+function groupOccasionsByDay(occasions: OccasionRow[], today: string) {
+  const tomorrow = addDaysToDateString(today, 1);
+  const groups = new Map<string, OccasionRow[]>();
+  for (const o of occasions) {
+    const list = groups.get(o.date) ?? [];
+    list.push(o);
+    groups.set(o.date, list);
+  }
+  return [...groups.entries()]
+    .sort(([a], [b]) => a.localeCompare(b))
+    .map(([date, items]) => ({
+      date,
+      label: date === tomorrow ? "Tomorrow" : formatWeekdayDate(date),
+      items,
+    }));
+}
+
+// One row per birthday/anniversary — WhatsApp greeting button reuses the
+// exact wa.me pattern the invoice-share feature already established
+// (buildWhatsAppLink), just with occasion-specific pre-filled text instead
+// of a receipt link. Primary phone only, same as buildWhatsAppLink's own
+// default. A customer with no valid phone on file gets a genuinely
+// disabled button with a reason in its title, never a broken link — same
+// treatment ReceiptPage's own WhatsApp button already uses.
+function OccasionRowItem({ occasion, shopName }: { occasion: OccasionRow; shopName: string }) {
+  const message = buildOccasionMessage(occasion.type, occasion.name, shopName);
+  const whatsapp = buildWhatsAppLink(occasion.phone, message);
+  return (
+    <div className="found-panel dashboard-occasion-row">
+      <div className="dashboard-occasion-info">
+        <p className="dashboard-row-title">{occasion.name}</p>
+        <span className={`pill ${occasion.type === "birthday" ? "pill-active" : "pill-info"}`}>
+          {occasion.type === "birthday" ? "Birthday" : "Anniversary"}
+        </span>
+      </div>
+      {"url" in whatsapp ? (
+        <a href={whatsapp.url} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-compact">
+          Send Greeting
+        </a>
+      ) : (
+        <button className="btn-secondary btn-compact" disabled title={whatsapp.error}>
+          Send Greeting
+        </button>
+      )}
+    </div>
+  );
+}
+
 export default function DashboardPage() {
   const { session } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Independent, non-blocking fetch — a fallback name here just makes a
+  // WhatsApp greeting's shop attribution generic for one render, whereas
+  // failing the whole Dashboard load over a shop-settings hiccup would be
+  // a much worse tradeoff for something this secondary.
+  const [shopName, setShopName] = useState("the shop");
 
   useEffect(() => {
     fetchDashboardSummary()
       .then(setSummary)
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load dashboard"))
       .finally(() => setLoading(false));
+  }, []);
+
+  useEffect(() => {
+    fetchShopSettings()
+      .then((s) => setShopName(s.name))
+      .catch(() => {});
   }, []);
 
   const showSlowHint = useSlowLoadHint(loading);
@@ -91,10 +157,12 @@ export default function DashboardPage() {
     );
   if (error || !summary) return <div className="page wizard-error">{error ?? "Failed to load dashboard"}</div>;
 
-  const { due_today, overdue, pickups_due_today, pickups_due_this_week, outstanding_balance, stats } = summary;
+  const { due_today, overdue, pickups_due_today, pickups_due_this_week, occasions_today, occasions_this_week, outstanding_balance, stats } =
+    summary;
   const urgentOverdue = overdue.filter((b) => b.next_customer_waiting);
   const otherOverdue = overdue.filter((b) => !b.next_customer_waiting);
   const weekPickupGroups = groupPickupsByDay(pickups_due_this_week, summary.today);
+  const weekOccasionGroups = groupOccasionsByDay(occasions_this_week, summary.today);
 
   return (
     <div className="page">
@@ -207,6 +275,29 @@ export default function DashboardPage() {
               <p className="dashboard-day-group-label">{group.label}</p>
               {group.items.map((p) => (
                 <PickupRow key={p.id} pickup={p} />
+              ))}
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div id="occasions-section">
+        <div className="dashboard-section">
+          <h2>Today's Occasions ({occasions_today.length})</h2>
+          {occasions_today.length === 0 && <p className="wizard-hint">No birthdays or anniversaries today.</p>}
+          {occasions_today.map((o) => (
+            <OccasionRowItem key={`${o.customer_id}-${o.type}`} occasion={o} shopName={shopName} />
+          ))}
+        </div>
+
+        <div className="dashboard-section">
+          <h2>This Week's Occasions ({occasions_this_week.length})</h2>
+          {occasions_this_week.length === 0 && <p className="wizard-hint">No birthdays or anniversaries later this week.</p>}
+          {weekOccasionGroups.map((group) => (
+            <div key={group.date}>
+              <p className="dashboard-day-group-label">{group.label}</p>
+              {group.items.map((o) => (
+                <OccasionRowItem key={`${o.customer_id}-${o.type}`} occasion={o} shopName={shopName} />
               ))}
             </div>
           ))}

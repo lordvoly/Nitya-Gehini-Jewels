@@ -160,6 +160,12 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
           // check keyed off this — see BookingCustomerSummary in lib/bookings.ts).
           customer_type: b.customers?.customer_type ?? "regular",
           created_at: "",
+          // Not part of the booking embed (BookingCustomerSummary) — this
+          // synthetic Customer only exists to drive FOC-visibility here,
+          // never the wedding-date reference/warning (that's BookingForm's
+          // create-flow only), so null is always correct in this context.
+          date_of_birth: null,
+          date_of_wedding: null,
         });
         setBookingCode(b.booking_code);
         setBookingDate(b.booking_date);

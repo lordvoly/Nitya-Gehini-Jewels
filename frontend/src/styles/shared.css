@@ -1584,6 +1584,28 @@ a.stat-card:active {
   margin: 14px 0 6px;
 }
 
+/* Upcoming Occasions — name+type pill on the left, the WhatsApp greeting
+   action on the right, same row-with-a-trailing-action shape as
+   .dashboard-pickup-row above (built on the same .found-panel base). */
+.dashboard-occasion-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dashboard-occasion-info {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dashboard-occasion-info .dashboard-row-title {
+  display: inline;
+}
+
 /* ── Booking cards ────────────────────────────────────────────────────── */
 /* One family booking (parent transaction) can now hold several line items
    on independent schedules — a flat table row can't express that

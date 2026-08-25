@@ -15,6 +15,8 @@ function formFromCustomer(customer: Customer) {
     email: customer.email ?? "",
     address: customer.address,
     customerType: customer.customer_type,
+    dateOfBirth: customer.date_of_birth ?? "",
+    dateOfWedding: customer.date_of_wedding ?? "",
     notes: customer.notes ?? "",
   };
 }
@@ -54,6 +56,8 @@ export function CustomerEditForm({
         address: form.address.trim(),
         notes: form.notes.trim() || null,
         customer_type: form.customerType as CustomerType,
+        date_of_birth: form.dateOfBirth || null,
+        date_of_wedding: form.dateOfWedding || null,
       });
       onSaved(saved);
     } catch (e) {
@@ -111,6 +115,14 @@ export function CustomerEditForm({
             </button>
           ))}
         </div>
+        <label className="field-label">
+          Date of Birth
+          <input type="date" value={form.dateOfBirth} onChange={(e) => update("dateOfBirth", e.target.value)} />
+        </label>
+        <label className="field-label">
+          Wedding Date
+          <input type="date" value={form.dateOfWedding} onChange={(e) => update("dateOfWedding", e.target.value)} />
+        </label>
         <label className="field-label">
           Notes
           <textarea

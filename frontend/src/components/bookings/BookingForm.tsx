@@ -310,6 +310,11 @@ export function BookingForm() {
 
             <p className="field-label">Customer</p>
             <CustomerPicker selected={customer} onSelect={setCustomer} />
+            {customer?.date_of_wedding && (
+              <p className="wizard-hint">
+                Wedding date on file: <strong>{formatDateDisplay(customer.date_of_wedding)}</strong>
+              </p>
+            )}
 
             {lineItems.map((row, index) => {
               const selected = selectedItemFor(row);
@@ -440,6 +445,24 @@ export function BookingForm() {
                     onChange={(e) => updateLineItem(row.key, { returnDate: e.target.value })}
                   />
                 </label>
+              )}
+
+              {/* Live, client-side — both the wedding date and this row's
+                  own return date are already in state, so there's no need
+                  to round-trip through the server the way the same-day-
+                  turnover warning does. Checked per line item (not once per
+                  booking), since a customer can rent the same item twice in
+                  one transaction with different return dates. Plain string
+                  comparison — both are ISO YYYY-MM-DD, safe to compare
+                  lexicographically like every other date comparison in this
+                  app (see checkUniqueRentalConflicts). */}
+              {row.type === "rental" && row.returnDate && customer?.date_of_wedding && row.returnDate > customer.date_of_wedding && (
+                <div className="found-panel">
+                  <p>
+                    This item returns after {customer.name}'s wedding date ({formatDateDisplay(customer.date_of_wedding)}) —
+                    double check this is intended.
+                  </p>
+                </div>
               )}
 
               <label className="field-label">

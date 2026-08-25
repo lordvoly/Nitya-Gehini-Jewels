@@ -17,6 +17,8 @@ export function AddCustomerForm({
   const [email, setEmail] = useState("");
   const [address, setAddress] = useState("");
   const [customerType, setCustomerType] = useState<CustomerType>("regular");
+  const [dateOfBirth, setDateOfBirth] = useState("");
+  const [dateOfWedding, setDateOfWedding] = useState("");
   const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,6 +40,8 @@ export function AddCustomerForm({
         address: address.trim(),
         notes: notes.trim() || null,
         customer_type: customerType,
+        date_of_birth: dateOfBirth || null,
+        date_of_wedding: dateOfWedding || null,
       });
       if (result.type === "created") {
         onCustomerReady(result.customer, false);
@@ -121,6 +125,16 @@ export function AddCustomerForm({
             </button>
           ))}
         </div>
+        <label className="field-label">
+          Date of Birth
+          <input type="date" value={dateOfBirth} onChange={(e) => setDateOfBirth(e.target.value)} />
+        </label>
+        <p className="wizard-hint">Optional — used for the Dashboard's birthday reminders.</p>
+        <label className="field-label">
+          Wedding Date
+          <input type="date" value={dateOfWedding} onChange={(e) => setDateOfWedding(e.target.value)} />
+        </label>
+        <p className="wizard-hint">Optional — used for anniversary reminders and a return-date reference at booking time.</p>
         <label className="field-label">
           Notes
           <textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Optional" />

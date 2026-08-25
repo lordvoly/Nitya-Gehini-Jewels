@@ -28,6 +28,11 @@ export interface Customer {
   notes: string | null;
   customer_type: CustomerType;
   created_at: string;
+  // Plain optional reference dates — never collected before this feature,
+  // so existing customers just have both as null. Recurring yearly by
+  // month+day (see Dashboard's Upcoming Occasions), not exact-date.
+  date_of_birth: string | null;
+  date_of_wedding: string | null;
 }
 
 export interface NewCustomer {
@@ -38,6 +43,8 @@ export interface NewCustomer {
   address: string;
   notes: string | null;
   customer_type: CustomerType;
+  date_of_birth: string | null;
+  date_of_wedding: string | null;
 }
 
 export function fetchCustomers(params?: { search?: string; customer_type?: CustomerCategoryFilter }) {

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
 import { istWeekStart } from "../lib/dates.js";
-import { getDailyBriefingData, getUpcomingPickupsData } from "../lib/dashboardData.js";
+import { getDailyBriefingData, getUpcomingPickupsData, getUpcomingOccasionsData } from "../lib/dashboardData.js";
 import { getItemAvailability } from "../lib/itemsData.js";
 
 export const dashboardRouter = Router();
@@ -45,7 +45,11 @@ async function getBookingsThisWeekCount(): Promise<number> {
 // tool so both surfaces read the exact same queries.
 dashboardRouter.get("/summary", async (_req, res) => {
   try {
-    const [briefing, pickups] = await Promise.all([getDailyBriefingData(), getUpcomingPickupsData()]);
+    const [briefing, pickups, occasions] = await Promise.all([
+      getDailyBriefingData(),
+      getUpcomingPickupsData(),
+      getUpcomingOccasionsData(),
+    ]);
 
     const [
       { count: items_in_catalog, error: catalogItemsError },
@@ -97,6 +101,8 @@ dashboardRouter.get("/summary", async (_req, res) => {
       overdue: briefing.overdue,
       pickups_due_today: pickups.pickups_due_today,
       pickups_due_this_week: pickups.pickups_due_this_week,
+      occasions_today: occasions.occasions_today,
+      occasions_this_week: occasions.occasions_this_week,
       outstanding_balance: briefing.outstanding_balance,
       outstanding_balance_count: briefing.outstanding_balance_count,
       stats: {

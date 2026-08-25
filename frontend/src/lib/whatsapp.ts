@@ -13,3 +13,16 @@ export function buildWhatsAppLink(phone: string | null | undefined, message: str
   }
   return { url: `https://wa.me/91${digits}?text=${encodeURIComponent(message)}` };
 }
+
+// Dashboard "Upcoming Occasions" greeting text — wording differs by type,
+// same as the invoice-share message uses the shop's own name rather than
+// hardcoding it. Primary phone only (the same field buildWhatsAppLink
+// above already defaults to) — phone_secondary is a plain alternate
+// contact number, not treated as a second identifier anywhere else in
+// this app, and a greeting is exactly the kind of message that should go
+// to the number the customer actually gave as their own.
+export function buildOccasionMessage(type: "birthday" | "anniversary", customerName: string, shopName: string): string {
+  return type === "birthday"
+    ? `Happy Birthday, ${customerName}! 🎉 Wishing you a wonderful year ahead — with warm wishes from all of us at ${shopName}.`
+    : `Happy Anniversary, ${customerName}! 💍 Wishing you many more years of happiness together — with warm wishes from all of us at ${shopName}.`;
+}

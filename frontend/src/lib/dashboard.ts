@@ -42,6 +42,19 @@ export interface OverdueBookingItem {
   next_customer_waiting: boolean;
 }
 
+// Month+day match only, recurring yearly — see the backend's
+// getUpcomingOccasionsData for the matching logic (including how Feb 29
+// is handled in non-leap years). `date` is this YEAR's real calendar
+// occurrence, used for the same day-grouping treatment
+// pickups_due_this_week already gets.
+export interface OccasionRow {
+  customer_id: string;
+  name: string;
+  phone: string;
+  type: "birthday" | "anniversary";
+  date: string;
+}
+
 export interface DashboardStats {
   items_in_catalog: number;
   items_retired: number;
@@ -86,6 +99,8 @@ export interface DashboardSummary {
   // — today's own pickups are only in pickups_due_today, never duplicated
   // here.
   pickups_due_this_week: PickupDueBookingItem[];
+  occasions_today: OccasionRow[];
+  occasions_this_week: OccasionRow[];
   outstanding_balance: number;
   outstanding_balance_count: number;
   stats: DashboardStats;

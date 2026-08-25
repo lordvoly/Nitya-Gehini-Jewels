@@ -89,7 +89,7 @@ customersRouter.get("/:id", async (req, res) => {
 // insert-then-catch (rather than a separate pre-check GET) avoids a race
 // between the check and the create.
 customersRouter.post("/", async (req, res) => {
-  const { name, phone, phone_secondary, email, address, notes, customer_type } = req.body ?? {};
+  const { name, phone, phone_secondary, email, address, notes, customer_type, date_of_birth, date_of_wedding } = req.body ?? {};
   if (!name?.trim() || !phone?.trim() || !address?.trim()) {
     return res.status(400).json({ error: "Name, phone, and address are required" });
   }
@@ -112,6 +112,11 @@ customersRouter.post("/", async (req, res) => {
       address: address.trim(),
       notes: notes?.trim() || null,
       customer_type: type,
+      // Plain optional reference dates, never collected before this
+      // feature — same trim-or-null treatment as email, no format/range
+      // validation beyond what the <input type="date"> already guarantees.
+      date_of_birth: date_of_birth?.trim() || null,
+      date_of_wedding: date_of_wedding?.trim() || null,
     })
     .select()
     .single();
@@ -139,7 +144,7 @@ customersRouter.post("/", async (req, res) => {
 // handling as create; updating a customer to their own unchanged phone
 // naturally never collides since it's the same row.
 customersRouter.patch("/:id", async (req, res) => {
-  const { name, phone, phone_secondary, email, address, notes, customer_type } = req.body ?? {};
+  const { name, phone, phone_secondary, email, address, notes, customer_type, date_of_birth, date_of_wedding } = req.body ?? {};
   if (!name?.trim() || !phone?.trim() || !address?.trim()) {
     return res.status(400).json({ error: "Name, phone, and address are required" });
   }
@@ -160,6 +165,8 @@ customersRouter.patch("/:id", async (req, res) => {
       address: address.trim(),
       notes: notes?.trim() || null,
       customer_type: type,
+      date_of_birth: date_of_birth?.trim() || null,
+      date_of_wedding: date_of_wedding?.trim() || null,
     })
     .eq("id", req.params.id)
     .select()
