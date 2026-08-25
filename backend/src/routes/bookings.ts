@@ -1283,7 +1283,15 @@ bookingsRouter.post("/:bookingId/items/:bookingItemId/return", async (req: Authe
   if (bookingItem.type !== "rental") {
     return res.status(400).json({ error: "Only rentals go through returns processing" });
   }
-  if (!ACTIVE_STATUSES.includes(bookingItem.status)) {
+  // Deliberately stricter than ACTIVE_STATUSES (which the sibling
+  // cancel/edit endpoints above correctly use, since those are valid on a
+  // still-'booked' item too) — a return specifically requires the item to
+  // have actually gone out first. Checked here, not just hidden in the
+  // UI, so the same rule holds for a direct API call too.
+  if (bookingItem.status === "booked") {
+    return res.status(409).json({ error: "This item hasn't been picked up yet — confirm pickup before processing a return." });
+  }
+  if (bookingItem.status !== "out") {
     return res.status(409).json({ error: `This item is already '${bookingItem.status}' and can't be returned again` });
   }
 

@@ -313,7 +313,10 @@ export function BookingsList({
             <div className="booking-card-items">
               {b.booking_items.map((bi) => {
                 const itemPill = bookingItemStatusPill(bi);
-                const canReturn = bi.type === "rental" && (bi.status === "booked" || bi.status === "out");
+                // A rental can only be returned once it's actually out —
+                // a still-'booked' item was never physically handed over,
+                // so there's nothing to return yet (confirm pickup first).
+                const canReturn = bi.type === "rental" && bi.status === "out";
                 const canConfirmPickup = bi.status === "booked";
                 return (
                   <div className="booking-card-item" key={bi.id}>
