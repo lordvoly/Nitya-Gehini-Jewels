@@ -1,19 +1,52 @@
-import { useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react";
+
+// How long the strip stays up after the page stops scrolling (or a
+// tap/drag on the strip itself ends) before fading back out.
+const HIDE_DELAY_MS = 1200;
 
 // Android Contacts-style A-Z scrubber: a narrow vertical strip of letters,
 // fixed to the right edge, that jumps the list to a section on tap and
 // scrubs through sections as you drag up/down without lifting your finger.
 // Pointer Events (not separate touch/mouse handlers) so the same code
-// drives both a phone drag and a desktop mouse-down-and-drag.
+// drives both a phone drag and a desktop mouse-down-and-drag. Hidden by
+// default and only revealed while the page is actively scrolling (or the
+// strip itself is being touched) — otherwise it sits over list content
+// all the time even for a short list that doesn't need it.
 export function AlphabetIndex({ letters, onSelect }: { letters: string[]; onSelect: (letter: string) => void }) {
   const containerRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const [activeLetter, setActiveLetter] = useState<string | null>(null);
   const [bubbleY, setBubbleY] = useState(0);
+  const [visible, setVisible] = useState(false);
   // A ref, not state, because it's read-and-written synchronously within a
   // single pointer-move handler purely to dedupe onSelect calls — it never
   // itself drives a render.
   const lastLetterRef = useRef<string | null>(null);
+  // Mirrors `dragging` in a ref so the scroll listener's hide-timer
+  // callback (registered once, outside React's render/state cycle) can
+  // check the current value without becoming stale over the effect's
+  // lifetime.
+  const draggingRef = useRef(false);
+  const hideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  function scheduleHide() {
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    hideTimerRef.current = setTimeout(() => {
+      if (!draggingRef.current) setVisible(false);
+    }, HIDE_DELAY_MS);
+  }
+
+  useEffect(() => {
+    function handleScroll() {
+      setVisible(true);
+      scheduleHide();
+    }
+    window.addEventListener("scroll", handleScroll, { passive: true });
+    return () => {
+      window.removeEventListener("scroll", handleScroll);
+      if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    };
+  }, []);
 
   function letterAtY(clientY: number): string | null {
     const el = containerRef.current;
@@ -47,7 +80,12 @@ export function AlphabetIndex({ letters, onSelect }: { letters: string[]; onSele
       // Fall through — dragging still works via native hover/move as long
       // as the pointer stays over the strip, just without capture.
     }
+    draggingRef.current = true;
     setDragging(true);
+    // A tap/drag can start without a preceding scroll (once the strip is
+    // already up), and must not fade out mid-interaction.
+    if (hideTimerRef.current) clearTimeout(hideTimerRef.current);
+    setVisible(true);
     updateFromClientY(e.clientY);
   }
 
@@ -57,9 +95,11 @@ export function AlphabetIndex({ letters, onSelect }: { letters: string[]; onSele
   }
 
   function handlePointerEnd() {
+    draggingRef.current = false;
     setDragging(false);
     setActiveLetter(null);
     lastLetterRef.current = null;
+    scheduleHide();
   }
 
   if (letters.length < 2) return null;
@@ -68,7 +108,7 @@ export function AlphabetIndex({ letters, onSelect }: { letters: string[]; onSele
     <>
       <div
         ref={containerRef}
-        className="alpha-index"
+        className={`alpha-index${visible ? " visible" : ""}`}
         onPointerDown={handlePointerDown}
         onPointerMove={handlePointerMove}
         onPointerUp={handlePointerEnd}

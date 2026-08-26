@@ -993,7 +993,10 @@ a {
    mobile .mobile-tabbar shapes — those differ slightly in height, but not
    enough to need a per-breakpoint value here. touch-action: none is load
    -bearing: without it, a touch-drag on this strip scrolls the page
-   instead of scrubbing through letters. */
+   instead of scrubbing through letters. Hidden by default (opacity 0 +
+   pointer-events: none, not display: none, so it can fade rather than
+   pop) — AlphabetIndex.tsx toggles the .visible class while the page is
+   actively scrolling or the strip itself is being touched. */
 .alpha-index {
   position: fixed;
   top: 104px;
@@ -1008,6 +1011,14 @@ a {
   padding: 4px 0;
   touch-action: none;
   user-select: none;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 200ms ease;
+}
+
+.alpha-index.visible {
+  opacity: 1;
+  pointer-events: auto;
 }
 
 .alpha-index-letter {
@@ -2847,6 +2858,10 @@ a.chart-tooltip-title:hover {
   .skeleton {
     animation: none;
     background: var(--line);
+  }
+
+  .alpha-index {
+    transition: none;
   }
 
   /* The two recharts-based charts (Most-Booked's bars, Revenue Trend's
