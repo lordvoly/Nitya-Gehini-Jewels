@@ -11,6 +11,15 @@ import {
 import { FilterDropdown } from "../common/FilterDropdown";
 import { TableRowsSkeleton } from "../common/Skeleton";
 import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
+import { AlphabetIndex } from "./AlphabetIndex";
+
+// A stable "#" here, not the first group's actual sort position — a name
+// starting with a digit can sort before "A" under localeCompare, but the
+// side index still shows # last, same as a phone contacts app, since the
+// index is a fixed A-Z reference, not a mirror of on-screen order.
+function letterHeaderId(letter: string): string {
+  return `customer-letter-${letter === "#" ? "hash" : letter}`;
+}
 
 export function CustomersList({
   onEdit,
@@ -68,6 +77,18 @@ export function CustomersList({
     } else {
       letterGroups.push({ letter, customers: [c] });
     }
+  }
+
+  // Canonical A-Z-then-# order for the side index, independent of
+  // letterGroups' actual on-screen order (see letterHeaderId's comment).
+  const presentLetters = new Set(letterGroups.map((g) => g.letter));
+  const indexLetters = [
+    ...[...presentLetters].filter((l) => l !== "#").sort(),
+    ...(presentLetters.has("#") ? ["#"] : []),
+  ];
+
+  function jumpToLetter(letter: string) {
+    document.getElementById(letterHeaderId(letter))?.scrollIntoView({ behavior: "auto", block: "start" });
   }
 
   async function confirmDelete(customer: Customer) {
@@ -171,7 +192,7 @@ export function CustomersList({
             <tbody>
               {letterGroups.map((group) => (
                 <Fragment key={`letter-${group.letter}`}>
-                  <tr className="customer-letter-header">
+                  <tr className="customer-letter-header" id={letterHeaderId(group.letter)}>
                     <td colSpan={6}>{group.letter}</td>
                   </tr>
                   {group.customers.map((c) => (
@@ -223,6 +244,8 @@ export function CustomersList({
           </table>
         </div>
       )}
+
+      <AlphabetIndex letters={indexLetters} onSelect={jumpToLetter} />
     </div>
   );
 }
