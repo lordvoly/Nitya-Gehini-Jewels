@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Routes, Route, NavLink, Link, useNavigate } from "react-router-dom";
-import { Home, Calendar, Gem, Users, Sparkles, Menu, BarChart3, Wallet, AlertCircle, Settings, HelpCircle } from "lucide-react";
+import { Home, Calendar, Gem, Users, Sparkles, Menu, BarChart3, Wallet, AlertCircle, Settings, HelpCircle, LogOut } from "lucide-react";
 import LoginPage from "./pages/LoginPage";
 import DashboardPage from "./pages/DashboardPage";
 import ItemsPage from "./pages/ItemsPage";
@@ -119,8 +119,8 @@ export default function App() {
             <button type="button" className="avatar-btn" aria-label="Your profile" onClick={() => setProfileOpen(true)}>
               <Avatar name={profile?.name} photoUrl={profile?.photo_url} />
             </button>
-            <button className="btn-secondary" onClick={handleLogOut}>
-              Log Out
+            <button type="button" className="btn-icon" aria-label="Log Out" title="Log Out" onClick={handleLogOut}>
+              <LogOut size={18} strokeWidth={2} aria-hidden="true" />
             </button>
           </div>
         )}
