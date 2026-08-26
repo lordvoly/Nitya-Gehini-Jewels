@@ -2,10 +2,13 @@ import { useState } from "react";
 import { useAuth } from "../../lib/auth";
 import { updateMe, uploadProfilePhoto } from "../../lib/me";
 import { supabase } from "../../lib/supabase";
+import { getStoredTheme, setStoredTheme, type ThemePreference } from "../../lib/theme";
 import { PhotoPicker } from "../items/PhotoPicker";
 import { Avatar } from "./Avatar";
 
 const ROLE_LABELS: Record<string, string> = { admin: "Admin", operator: "Operator" };
+const THEME_LABELS: Record<ThemePreference, string> = { system: "System", light: "Light", dark: "Dark" };
+const THEME_OPTIONS: ThemePreference[] = ["system", "light", "dark"];
 
 // Self-service only — own account, no way to view or edit anyone else's
 // profile. There's no :id in any of this panel's requests; every call is
@@ -19,6 +22,16 @@ export function ProfilePanel({ onClose }: { onClose: () => void }) {
   const [nameError, setNameError] = useState<string | null>(null);
 
   const [photoError, setPhotoError] = useState<string | null>(null);
+
+  // Per-device, not per-account — deliberately not synced through
+  // updateMe()/the users table, same reasoning a phone's own display
+  // settings aren't tied to which app account is signed in.
+  const [theme, setTheme] = useState<ThemePreference>(getStoredTheme);
+
+  function handleThemeChange(pref: ThemePreference) {
+    setStoredTheme(pref);
+    setTheme(pref);
+  }
 
   const [currentPassword, setCurrentPassword] = useState("");
   const [newPassword, setNewPassword] = useState("");
@@ -113,6 +126,23 @@ export function ProfilePanel({ onClose }: { onClose: () => void }) {
           <p className="wizard-hint">{profile.email}</p>
         </div>
       </div>
+
+      <p className="field-label">Appearance</p>
+      <div className="toggle-group">
+        {THEME_OPTIONS.map((t) => (
+          <button
+            type="button"
+            key={t}
+            className={theme === t ? "toggle-btn active" : "toggle-btn"}
+            onClick={() => handleThemeChange(t)}
+          >
+            {THEME_LABELS[t]}
+          </button>
+        ))}
+      </div>
+      <p className="wizard-hint">
+        System follows your phone or browser's own light/dark setting automatically.
+      </p>
 
       <label className="field-label">
         Display Name

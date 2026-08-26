@@ -8,11 +8,38 @@
    shot on, chosen so item photos throughout the app don't fight the page
    background. Green/clay are semantic only (success/attention) and
    deliberately far from wine on the wheel so they're never mistaken for
-   brand chrome. Light-only by deliberate choice — this is a tool used in
-   normal shop lighting, not a themeable product. */
+   brand chrome.
+
+   Dark mode (added later — see the three dark-mode blocks below this one)
+   reuses every token name as-is, so no component CSS below ever needed to
+   change; only the values these tokens resolve to differ by theme. One
+   real exception: --wine-strong was used both as *text* (needs to be
+   bright to read against a dark surface) and as a *solid fill* under white
+   text (needs to stay mid-dark, or white-on-it fails contrast) — the same
+   single value can satisfy both roles in light mode (huge headroom either
+   way against a near-white page) but not in dark mode, where those two
+   requirements pull in opposite directions. Rather than force a bad
+   compromise, --wine-strong stayed dedicated to the *text* role and a new
+   --wine-deep token was added for the *fill* role (.mobile-tab-ask-badge's
+   active state, .btn-primary's hover, .alpha-index-bubble) — in light mode
+   --wine-deep is simply an alias of the old --wine-strong value, so this
+   changed zero light-mode pixels. */
 :root {
+  /* Tells the browser which palette to use for anything it renders itself
+     rather than this stylesheet — checkbox/date-input popups, the
+     scrollbar track, form-control default backgrounds. Without this, a
+     plain <input type="checkbox"> stays a stark white box in dark mode
+     regardless of every token above, since it's OS/browser chrome, not
+     CSS-paintable content. accent-color then themes the checked-state fill
+     itself to match the brand color, in both themes since --wine already
+     resolves per-theme. Re-set to `dark` inside both dark-mode blocks
+     below. */
+  color-scheme: light;
+  accent-color: var(--wine);
+
   --wine: #7a1e32;
   --wine-strong: #5c1626;
+  --wine-deep: #5c1626;
   --wine-soft: #f6e9ec;
   --gold: #a9822e;
   --gold-text: #7a5d1f;
@@ -57,6 +84,77 @@
      .empty-state's dashed border/.chat-bubble) which use color, not
      elevation, to mean something specific. */
   --shadow-card: 0 1px 2px rgba(43, 33, 41, 0.05), 0 6px 16px rgba(43, 33, 41, 0.07);
+}
+
+/* Dark mode, three-state per the standard pattern: bare :root above stays
+   the light default; this media block covers "system says dark" (guarded
+   so an explicit :root[data-theme="light"] below always wins over the OS
+   setting); the [data-theme="dark"] block after it covers an explicit
+   in-app choice regardless of what the OS says. frontend/src/lib/theme.ts
+   is the only thing that ever sets/clears data-theme; nothing here reads
+   it directly. Every value below was chosen and checked against the real
+   WCAG contrast formula (not eyeballed), same rigor this file's own
+   --gold/--gold-text split above already used — see the scratch contrast
+   script referenced in this session's own history for the actual numbers.
+   --wine itself is the one token still asked to serve both the "readable
+   text on a dark surface" and "solid fill under white text" roles (same
+   tension --wine-strong hit above) — no single value clears the standard
+   4.5:1 AA bar in both roles at once here, so this picks the closest
+   achievable balance (~4.1-4.5:1 depending on which surface it's sitting
+   on) rather than splitting a *second* token for what's a much smaller
+   gap than --wine-strong's was. */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+    --wine: #ca4a63;
+    --wine-strong: #f2a7b6;
+    --wine-deep: #9c3049;
+    --wine-soft: #3a1f27;
+    --gold: #c9a24a;
+    --gold-text: #e0b563;
+    --gold-soft: #332a17;
+    --ivory: #181113;
+    --surface: #241a1d;
+    --ink: #f3e9e6;
+    --ink-soft: #c2aca7;
+    --line: #453337;
+    --green: #7fbf95;
+    --green-soft: #1c2a1f;
+    --clay: #e08a72;
+    --clay-soft: #331f18;
+    --blue: #8fb8d6;
+    --blue-soft: #1c2732;
+    --amber: #d9a83e;
+    --amber-soft: #332813;
+    --focus: #e0b563;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 16px rgba(0, 0, 0, 0.35);
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --wine: #ca4a63;
+  --wine-strong: #f2a7b6;
+  --wine-deep: #9c3049;
+  --wine-soft: #3a1f27;
+  --gold: #c9a24a;
+  --gold-text: #e0b563;
+  --gold-soft: #332a17;
+  --ivory: #181113;
+  --surface: #241a1d;
+  --ink: #f3e9e6;
+  --ink-soft: #c2aca7;
+  --line: #453337;
+  --green: #7fbf95;
+  --green-soft: #1c2a1f;
+  --clay: #e08a72;
+  --clay-soft: #331f18;
+  --blue: #8fb8d6;
+  --blue-soft: #1c2732;
+  --amber: #d9a83e;
+  --amber-soft: #332813;
+  --focus: #e0b563;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 16px rgba(0, 0, 0, 0.35);
 }
 
 @font-face {
@@ -269,7 +367,7 @@ a {
 }
 
 .mobile-tab-ask.active .mobile-tab-ask-badge {
-  background: var(--wine-strong);
+  background: var(--wine-deep);
 }
 
 .more-menu {
@@ -762,8 +860,8 @@ a {
 }
 
 .btn-primary:hover:not(:disabled) {
-  background: var(--wine-strong);
-  border-color: var(--wine-strong);
+  background: var(--wine-deep);
+  border-color: var(--wine-deep);
 }
 
 .btn-primary:disabled {
@@ -1046,7 +1144,7 @@ a {
   width: 56px;
   height: 56px;
   border-radius: 50%;
-  background: var(--wine-strong);
+  background: var(--wine-deep);
   color: #fff;
   display: flex;
   align-items: center;
@@ -2694,7 +2792,15 @@ a.chart-tooltip-title:hover {
 /* Print media hides all app chrome — header, both nav shapes, and any
    explicitly-marked .no-print controls (the Print button itself) — leaving
    only the receipt content, same idea across every printable view this app
-   ever grows. */
+   ever grows. Also forces every token back to its light-mode value
+   regardless of the on-screen theme (dark mode, added later — see the
+   design-tokens comment at the top of this file) — a printed/saved-as-PDF
+   receipt should always look like a real paper receipt, never a dark-mode
+   render with near-black "surface" boxes on an otherwise white page. The
+   values are simply re-listed here rather than referencing the light
+   :root block indirectly, since a plain :root selector inside @media
+   print would still lose to a more specific :root[data-theme="dark"] rule
+   outside it. */
 @media print {
   .app-header,
   .app-tabbar,
@@ -2709,6 +2815,40 @@ a.chart-tooltip-title:hover {
 
   body {
     background: #fff;
+  }
+
+  /* :root:root:root, not plain :root — deliberately over-specific (0,3,0)
+     to unambiguously beat :root[data-theme="dark"] and the
+     :root:not([data-theme="light"]) dark-mode media rule (both (0,2,0)):
+     media-query nesting alone doesn't decide the cascade when a page is
+     printed while the OS itself reports dark (both @media blocks are
+     simultaneously true), only specificity does — same lesson as this
+     file's own item-detail-name/data-table td overflow-wrap fixes
+     elsewhere. Same technique, not !important, so it stays plain CSS. */
+  :root:root:root {
+    color-scheme: light;
+    --wine: #7a1e32;
+    --wine-strong: #5c1626;
+    --wine-deep: #5c1626;
+    --wine-soft: #f6e9ec;
+    --gold: #a9822e;
+    --gold-text: #7a5d1f;
+    --gold-soft: #f1e6ce;
+    --ivory: #fbf8f3;
+    --surface: #ffffff;
+    --ink: #2b2129;
+    --ink-soft: #6e6067;
+    --line: #e9dfd8;
+    --green: #3f6b4c;
+    --green-soft: #e4eee6;
+    --clay: #b3402b;
+    --clay-soft: #f7e5e0;
+    --blue: #3a5f7a;
+    --blue-soft: #e6edf1;
+    --amber: #f0c14b;
+    --amber-soft: #fffaf0;
+    --focus: #7a5d1f;
+    --shadow-card: 0 1px 2px rgba(43, 33, 41, 0.05), 0 6px 16px rgba(43, 33, 41, 0.07);
   }
 }
 

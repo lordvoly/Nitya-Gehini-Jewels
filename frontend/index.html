@@ -11,6 +11,18 @@
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
     <meta name="theme-color" content="#7a1e32" />
+    <!-- Sets data-theme before first paint, so an explicit dark/light
+         choice (frontend/src/lib/theme.ts, localStorage key "ngj-theme")
+         never flashes the wrong theme while main.tsx's own module script
+         is still loading. "system" (the default — no stored value) needs
+         no attribute at all; shared.css's prefers-color-scheme media query
+         already handles that case with zero JS. -->
+    <script>
+      (function () {
+        var v = localStorage.getItem("ngj-theme");
+        if (v === "light" || v === "dark") document.documentElement.setAttribute("data-theme", v);
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>
