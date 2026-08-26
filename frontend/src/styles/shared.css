@@ -412,6 +412,24 @@ a {
     width: 52px;
     height: 52px;
   }
+
+  /* CustomersList's A-Z section divider row (see .customer-letter-header
+     below) must NOT pick up the plain `.data-table tr` card treatment
+     (shadow, radius, padding, margin) a couple of rules up — it's a slim
+     label bar, not a data row, at this breakpoint. Selector is
+     deliberately over-specific (.data-table tr.customer-letter-header,
+     not just .customer-letter-header) to unambiguously beat
+     `.data-table tr`'s own specificity rather than reach for !important. */
+  .data-table tr.customer-letter-header {
+    box-shadow: none;
+    background: none;
+    padding: 0;
+    margin: 14px 0 4px;
+  }
+
+  .data-table tr.customer-letter-header:first-child {
+    margin-top: 0;
+  }
 }
 
 /* ── Page layout ──────────────────────────────────────────────────────── */
@@ -951,6 +969,21 @@ a {
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.04em;
+}
+
+/* CustomersList's A-Z section divider (mobile-contacts-style grouping) —
+   a slim label bar between letter groups, not a real data row; the mobile
+   card-collapse override for this same class lives in the compact-layout
+   @media block above. */
+.customer-letter-header td {
+  padding: 5px 8px;
+  font-family: "Fraunces", Georgia, serif;
+  font-weight: 700;
+  font-size: 13px;
+  color: var(--wine-strong);
+  background: var(--wine-soft);
+  border-bottom: none;
+  border-radius: var(--radius);
 }
 
 .row-thumb {

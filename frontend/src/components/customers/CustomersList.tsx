@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Pencil, Trash2 } from "lucide-react";
 import {
   CUSTOMER_TYPE_LABELS,
@@ -36,7 +36,14 @@ export function CustomersList({
           // A newer search may have started (and possibly already resolved)
           // while this request was in flight — an older response landing
           // late must not clobber the newer results.
-          if (!cancelled) setCustomers(data);
+          if (!cancelled) {
+            // Mobile-contacts-style A-Z order, not the backend's
+            // newest-first default (which is right for other callers of
+            // fetchCustomers, e.g. CustomerPicker's recency-biased quick
+            // search — this sort is scoped to this list only).
+            const sorted = [...data].sort((a, b) => a.name.localeCompare(b.name, undefined, { sensitivity: "base" }));
+            setCustomers(sorted);
+          }
         })
         .finally(() => {
           if (!cancelled) setLoading(false);
@@ -47,6 +54,21 @@ export function CustomersList({
       clearTimeout(handle);
     };
   }, [term, categoryFilter]);
+
+  // Groups the already-sorted list into contacts-app-style letter sections —
+  // a name starting with anything other than A-Z (digit, symbol) falls under
+  // "#", same fallback bucket a phone contacts app uses.
+  const letterGroups: { letter: string; customers: Customer[] }[] = [];
+  for (const c of customers) {
+    const first = c.name.trim().charAt(0).toUpperCase();
+    const letter = first >= "A" && first <= "Z" ? first : "#";
+    const lastGroup = letterGroups[letterGroups.length - 1];
+    if (lastGroup && lastGroup.letter === letter) {
+      lastGroup.customers.push(c);
+    } else {
+      letterGroups.push({ letter, customers: [c] });
+    }
+  }
 
   async function confirmDelete(customer: Customer) {
     setDeletingId(customer.id);
@@ -147,44 +169,55 @@ export function CustomersList({
               </tr>
             </thead>
             <tbody>
-              {customers.map((c) => (
-                <tr key={c.id}>
-                  <td data-label="Name">
-                    <button type="button" className="link-button" onClick={() => onView(c)}>
-                      {c.name}
-                    </button>
-                  </td>
-                  <td data-label="Phone">{c.phone}</td>
-                  <td data-label="Email">{c.email ?? "—"}</td>
-                  <td data-label="Address">{c.address}</td>
-                  <td data-label="Type">{CUSTOMER_TYPE_LABELS[c.customer_type]}</td>
-                  <td className="row-actions">
-                    {confirmingId === c.id ? (
-                      <>
-                        <span>Delete this customer?</span>
-                        <button
-                          className="btn-danger"
-                          onClick={() => confirmDelete(c)}
-                          disabled={deletingId === c.id}
-                        >
-                          {deletingId === c.id ? "…" : "Yes, Delete"}
+              {letterGroups.map((group) => (
+                <Fragment key={`letter-${group.letter}`}>
+                  <tr className="customer-letter-header">
+                    <td colSpan={6}>{group.letter}</td>
+                  </tr>
+                  {group.customers.map((c) => (
+                    <tr key={c.id}>
+                      <td data-label="Name">
+                        <button type="button" className="link-button" onClick={() => onView(c)}>
+                          {c.name}
                         </button>
-                        <button className="btn-secondary" onClick={() => setConfirmingId(null)}>
-                          Cancel
-                        </button>
-                      </>
-                    ) : (
-                      <>
-                        <button className="btn-icon" aria-label="Edit" onClick={() => onEdit(c)}>
-                          <Pencil size={16} strokeWidth={2} aria-hidden="true" />
-                        </button>
-                        <button className="btn-icon btn-icon-danger" aria-label="Delete" onClick={() => setConfirmingId(c.id)}>
-                          <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
-                        </button>
-                      </>
-                    )}
-                  </td>
-                </tr>
+                      </td>
+                      <td data-label="Phone">{c.phone}</td>
+                      <td data-label="Email">{c.email ?? "—"}</td>
+                      <td data-label="Address">{c.address}</td>
+                      <td data-label="Type">{CUSTOMER_TYPE_LABELS[c.customer_type]}</td>
+                      <td className="row-actions">
+                        {confirmingId === c.id ? (
+                          <>
+                            <span>Delete this customer?</span>
+                            <button
+                              className="btn-danger"
+                              onClick={() => confirmDelete(c)}
+                              disabled={deletingId === c.id}
+                            >
+                              {deletingId === c.id ? "…" : "Yes, Delete"}
+                            </button>
+                            <button className="btn-secondary" onClick={() => setConfirmingId(null)}>
+                              Cancel
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button className="btn-icon" aria-label="Edit" onClick={() => onEdit(c)}>
+                              <Pencil size={16} strokeWidth={2} aria-hidden="true" />
+                            </button>
+                            <button
+                              className="btn-icon btn-icon-danger"
+                              aria-label="Delete"
+                              onClick={() => setConfirmingId(c.id)}
+                            >
+                              <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
+                            </button>
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </Fragment>
               ))}
             </tbody>
           </table>
