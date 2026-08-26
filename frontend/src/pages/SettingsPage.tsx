@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { useAuth } from "../lib/auth";
 import { fetchShopSettings, updateShopSettings, type ShopSettings } from "../lib/shopSettings";
+import { toIntOrNull } from "../lib/numbers";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { FormSkeleton } from "../components/common/Skeleton";
 import "../styles/shared.css";
@@ -11,6 +12,7 @@ export default function SettingsPage() {
   const [name, setName] = useState("");
   const [address, setAddress] = useState("");
   const [phone, setPhone] = useState("");
+  const [occasionDiscountPercent, setOccasionDiscountPercent] = useState("10");
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -23,6 +25,7 @@ export default function SettingsPage() {
         setName(s.name);
         setAddress(s.address);
         setPhone(s.phone);
+        setOccasionDiscountPercent(String(s.occasion_discount_percent));
       })
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load shop settings"))
       .finally(() => setLoading(false));
@@ -33,7 +36,12 @@ export default function SettingsPage() {
     setSaved(false);
     setSaving(true);
     try {
-      const updated = await updateShopSettings({ name, address, phone });
+      const updated = await updateShopSettings({
+        name,
+        address,
+        phone,
+        occasion_discount_percent: toIntOrNull(occasionDiscountPercent) ?? 10,
+      });
       setSettings(updated);
       setSaved(true);
     } catch (e) {
@@ -103,6 +111,19 @@ export default function SettingsPage() {
         Phone
         <input type="text" value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Not set" />
       </label>
+      <label className="field-label">
+        Occasion Discount (%)
+        <input
+          type="number"
+          min={0}
+          value={occasionDiscountPercent}
+          onChange={(e) => setOccasionDiscountPercent(e.target.value)}
+        />
+      </label>
+      <p className="wizard-hint">
+        The discount % offered in the birthday/anniversary WhatsApp greeting sent from the Dashboard's Upcoming
+        Occasions section.
+      </p>
 
       <div className="wizard-actions">
         <button className="btn-primary btn-save" disabled={saving || !name.trim()} onClick={handleSave}>

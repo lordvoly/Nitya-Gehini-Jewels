@@ -94,8 +94,16 @@ function groupOccasionsByDay(occasions: OccasionRow[], today: string) {
 // default. A customer with no valid phone on file gets a genuinely
 // disabled button with a reason in its title, never a broken link — same
 // treatment ReceiptPage's own WhatsApp button already uses.
-function OccasionRowItem({ occasion, shopName }: { occasion: OccasionRow; shopName: string }) {
-  const message = buildOccasionMessage(occasion.type, occasion.name, shopName);
+function OccasionRowItem({
+  occasion,
+  shopName,
+  discountPercent,
+}: {
+  occasion: OccasionRow;
+  shopName: string;
+  discountPercent: number;
+}) {
+  const message = buildOccasionMessage(occasion.type, occasion.name, shopName, discountPercent);
   const whatsapp = buildWhatsAppLink(occasion.phone, message);
   return (
     <div className="found-panel dashboard-occasion-row">
@@ -123,11 +131,12 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  // Independent, non-blocking fetch — a fallback name here just makes a
-  // WhatsApp greeting's shop attribution generic for one render, whereas
-  // failing the whole Dashboard load over a shop-settings hiccup would be
-  // a much worse tradeoff for something this secondary.
+  // Independent, non-blocking fetch — a fallback name/discount here just
+  // makes a WhatsApp greeting generic for one render, whereas failing the
+  // whole Dashboard load over a shop-settings hiccup would be a much
+  // worse tradeoff for something this secondary.
   const [shopName, setShopName] = useState("the shop");
+  const [occasionDiscountPercent, setOccasionDiscountPercent] = useState(10);
 
   useEffect(() => {
     fetchDashboardSummary()
@@ -138,7 +147,10 @@ export default function DashboardPage() {
 
   useEffect(() => {
     fetchShopSettings()
-      .then((s) => setShopName(s.name))
+      .then((s) => {
+        setShopName(s.name);
+        setOccasionDiscountPercent(s.occasion_discount_percent);
+      })
       .catch(() => {});
   }, []);
 
@@ -286,7 +298,12 @@ export default function DashboardPage() {
           <h2>Today's Occasions ({occasions_today.length})</h2>
           {occasions_today.length === 0 && <p className="wizard-hint">No birthdays or anniversaries today.</p>}
           {occasions_today.map((o) => (
-            <OccasionRowItem key={`${o.customer_id}-${o.type}`} occasion={o} shopName={shopName} />
+            <OccasionRowItem
+              key={`${o.customer_id}-${o.type}`}
+              occasion={o}
+              shopName={shopName}
+              discountPercent={occasionDiscountPercent}
+            />
           ))}
         </div>
 
@@ -297,7 +314,12 @@ export default function DashboardPage() {
             <div key={group.date}>
               <p className="dashboard-day-group-label">{group.label}</p>
               {group.items.map((o) => (
-                <OccasionRowItem key={`${o.customer_id}-${o.type}`} occasion={o} shopName={shopName} />
+                <OccasionRowItem
+                  key={`${o.customer_id}-${o.type}`}
+                  occasion={o}
+                  shopName={shopName}
+                  discountPercent={occasionDiscountPercent}
+                />
               ))}
             </div>
           ))}
