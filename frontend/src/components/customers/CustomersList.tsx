@@ -1,5 +1,5 @@
 import { useEffect, useState } from "react";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import {
   CUSTOMER_TYPE_LABELS,
   CUSTOMER_CATEGORY_FILTER_LABELS,
@@ -178,8 +178,8 @@ export function CustomersList({
                         <button className="btn-icon" aria-label="Edit" onClick={() => onEdit(c)}>
                           <Pencil size={16} strokeWidth={2} aria-hidden="true" />
                         </button>
-                        <button className="btn-danger" onClick={() => setConfirmingId(c.id)}>
-                          Delete
+                        <button className="btn-icon btn-icon-danger" aria-label="Delete" onClick={() => setConfirmingId(c.id)}>
+                          <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
                         </button>
                       </>
                     )}

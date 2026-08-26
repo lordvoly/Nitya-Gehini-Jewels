@@ -1,6 +1,6 @@
 import { useMemo, useState } from "react";
 import { Link } from "react-router-dom";
-import { Pencil } from "lucide-react";
+import { Pencil, Trash2 } from "lucide-react";
 import type { Item } from "../../lib/items";
 import { itemStatusPill } from "../../lib/statusPill";
 import { PhotoLightbox } from "./PhotoLightbox";
@@ -288,8 +288,8 @@ export function ItemsList({
                               {togglingId === item.id ? "…" : "Reactivate"}
                             </button>
                           )}
-                          <button className="btn-danger" onClick={() => setConfirmingId(item.id)}>
-                            Delete
+                          <button className="btn-icon btn-icon-danger" aria-label="Delete" onClick={() => setConfirmingId(item.id)}>
+                            <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
                           </button>
                         </>
                       )}

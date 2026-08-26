@@ -810,6 +810,19 @@ a {
   cursor: not-allowed;
 }
 
+/* Delete's own icon-button variant — same shape as .btn-icon, but in the
+   clay/red already used for .btn-danger everywhere else, so converting
+   the trigger button to icon-only doesn't lose the "this is destructive"
+   visual cue that color was carrying. */
+.btn-icon-danger {
+  border-color: var(--clay);
+  color: var(--clay);
+}
+
+.btn-icon-danger:hover:not(:disabled) {
+  background: var(--clay-soft);
+}
+
 /* A smaller footprint for a lone CTA that doesn't need
    .btn-primary/.btn-secondary/.btn-danger's full default size (Record
    Payment, Print/Download Receipt, Edit Booking) — sizing only, so
