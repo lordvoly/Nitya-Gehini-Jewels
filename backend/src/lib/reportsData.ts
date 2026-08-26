@@ -15,6 +15,11 @@ export interface BookingItemRow {
   item_id: string;
   items: { item_code: string; name: string } | null;
   bookings: { customer_id: string; customers: { name: string; phone: string; customer_type: "regular" | "influencer" | "mua" } | null } | null;
+  // Optional — only getPeriodBookingItems actually selects this column;
+  // getItemBookingItems/getAllBookingItems don't, so it stays undefined
+  // there rather than claiming a guarantee those queries don't provide.
+  // Feeds getRevenueTrend's date-bucketing below.
+  pickup_date?: string;
 }
 
 const isRegular = (b: BookingItemRow) => (b.bookings?.customers?.customer_type ?? "regular") === "regular";
@@ -33,7 +38,9 @@ export function effectivePrice(item: { price_charged: number; is_foc: boolean })
 export async function getPeriodBookingItems(from: string, to: string): Promise<BookingItemRow[]> {
   const { data, error } = await supabase
     .from("booking_items")
-    .select("id, booking_id, type, price_charged, is_foc, item_id, items(item_code, name), bookings(customer_id, customers(name, phone, customer_type))")
+    .select(
+      "id, booking_id, type, price_charged, is_foc, item_id, pickup_date, items(item_code, name), bookings(customer_id, customers(name, phone, customer_type))",
+    )
     .neq("status", "cancelled")
     .gte("pickup_date", from)
     .lte("pickup_date", to)
@@ -83,6 +90,94 @@ export function rankMostBookedItems(periodItems: BookingItemRow[], includeCollab
     else itemCounts.set(b.item_id, { item_id: b.item_id, item_code: b.items.item_code, name: b.items.name, booking_count: 1 });
   }
   return [...itemCounts.values()].sort((a, b) => b.booking_count - a.booking_count);
+}
+
+// ── Revenue trend ("growth" chart) ─────────────────────────────────────
+
+export type RevenueTrendGranularity = "day" | "week" | "month" | "year";
+
+export interface RevenueTrendPoint {
+  // The bucket's own start date (ISO) — a day bucket is itself, a week
+  // bucket is its Monday, a month bucket is its 1st, a year bucket is its
+  // Jan 1. The frontend formats this into a display label; never a
+  // separately-computed label sent from here (one source of truth).
+  bucket: string;
+  revenue: number;
+}
+
+function daysBetweenDates(from: string, to: string): number {
+  const fromMs = new Date(`${from}T00:00:00Z`).getTime();
+  const toMs = new Date(`${to}T00:00:00Z`).getTime();
+  return Math.round((toMs - fromMs) / 86_400_000);
+}
+
+function mondayOf(dateStr: string): string {
+  const d = new Date(`${dateStr}T00:00:00Z`);
+  const day = d.getUTCDay(); // 0 (Sun) .. 6 (Sat)
+  const diffToMonday = day === 0 ? 6 : day - 1;
+  d.setUTCDate(d.getUTCDate() - diffToMonday);
+  return d.toISOString().slice(0, 10);
+}
+
+function firstOfMonth(dateStr: string): string {
+  return `${dateStr.slice(0, 7)}-01`;
+}
+
+function firstOfYear(dateStr: string): string {
+  return `${dateStr.slice(0, 4)}-01-01`;
+}
+
+function bucketKeyFor(dateStr: string, granularity: RevenueTrendGranularity): string {
+  if (granularity === "day") return dateStr;
+  if (granularity === "week") return mondayOf(dateStr);
+  if (granularity === "month") return firstOfMonth(dateStr);
+  return firstOfYear(dateStr);
+}
+
+// Every bucket key in [from, to], inclusive of whichever bucket each
+// endpoint falls in — so a chart always starts and ends at the edges of
+// the selected range, not just wherever the first/last actual booking
+// happened to land, and every bucket in between gets an explicit ₹0
+// rather than being silently skipped (a line/area chart connecting across
+// a skipped gap would misrepresent a genuinely quiet period as a smooth
+// slope instead of a flat trough).
+function enumerateBucketKeys(from: string, to: string, granularity: RevenueTrendGranularity): string[] {
+  const keys: string[] = [];
+  let cursor = bucketKeyFor(from, granularity);
+  const lastKey = bucketKeyFor(to, granularity);
+  while (cursor <= lastKey) {
+    keys.push(cursor);
+    const d = new Date(`${cursor}T00:00:00Z`);
+    if (granularity === "day") d.setUTCDate(d.getUTCDate() + 1);
+    else if (granularity === "week") d.setUTCDate(d.getUTCDate() + 7);
+    else if (granularity === "month") d.setUTCMonth(d.getUTCMonth() + 1);
+    else d.setUTCFullYear(d.getUTCFullYear() + 1);
+    cursor = d.toISOString().slice(0, 10);
+  }
+  return keys;
+}
+
+// Auto-picks a bucket size from the resolved [from, to] span so a 1-week
+// report isn't flattened into a single monthly bar, and a many-year
+// "Lifetime" report isn't hundreds of daily points wide. Reuses
+// periodItems (already fetched by the caller for summary/most-booked) —
+// no second query.
+export function getRevenueTrend(periodItems: BookingItemRow[], from: string, to: string): { granularity: RevenueTrendGranularity; points: RevenueTrendPoint[] } {
+  const span = daysBetweenDates(from, to);
+  const granularity: RevenueTrendGranularity = span <= 14 ? "day" : span <= 120 ? "week" : span <= 730 ? "month" : "year";
+
+  const totals = new Map<string, number>();
+  for (const key of enumerateBucketKeys(from, to, granularity)) totals.set(key, 0);
+  for (const item of periodItems) {
+    if (!item.pickup_date) continue;
+    const key = bucketKeyFor(item.pickup_date, granularity);
+    totals.set(key, (totals.get(key) ?? 0) + effectivePrice(item));
+  }
+
+  return {
+    granularity,
+    points: [...totals.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([bucket, revenue]) => ({ bucket, revenue })),
+  };
 }
 
 // All-time, non-cancelled booking_items — no date bound, unlike

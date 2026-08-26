@@ -37,3 +37,19 @@ export function formatWeekdayDate(dateStr: string): string {
   const date = new Date(y, m - 1, d);
   return date.toLocaleDateString("en-GB", { weekday: "short", day: "numeric", month: "short" });
 }
+
+// Reports' Revenue Trend chart — each point's `bucket` is already the
+// bucket's own start date (a day, a Monday, a 1st-of-month, or a Jan 1;
+// see backend getRevenueTrend), so this only ever formats a display
+// label, never computes which bucket a date belongs to. Same local-
+// components construction as the two functions above, for the same
+// timezone-shift reason.
+export function formatTrendBucketLabel(dateStr: string, granularity: "day" | "week" | "month" | "year"): string {
+  if (granularity === "year") return dateStr.slice(0, 4);
+  const [y, m, d] = dateStr.split("-").map(Number);
+  const date = new Date(y, m - 1, d);
+  if (granularity === "month") return date.toLocaleDateString("en-GB", { month: "short", year: "numeric" });
+  // day and week both show as a short day+month — a week bucket's label
+  // is its own start date, "the week of", not a separate range shape.
+  return date.toLocaleDateString("en-GB", { day: "numeric", month: "short" });
+}

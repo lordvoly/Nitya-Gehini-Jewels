@@ -1503,6 +1503,91 @@ a.stat-card:active {
   color: var(--wine);
 }
 
+/* Reports' date-range quick-select — same pill look as .report-nav-pill
+   above (horizontally-scrolling row, no wrapping/cramping at mobile
+   widths the way 6 items in a .toggle-group's flex:1 row would), but a
+   real persistent selection control (needs an .active state) rather than
+   a plain jump-to-section trigger, so kept as its own class rather than
+   overloading .report-nav-pill with a second meaning. */
+.filter-pill-row {
+  display: flex;
+  gap: 8px;
+  overflow-x: auto;
+  padding: 4px 2px 10px;
+  margin-bottom: 4px;
+}
+
+.filter-pill {
+  flex: 0 0 auto;
+  white-space: nowrap;
+  min-height: var(--tap);
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  font-family: inherit;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius-pill);
+  background: var(--surface);
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.filter-pill:hover:not(.active) {
+  border-color: var(--wine);
+  color: var(--wine);
+}
+
+.filter-pill.active {
+  background: var(--wine);
+  border-color: var(--wine);
+  color: #fff;
+}
+
+/* Most-Booked Items' vertical bar chart and the Revenue Trend area chart
+   both use recharts (added as a real dependency for these two) rather
+   than plain CSS — a proper skyline-style bar chart with axes/gridlines/
+   tooltips is enough chart machinery that hand-rolling it stopped being
+   the simpler option. .bar-chart-scroll is the one piece that's still
+   plain CSS: recharts renders into a fixed-width SVG, so once there are
+   enough bars to need one, it scrolls horizontally in its own container —
+   same rule this app already applies to wide tables, never letting the
+   page itself scroll sideways. */
+.bar-chart-scroll {
+  overflow-x: auto;
+  margin: 4px 0 20px;
+}
+
+/* Recharts' <Tooltip content={...}> replaces its default tooltip
+   entirely, so this is a real styled panel matching this app's own card
+   language (surface + border + shadow + radius), not a themed override of
+   recharts' own plain default box. */
+.chart-tooltip {
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: var(--shadow-card);
+  padding: 8px 12px;
+  font-size: 12.5px;
+  max-width: 220px;
+}
+
+.chart-tooltip-title {
+  display: block;
+  font-weight: 700;
+  color: var(--ink);
+  margin-bottom: 2px;
+  text-decoration: none;
+}
+
+a.chart-tooltip-title:hover {
+  text-decoration: underline;
+}
+
+.chart-tooltip p {
+  margin: 0;
+  color: var(--ink-soft);
+}
+
 .dashboard-link {
   display: block;
   text-decoration: none;
@@ -2669,4 +2754,11 @@ a.stat-card:active {
     animation: none;
     background: var(--line);
   }
+
+  /* The two recharts-based charts (Most-Booked's bars, Revenue Trend's
+     area) take their own reduced-motion signal via
+     usePrefersReducedMotion() and pass isAnimationActive={false} directly
+     — recharts animates via requestAnimationFrame-driven SVG attribute
+     interpolation, which a CSS transition/animation rule can't reach, so
+     there's deliberately no entry for them here. */
 }

@@ -3,7 +3,20 @@ import { Link, useLocation } from "react-router-dom";
 import { fetchReports, type ReportsResponse } from "../lib/reports";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { ListPageSkeleton } from "../components/common/Skeleton";
+import { MostBookedBarChart } from "../components/reports/MostBookedBarChart";
+import { RevenueTrendChart } from "../components/reports/RevenueTrendChart";
 import "../styles/shared.css";
+
+type RangePreset = "week" | "month" | "3months" | "6months" | "year" | "lifetime";
+
+const RANGE_PRESETS: { value: RangePreset; label: string }[] = [
+  { value: "week", label: "Past Week" },
+  { value: "month", label: "Past Month" },
+  { value: "3months", label: "Past 3 Months" },
+  { value: "6months", label: "Past 6 Months" },
+  { value: "year", label: "Past Year" },
+  { value: "lifetime", label: "Lifetime" },
+];
 
 export default function ReportsPage() {
   const location = useLocation();
@@ -13,11 +26,19 @@ export default function ReportsPage() {
   const [includeCollabs, setIncludeCollabs] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Which quick-select pill (if any) produced the currently-shown period —
+  // null means "custom", i.e. the calendar pickers were edited directly
+  // and no longer match any preset's resolved range. Tracked here rather
+  // than inferred from period.from/to, since a preset's own resolved
+  // dates could coincidentally match hand-picked ones.
+  const [activePreset, setActivePreset] = useState<RangePreset | null>("month");
 
-  // First load: no from/to, so the backend picks "this month" (IST) for
-  // us — we only ever display what it resolved, never compute it here.
+  // First load: explicitly request the "Past Month" preset (the new
+  // default, replacing the old "this calendar month" one) so activePreset
+  // starts correctly highlighted — we still only ever display whatever
+  // period the backend actually resolved, never compute it here.
   useEffect(() => {
-    fetchReports()
+    fetchReports({ range: "month" })
       .then((res) => {
         setData(res);
         setFrom(res.period.from);
@@ -44,13 +65,29 @@ export default function ReportsPage() {
       .finally(() => setLoading(false));
   }
 
+  function handlePresetClick(preset: RangePreset) {
+    setActivePreset(preset);
+    setLoading(true);
+    setError(null);
+    fetchReports({ range: preset, includeCollabs })
+      .then((res) => {
+        setData(res);
+        setFrom(res.period.from);
+        setTo(res.period.to);
+      })
+      .catch((e) => setError(e instanceof Error ? e.message : "Failed to load reports"))
+      .finally(() => setLoading(false));
+  }
+
   function handleFromChange(value: string) {
     setFrom(value);
+    setActivePreset(null);
     if (value && to) refresh(value, to, includeCollabs);
   }
 
   function handleToChange(value: string) {
     setTo(value);
+    setActivePreset(null);
     if (from && value) refresh(from, value, includeCollabs);
   }
 
@@ -75,10 +112,11 @@ export default function ReportsPage() {
   if (error && !data) return <div className="page wizard-error">{error}</div>;
   if (!data) return null;
 
-  const { summary, most_booked_items, repeat_customers, idle_inventory, pnl, outstanding_dues } = data;
+  const { summary, most_booked_items, revenue_trend, repeat_customers, idle_inventory, pnl, outstanding_dues } = data;
 
   const sections = [
     { id: "overview-section", label: "Overview" },
+    { id: "revenue-trend-section", label: "Revenue Trend" },
     { id: "pnl-section", label: "P&L" },
     { id: "most-booked-section", label: "Most-Booked" },
     { id: "repeat-customers-section", label: "Repeat Customers" },
@@ -101,6 +139,19 @@ export default function ReportsPage() {
         ))}
       </nav>
 
+      <div className="filter-pill-row" aria-label="Quick date range">
+        {RANGE_PRESETS.map((p) => (
+          <button
+            key={p.value}
+            type="button"
+            className={activePreset === p.value ? "filter-pill active" : "filter-pill"}
+            onClick={() => handlePresetClick(p.value)}
+          >
+            {p.label}
+          </button>
+        ))}
+      </div>
+
       <div className="button-grid date-range-row">
         <label className="field-label">
           From
@@ -111,6 +162,9 @@ export default function ReportsPage() {
           <input type="date" value={to ?? ""} onChange={(e) => handleToChange(e.target.value)} />
         </label>
       </div>
+      <p className="wizard-hint">
+        Pick a quick range above, or set exact dates here — editing either field switches to a custom range.
+      </p>
 
       {error && <p className="wizard-error">{error}</p>}
       {loading && <p className="wizard-hint">Refreshing…</p>}
@@ -137,6 +191,24 @@ export default function ReportsPage() {
           Total bookings counts family transactions (one visit, however many items). Rentals/Sales counts
           individual items — a visit with one rental and one sale in the same booking adds 1 to both.
         </p>
+      </div>
+
+      <div id="revenue-trend-section" className="dashboard-section">
+        <h2>Revenue Trend</h2>
+        {revenue_trend.points.length === 0 ? (
+          <div className="empty-state">
+            <h3>Nothing to chart yet</h3>
+            <p>Try a wider date range.</p>
+          </div>
+        ) : (
+          <>
+            <RevenueTrendChart trend={revenue_trend} />
+            <p className="wizard-hint">
+              Grouped by {revenue_trend.granularity} — the bucket size widens automatically for a longer range, so
+              this stays readable from a single week up to a Lifetime view.
+            </p>
+          </>
+        )}
       </div>
 
       <div id="pnl-section" className="dashboard-section">
@@ -198,28 +270,37 @@ export default function ReportsPage() {
             <p>Try a wider date range.</p>
           </div>
         ) : (
-          <div className="table-wrap">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Code</th>
-                  <th>Name</th>
-                  <th>Bookings</th>
-                </tr>
-              </thead>
-              <tbody>
-                {most_booked_items.map((i) => (
-                  <tr key={i.item_id}>
-                    <td data-label="Code">{i.item_code}</td>
-                    <td data-label="Name">
-                      <Link to={`/items/${i.item_id}`}>{i.name}</Link>
-                    </td>
-                    <td data-label="Bookings">{i.booking_count}</td>
+          <>
+            <MostBookedBarChart items={most_booked_items} />
+            {most_booked_items.every((i) => i.booking_count <= 1) && (
+              <p className="wizard-hint">
+                Nothing charted yet — every item here has only one booking so far. The chart shows items with more
+                than one.
+              </p>
+            )}
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Code</th>
+                    <th>Name</th>
+                    <th>Bookings</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {most_booked_items.map((i) => (
+                    <tr key={i.item_id}>
+                      <td data-label="Code">{i.item_code}</td>
+                      <td data-label="Name">
+                        <Link to={`/items/${i.item_id}`}>{i.name}</Link>
+                      </td>
+                      <td data-label="Bookings">{i.booking_count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

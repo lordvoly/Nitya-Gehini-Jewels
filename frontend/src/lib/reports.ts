@@ -14,6 +14,22 @@ export interface MostBookedItem {
   booking_count: number;
 }
 
+export type RevenueTrendGranularity = "day" | "week" | "month" | "year";
+
+export interface RevenueTrendPoint {
+  // The bucket's own start date (ISO) — a day bucket is itself, a week
+  // bucket is its Monday, a month bucket is its 1st, a year bucket is its
+  // Jan 1. Formatted into a display label client-side; the backend never
+  // sends a separately-computed label.
+  bucket: string;
+  revenue: number;
+}
+
+export interface RevenueTrend {
+  granularity: RevenueTrendGranularity;
+  points: RevenueTrendPoint[];
+}
+
 export interface RepeatCustomer {
   customer_id: string;
   name: string;
@@ -63,16 +79,21 @@ export interface ReportsResponse {
   include_collabs: boolean;
   summary: ReportsSummary;
   most_booked_items: MostBookedItem[];
+  revenue_trend: RevenueTrend;
   repeat_customers: RepeatCustomer[];
   idle_inventory: IdleInventoryItem[];
   pnl: Pnl;
   outstanding_dues: OutstandingDue[];
 }
 
-export function fetchReports(params?: { from?: string; to?: string; includeCollabs?: boolean }) {
+// `range` (a quick-select preset) and `from`/`to` (the calendar pickers)
+// are mutually exclusive on any one call — the caller picks one path, the
+// backend resolves explicit from+to over range if somehow both are sent.
+export function fetchReports(params?: { from?: string; to?: string; range?: string; includeCollabs?: boolean }) {
   const qs = new URLSearchParams();
   if (params?.from) qs.set("from", params.from);
   if (params?.to) qs.set("to", params.to);
+  if (params?.range) qs.set("range", params.range);
   if (params?.includeCollabs) qs.set("include_collabs", "true");
   const query = qs.toString();
   return apiFetch<ReportsResponse>(`/api/reports${query ? `?${query}` : ""}`);

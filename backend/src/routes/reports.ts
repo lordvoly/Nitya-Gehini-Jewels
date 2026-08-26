@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
-import { istMonthRange } from "../lib/dates.js";
+import { istReportsRangeForPreset } from "../lib/dates.js";
 import {
   getPeriodBookingItems,
   summarizeBookingItems,
@@ -10,11 +10,22 @@ import {
   getIdleInventory,
   getFinancialSummary,
   getOutstandingDues,
+  getRevenueTrend,
 } from "../lib/reportsData.js";
 
 export const reportsRouter = Router();
 
-// GET /api/reports?from=&to=&include_collabs=true|false
+// GET /api/reports?from=&to=&range=&include_collabs=true|false
+//
+// `range` (week/month/3months/6months/year/lifetime) is the quick-select
+// path — resolved server-side via istReportsRangeForPreset so the
+// frontend never computes "today" or a relative window itself, same IST
+// rule as everywhere else in this app. Explicit from+to (the calendar
+// pickers) always win over `range` when both are present, so switching a
+// date field back to a custom value can't be silently overridden by a
+// stale range param. Omitting all three falls back to the past month
+// (istReportsRangeForPreset("") below), replacing the old "this calendar
+// month" default.
 //
 // A cancelled item never actually happened, so it's excluded from every
 // figure here (revenue, counts, "idle" activity) — same spirit as
@@ -35,9 +46,13 @@ export const reportsRouter = Router();
 // reimplementation that could quietly drift from this one.
 reportsRouter.get("/", async (req, res) => {
   try {
-    const defaultRange = istMonthRange();
-    const from = typeof req.query.from === "string" && req.query.from ? req.query.from : defaultRange.from;
-    const to = typeof req.query.to === "string" && req.query.to ? req.query.to : defaultRange.to;
+    const explicitFrom = typeof req.query.from === "string" && req.query.from ? req.query.from : null;
+    const explicitTo = typeof req.query.to === "string" && req.query.to ? req.query.to : null;
+    const resolved =
+      explicitFrom && explicitTo
+        ? { from: explicitFrom, to: explicitTo }
+        : istReportsRangeForPreset(typeof req.query.range === "string" ? req.query.range : "");
+    const { from, to } = resolved;
     const includeCollabs = req.query.include_collabs === "true";
 
     // Bookings this period + most-booked items — both scoped to [from, to] by
@@ -46,6 +61,11 @@ reportsRouter.get("/", async (req, res) => {
     const periodItems = await getPeriodBookingItems(from, to);
     const summary = summarizeBookingItems(periodItems);
     const most_booked_items = rankMostBookedItems(periodItems, includeCollabs);
+    // Bucket granularity (day/week/month/year) is auto-picked from the
+    // resolved [from, to] span — see getRevenueTrend. Always includes
+    // collabs (same as summary/pnl above) — this is a revenue trend, not
+    // a most-booked-style ranking, so the collab toggle doesn't apply.
+    const revenue_trend = getRevenueTrend(periodItems, from, to);
 
     // Repeat customers — all-time, never scoped to the date range. Now
     // shared with the AI assistant's get_repeat_customers tool via
@@ -62,6 +82,7 @@ reportsRouter.get("/", async (req, res) => {
       include_collabs: includeCollabs,
       summary,
       most_booked_items,
+      revenue_trend,
       repeat_customers,
       idle_inventory,
       pnl,

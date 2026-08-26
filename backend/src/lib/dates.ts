@@ -76,6 +76,10 @@ const BOOKING_TIME_RANGE_DAYS: Record<string, number> = {
   week: 7,
   month: 30,
   "3months": 90,
+  // Added for Reports' own quick-select presets (istReportsRangeForPreset
+  // below) — BookingsList's own Time filter doesn't offer "6 months" as an
+  // option, so this key is simply never looked up from that caller.
+  "6months": 180,
   year: 365,
 };
 
@@ -93,4 +97,25 @@ export function istRangeForPreset(preset: string): { from: string; to: string } 
   const days = BOOKING_TIME_RANGE_DAYS[preset];
   if (days == null) return null;
   return { from: istDaysAgo(days), to: istToday() };
+}
+
+// A fixed, sufficiently-early anchor for Reports' "Lifetime" preset — well
+// before this shop's real data could possibly start, so every row in the
+// DB falls within [from, today] with no need to teach the report query
+// functions (shared with the AI assistant's tools) a second "no lower
+// bound" code path just for this one preset.
+const LIFETIME_FROM = "2000-01-01";
+
+/**
+ * Reports' own quick-select presets — always resolves to a concrete
+ * [from, today] window (never null, unlike istRangeForPreset above), since
+ * every report query function requires real from/to strings. Unrecognized
+ * presets (including the empty string, e.g. a first page load with no
+ * explicit range/from/to at all) fall back to the past month — a rolling
+ * 30-day window, replacing the old "this calendar month" default.
+ */
+export function istReportsRangeForPreset(preset: string): { from: string; to: string } {
+  if (preset === "lifetime") return { from: LIFETIME_FROM, to: istToday() };
+  const days = BOOKING_TIME_RANGE_DAYS[preset];
+  return { from: istDaysAgo(days ?? 30), to: istToday() };
 }
