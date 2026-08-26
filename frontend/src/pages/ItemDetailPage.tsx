@@ -1,7 +1,7 @@
 import { useEffect, useState } from "react";
 import { useParams, useNavigate, Link } from "react-router-dom";
-import { ArrowLeft } from "lucide-react";
-import { fetchItem, fetchItemHistory, fetchItemRevenue, type Item, type ItemHistoryRow, type ItemRevenue } from "../lib/items";
+import { ArrowLeft, Trash2 } from "lucide-react";
+import { fetchItem, fetchItemHistory, fetchItemRevenue, deleteItem, type Item, type ItemHistoryRow, type ItemRevenue } from "../lib/items";
 import { PhotoLightbox } from "../components/items/PhotoLightbox";
 import { itemStatusPill, bookingItemStatusPill } from "../lib/statusPill";
 import { formatDateDisplay } from "../lib/dates";
@@ -24,6 +24,9 @@ export default function ItemDetailPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [lightboxOpen, setLightboxOpen] = useState(false);
+  const [confirmingDelete, setConfirmingDelete] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
 
   useEffect(() => {
     if (!id) return;
@@ -50,6 +53,24 @@ export default function ItemDetailPage() {
   }, [id]);
 
   const showSlowHint = useSlowLoadHint(loading);
+
+  async function handleDelete() {
+    if (!id) return;
+    setDeleting(true);
+    setDeleteError(null);
+    try {
+      await deleteItem(id);
+      // The item no longer exists to show — same "nothing left to stay
+      // on" reasoning as ItemsPage's own list-row delete, just navigating
+      // away instead of filtering a row out of a list already on screen.
+      navigate("/items");
+    } catch (e) {
+      setDeleteError(e instanceof Error ? e.message : "Failed to delete item");
+      setConfirmingDelete(false);
+    } finally {
+      setDeleting(false);
+    }
+  }
 
   if (loading)
     return (
@@ -110,10 +131,33 @@ export default function ItemDetailPage() {
             {item.components && item.components.length > 0 && <li>Components: {item.components.join(", ")}</li>}
           </ul>
 
+          {deleteError && <p className="wizard-error">{deleteError}</p>}
           <div className="wizard-nav">
             <button type="button" className="btn-icon" aria-label="Back" onClick={() => navigate(-1)}>
               <ArrowLeft size={17} strokeWidth={2} aria-hidden="true" />
             </button>
+            <div className="line-item-actions">
+              {confirmingDelete ? (
+                <>
+                  <span>Delete this item?</span>
+                  <button type="button" className="btn-danger" onClick={handleDelete} disabled={deleting}>
+                    {deleting ? "…" : "Yes, Delete"}
+                  </button>
+                  <button type="button" className="btn-secondary" onClick={() => setConfirmingDelete(false)} disabled={deleting}>
+                    Cancel
+                  </button>
+                </>
+              ) : (
+                <button
+                  type="button"
+                  className="btn-icon btn-icon-danger"
+                  aria-label="Delete"
+                  onClick={() => setConfirmingDelete(true)}
+                >
+                  <Trash2 size={16} strokeWidth={2} aria-hidden="true" />
+                </button>
+              )}
+            </div>
           </div>
         </div>
       </div>
