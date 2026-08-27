@@ -74,6 +74,14 @@ export default function BookingsPage() {
             setReturningItem(null);
             setView("list");
           }}
+          onDone={() => {
+            // Land back on this same booking's detail view, not the flat
+            // list — a multi-item booking needs its remaining items
+            // processable right away, without re-finding the booking.
+            const bookingId = returningItem.booking.id;
+            setReturningItem(null);
+            setViewingBookingId(bookingId);
+          }}
         />
       ) : confirmingPickup ? (
         <ConfirmPickupForm
@@ -82,6 +90,11 @@ export default function BookingsPage() {
           onCancel={() => {
             setConfirmingPickup(null);
             setView("list");
+          }}
+          onDone={() => {
+            const bookingId = confirmingPickup.booking.id;
+            setConfirmingPickup(null);
+            setViewingBookingId(bookingId);
           }}
         />
       ) : viewingBookingId ? (

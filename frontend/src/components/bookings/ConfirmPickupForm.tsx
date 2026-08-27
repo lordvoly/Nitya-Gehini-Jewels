@@ -12,10 +12,16 @@ export function ConfirmPickupForm({
   booking,
   item,
   onCancel,
+  onDone,
 }: {
   booking: Booking;
   item: BookingItem;
   onCancel: () => void;
+  // Called only from the post-success screen — see ReturnForm's identical
+  // onDone for why this is separate from onCancel: a multi-item booking
+  // needs to land back on this booking's own detail view, not the flat
+  // bookings list.
+  onDone: () => void;
 }) {
   // Pre-filled with the current balance due — the common case is collecting
   // (some or all of) what's owed right when the item leaves the shop — but
@@ -68,8 +74,8 @@ export function ConfirmPickupForm({
           </div>
         )}
         <div className="wizard-actions">
-          <button className="btn-primary" onClick={onCancel}>
-            Back to Bookings
+          <button className="btn-primary" onClick={onDone}>
+            Back to Booking
           </button>
         </div>
       </div>

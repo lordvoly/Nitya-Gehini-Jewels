@@ -15,10 +15,17 @@ export function ReturnForm({
   booking,
   item,
   onCancel,
+  onDone,
 }: {
   booking: Booking;
   item: BookingItem;
   onCancel: () => void;
+  // Called only from the post-success screen — distinct from onCancel
+  // (the pre-submit Cancel button) because a multi-item booking needs to
+  // land back on *this* booking's detail view, not the flat bookings list,
+  // so the operator can immediately process the next item without
+  // re-finding the same booking. See BookingsPage.tsx's wiring.
+  onDone: () => void;
 }) {
   // Combined from two sources: the item's own components template (only
   // for set items — items.components itself is never touched here) and
@@ -103,8 +110,8 @@ export function ReturnForm({
           </div>
         )}
         <div className="wizard-actions">
-          <button className="btn-primary" onClick={onCancel}>
-            Back to Bookings
+          <button className="btn-primary" onClick={onDone}>
+            Back to Booking
           </button>
         </div>
       </div>
