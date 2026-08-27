@@ -3,6 +3,7 @@ import { supabase } from "../lib/supabase.js";
 import { istWeekStart } from "../lib/dates.js";
 import { getDailyBriefingData, getUpcomingPickupsData, getUpcomingOccasionsData } from "../lib/dashboardData.js";
 import { getItemAvailability } from "../lib/itemsData.js";
+import { getPendingItems } from "../lib/pendingItemsData.js";
 
 export const dashboardRouter = Router();
 
@@ -45,10 +46,11 @@ async function getBookingsThisWeekCount(): Promise<number> {
 // tool so both surfaces read the exact same queries.
 dashboardRouter.get("/summary", async (_req, res) => {
   try {
-    const [briefing, pickups, occasions] = await Promise.all([
+    const [briefing, pickups, occasions, pending_items] = await Promise.all([
       getDailyBriefingData(),
       getUpcomingPickupsData(),
       getUpcomingOccasionsData(),
+      getPendingItems(),
     ]);
 
     const [
@@ -105,6 +107,12 @@ dashboardRouter.get("/summary", async (_req, res) => {
       occasions_this_week: occasions.occasions_this_week,
       outstanding_balance: briefing.outstanding_balance,
       outstanding_balance_count: briefing.outstanding_balance_count,
+      // Every checklist entry flagged missing at return time and never
+      // formally charged for — see lib/pendingItemsData.ts. Distinct from
+      // outstanding_balance (money owed) — this can be true with a
+      // balance_due of exactly 0, e.g. a fully-paid booking whose ring
+      // still hasn't come back.
+      pending_items,
       stats: {
         // Renamed from total_active_items — "active" was already the exact
         // word used for an individual item's own status pill, and that

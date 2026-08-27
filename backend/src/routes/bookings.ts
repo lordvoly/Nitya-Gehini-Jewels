@@ -2,6 +2,7 @@ import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
 import { istToday, istRangeForPreset } from "../lib/dates.js";
 import { recordPayment } from "../lib/payments.js";
+import { computePendingComponentNames, getChargedNamesByBookingItem } from "../lib/pendingItemsData.js";
 import type { AuthedRequest } from "../middleware/auth.js";
 
 export const bookingsRouter = Router();
@@ -26,6 +27,11 @@ interface ChainableBookingItem {
   type: string;
   status: string;
   items?: { tracking_type: string } | null;
+  // Present on every raw booking_items row (BOOKING_ITEMS_EMBED selects
+  // "*"), just not previously declared here — needed now to compute
+  // pending_components (see attachPendingComponents below) off the same
+  // items array attachChains already receives.
+  return_checklist?: Record<string, boolean> | null;
 }
 
 interface BookingChainLink {
@@ -122,6 +128,23 @@ async function attachChains<T extends ChainableBookingItem>(
   );
 }
 
+// Layered on top of attachChains' output (same items array, same ids) as
+// its own small step rather than folded into attachChains itself — that
+// function's per-item booking_sequence lookups are already a lot to
+// follow, whereas this is a single batched charge lookup plus a pure-JS
+// map, no per-item round trip of its own. Shared by GET / and
+// getBookingDetail() below, same "one function, not two reimplementations"
+// rule as everything else in this file.
+async function attachPendingComponents<T extends { id: string; return_checklist?: Record<string, boolean> | null }>(
+  items: T[],
+): Promise<(T & { pending_components: string[] })[]> {
+  const chargedByBookingItem = await getChargedNamesByBookingItem(items.map((bi) => bi.id));
+  return items.map((bi) => ({
+    ...bi,
+    pending_components: computePendingComponentNames(bi.return_checklist ?? null, chargedByBookingItem.get(bi.id) ?? new Set<string>()),
+  }));
+}
+
 const BOOKING_LIST_SELECT = `*, customers(name, phone, customer_type), booking_items(${BOOKING_ITEMS_EMBED})`;
 
 // GET /api/bookings?item_id=&customer_id=&computed_status=&search=
@@ -183,6 +206,17 @@ bookingsRouter.get("/", async (req, res) => {
     ]),
   );
 
+  // Same "flagged missing at return, never charged for" annotation
+  // getBookingDetail() below adds — computed once here across every
+  // booking_item on the page, not per booking, so BookingsList's cards can
+  // show an "Item Pending" badge without a click-through.
+  const pendingByItemId = new Map(
+    (await attachPendingComponents((bookings ?? []).flatMap((b) => (b.booking_items ?? []) as ChainableBookingItem[]))).map((bi) => [
+      bi.id,
+      bi.pending_components,
+    ]),
+  );
+
   const [{ data: financials, error: financialsError }, { data: statuses, error: statusesError }] = await Promise.all([
     supabase.from("booking_financials").select("booking_id, total_paid, balance_due, price_charged").in("booking_id", ids),
     supabase
@@ -201,6 +235,7 @@ bookingsRouter.get("/", async (req, res) => {
     booking_items: ((b.booking_items ?? []) as ChainableBookingItem[]).map((bi) => ({
       ...bi,
       ...chainsByItemId.get(bi.id),
+      pending_components: pendingByItemId.get(bi.id) ?? [],
     })),
     total_paid: financialsByBookingId.get(b.id)?.total_paid ?? 0,
     balance_due: financialsByBookingId.get(b.id)?.balance_due ?? 0,
@@ -371,6 +406,7 @@ export async function getBookingDetail(id: string) {
   if (!booking) return null;
 
   const itemsWithChains = await attachChains((booking.booking_items ?? []) as ChainableBookingItem[]);
+  const itemsWithPending = await attachPendingComponents(itemsWithChains);
 
   const [{ data: financials, error: financialsError }, { data: status, error: statusError }] = await Promise.all([
     supabase.from("booking_financials").select("total_paid, balance_due, price_charged").eq("booking_id", id).maybeSingle(),
@@ -381,7 +417,7 @@ export async function getBookingDetail(id: string) {
 
   return {
     ...booking,
-    booking_items: itemsWithChains,
+    booking_items: itemsWithPending,
     total_paid: financials?.total_paid ?? 0,
     balance_due: financials?.balance_due ?? 0,
     price_charged: financials?.price_charged ?? 0,
@@ -1374,4 +1410,103 @@ bookingsRouter.post("/:bookingId/items/:bookingItemId/return", async (req: Authe
   }
 
   res.status(200).json({ ...data, warning });
+});
+
+// POST /:bookingId/items/:bookingItemId/resolve-pending-item — the item
+// physically came back after all; literally checks the box that was left
+// unchecked at return time. Deliberately narrow: only flips that one
+// checklist key, never touches return_notes (the original note, e.g. "Ring
+// Pending", stays as historical context even once resolved) and never
+// creates any payments/item_charges row — there's no money involved in
+// "it came back," only in charge-pending-item below.
+bookingsRouter.post("/:bookingId/items/:bookingItemId/resolve-pending-item", async (req, res) => {
+  const componentName = typeof req.body?.component_name === "string" ? req.body.component_name.trim() : "";
+  if (!componentName) return res.status(400).json({ error: "component_name is required" });
+
+  const { data: bookingItem, error: fetchError } = await supabase
+    .from("booking_items")
+    .select("id, return_checklist")
+    .eq("id", req.params.bookingItemId)
+    .eq("booking_id", req.params.bookingId)
+    .maybeSingle();
+  if (fetchError) return res.status(500).json({ error: fetchError.message });
+  if (!bookingItem) return res.status(404).json({ error: "Booking item not found" });
+
+  const checklist = (bookingItem.return_checklist as Record<string, boolean> | null) ?? null;
+  if (!checklist || !(componentName in checklist)) {
+    return res.status(404).json({ error: `"${componentName}" isn't on this item's return checklist` });
+  }
+  if (checklist[componentName]) {
+    return res.status(409).json({ error: `"${componentName}" is already marked returned` });
+  }
+
+  const { data, error } = await supabase
+    .from("booking_items")
+    .update({ return_checklist: { ...checklist, [componentName]: true } })
+    .eq("id", bookingItem.id)
+    .select()
+    .single();
+  if (error) return res.status(400).json({ error: error.message });
+
+  res.status(200).json(data);
+});
+
+// POST /:bookingId/items/:bookingItemId/charge-pending-item — the reverse
+// path: the shop has decided to stop chasing this and charge for it
+// instead, exactly the same "Charge for this" action ReturnForm already
+// offers at the moment of return, just usable later once something's
+// already been flagged pending. Same two-insert shape as the charges loop
+// in the return endpoint above (item_charges + a linked negative payments
+// row) — kept as its own small block rather than extracted into a shared
+// helper, since the two call sites differ in what they already have on
+// hand (effectiveReturnDate vs. istToday(), a loop over several charges vs.
+// exactly one). Once this succeeds, computePendingComponentNames will see
+// the new item_charges row and this component naturally drops out of the
+// "pending, not charged" set — it now lives in the ordinary Outstanding
+// Charges list instead.
+bookingsRouter.post("/:bookingId/items/:bookingItemId/charge-pending-item", async (req: AuthedRequest, res) => {
+  const componentName = typeof req.body?.component_name === "string" ? req.body.component_name.trim() : "";
+  const amount = Number(req.body?.amount);
+  if (!componentName) return res.status(400).json({ error: "component_name is required" });
+  if (!(amount > 0)) return res.status(400).json({ error: "amount must be greater than 0" });
+
+  const { data: bookingItem, error: fetchError } = await supabase
+    .from("booking_items")
+    .select("id, return_checklist")
+    .eq("id", req.params.bookingItemId)
+    .eq("booking_id", req.params.bookingId)
+    .maybeSingle();
+  if (fetchError) return res.status(500).json({ error: fetchError.message });
+  if (!bookingItem) return res.status(404).json({ error: "Booking item not found" });
+
+  const checklist = (bookingItem.return_checklist as Record<string, boolean> | null) ?? null;
+  if (!checklist || !(componentName in checklist) || checklist[componentName]) {
+    return res.status(409).json({ error: `"${componentName}" isn't a pending item on this booking` });
+  }
+
+  const chargedAt = istToday();
+  const { data: charge, error: chargeInsertError } = await supabase
+    .from("item_charges")
+    .insert({ booking_item_id: bookingItem.id, description: componentName, charge_amount: amount, charged_at: chargedAt })
+    .select()
+    .single();
+  if (chargeInsertError) return res.status(400).json({ error: chargeInsertError.message });
+
+  const { error: paymentError } = await supabase.from("payments").insert({
+    booking_id: req.params.bookingId,
+    amount: -amount,
+    method: "other",
+    type: "payment",
+    payment_date: chargedAt,
+    notes: `Lost/damaged: ${componentName}`,
+    recorded_by: req.user?.id ?? null,
+  });
+  if (paymentError) {
+    return res.status(200).json({
+      ...charge,
+      warning: "The charge was recorded but its balance adjustment failed — check Outstanding Dues.",
+    });
+  }
+
+  res.status(200).json(charge);
 });

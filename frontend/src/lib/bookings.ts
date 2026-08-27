@@ -94,6 +94,11 @@ export interface BookingItem {
   // true only for a rental still 'booked' whose pickup_date has already
   // passed. Always present on both GET /api/bookings and GET /:id.
   pickup_overdue: boolean;
+  // Computed server-side (bookings.ts's attachPendingComponents()), never
+  // stored — checklist entries left unchecked at return time with no
+  // item_charges row raised against them. Empty unless status='returned'
+  // and something's still genuinely outstanding. See lib/pendingItems.ts.
+  pending_components: string[];
   // Not a DB column — present only when the backend has a non-blocking
   // heads-up for the operator (e.g. an incomplete return checklist).
   warning?: string;

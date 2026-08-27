@@ -275,6 +275,11 @@ export function BookingsList({
       {!loading &&
         bookings.map((b) => {
           const statusPill = bookingComputedStatusPill(b.computed_status, b.resolved_item_count, b.active_item_count);
+          // Same additive signal as BookingDetail's own — computed_status
+          // itself is untouched (still correctly "Completed" for revenue/
+          // reporting purposes), this is a purely visual heads-up layered
+          // next to it.
+          const hasPendingItems = b.booking_items.some((bi) => bi.pending_components.length > 0);
           return (
           <div className="booking-card" key={b.id}>
             <div className="booking-card-header">
@@ -298,6 +303,7 @@ export function BookingsList({
               <div className="booking-card-status">
                 <span className={`pill ${statusPill.className}`}>{statusPill.label}</span>
                 {statusPill.fraction && <span className="status-fraction">{statusPill.fraction}</span>}
+                {hasPendingItems && <span className="pill pill-attention">Item Pending</span>}
               </div>
             </div>
 

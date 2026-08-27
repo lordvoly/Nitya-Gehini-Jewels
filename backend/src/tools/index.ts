@@ -13,6 +13,7 @@ import {
 } from "../lib/reportsData.js";
 import { getDailyBriefingData, getUpcomingPickupsForDays } from "../lib/dashboardData.js";
 import { getItemCharges } from "../routes/itemCharges.js";
+import { getPendingItems } from "../lib/pendingItemsData.js";
 import { getBookingDetail, checkUniqueRentalConflicts, getQuantityAvailability } from "../routes/bookings.js";
 import { getPaymentsForBooking } from "../routes/payments.js";
 import { resolveItemByCodeOrName } from "../lib/itemsData.js";
@@ -139,6 +140,12 @@ export const toolDefinitions = [
   {
     name: "get_outstanding_charges",
     description: "Every unresolved lost-or-damaged-item charge, with the booking, item, and customer it belongs to.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
+    name: "get_pending_items",
+    description:
+      "Items or components (a ring, an extra piece, one part of a set) flagged as still missing at return time that were NEVER formally charged for — an earlier, purely physical-custody stage than get_outstanding_charges (which is money already charged, awaiting payment). Use this for 'what haven't we gotten back', 'is anything still missing', or 'is booking X actually fully complete' — a booking can show Completed overall while still having one of these open, since a missing accessory doesn't block the rest of the booking from closing out.",
     input_schema: { type: "object" as const, properties: {} },
   },
   {
@@ -316,6 +323,9 @@ export async function runTool(name: string, input: Record<string, unknown>) {
     }
     case "get_outstanding_charges": {
       return await getItemCharges(false);
+    }
+    case "get_pending_items": {
+      return await getPendingItems();
     }
     case "get_popular_items": {
       const defaultRange = istMonthRange();

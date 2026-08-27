@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
 import { ImageOff } from "lucide-react";
 import { fetchDashboardSummary, type DashboardSummary, type PickupDueBookingItem, type OccasionRow } from "../lib/dashboard";
+import type { PendingItem } from "../lib/pendingItems";
 import { useAuth } from "../lib/auth";
 import { DashboardAlerts } from "../components/dashboard/DashboardAlerts";
 import { DashboardSkeleton } from "../components/common/Skeleton";
@@ -40,6 +41,25 @@ function PickupRow({ pickup }: { pickup: PickupDueBookingItem }) {
         </p>
       </div>
     </div>
+  );
+}
+
+// One row per missing-and-never-charged-for component — a single Link
+// (like Returns Due's rows) straight to the booking, since there's only
+// one meaningful destination here, not two like PickupRow's thumbnail vs.
+// booking split.
+function PendingItemRow({ pending }: { pending: PendingItem }) {
+  return (
+    <Link to={`/bookings?booking=${pending.booking_id}`} className="overdue-panel dashboard-link">
+      <p className="dashboard-row-title">
+        {pending.component_name} — {pending.item_code} · {pending.item_name}
+      </p>
+      <p className="dashboard-row-meta">
+        {pending.booking_code} · {pending.customer_name}
+        {pending.actual_return_date ? ` · returned ${formatDateDisplay(pending.actual_return_date)}` : ""}
+      </p>
+      {pending.return_notes && <p className="dashboard-row-meta">"{pending.return_notes}"</p>}
+    </Link>
   );
 }
 
@@ -169,8 +189,17 @@ export default function DashboardPage() {
     );
   if (error || !summary) return <div className="page wizard-error">{error ?? "Failed to load dashboard"}</div>;
 
-  const { due_today, overdue, pickups_due_today, pickups_due_this_week, occasions_today, occasions_this_week, outstanding_balance, stats } =
-    summary;
+  const {
+    due_today,
+    overdue,
+    pickups_due_today,
+    pickups_due_this_week,
+    occasions_today,
+    occasions_this_week,
+    outstanding_balance,
+    pending_items,
+    stats,
+  } = summary;
   const urgentOverdue = overdue.filter((b) => b.next_customer_waiting);
   const otherOverdue = overdue.filter((b) => !b.next_customer_waiting);
   const weekPickupGroups = groupPickupsByDay(pickups_due_this_week, summary.today);
@@ -219,6 +248,20 @@ export default function DashboardPage() {
           <div className="stat-label">Outstanding balance (active bookings)</div>
         </Link>
       </div>
+
+      {pending_items.length > 0 && (
+        <div id="pending-items-section">
+          <div className="dashboard-section">
+            <h2>Items Pending ({pending_items.length})</h2>
+            <p className="wizard-hint">
+              Flagged as still missing when a return was processed — not yet formally charged for.
+            </p>
+            {pending_items.map((p) => (
+              <PendingItemRow key={`${p.booking_item_id}-${p.component_name}`} pending={p} />
+            ))}
+          </div>
+        </div>
+      )}
 
       <div id="items-due-section">
         <div className="dashboard-section">

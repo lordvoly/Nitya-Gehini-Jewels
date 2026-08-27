@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ImageOff, ArrowLeft, IndianRupee, Printer, Pencil } from "lucide-react";
 import { fetchBooking, updateBooking, undoPickup, type Booking, type BookingItem } from "../../lib/bookings";
+import { resolvePendingItem } from "../../lib/pendingItems";
 import { BookingDetailSkeleton } from "../common/Skeleton";
 import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
 import {
@@ -75,6 +76,15 @@ export function BookingDetail({
   const [undoConfirmId, setUndoConfirmId] = useState<string | null>(null);
   const [undoSavingId, setUndoSavingId] = useState<string | null>(null);
   const [undoError, setUndoError] = useState<string | null>(null);
+
+  // Mark Returned on a still-pending component (see the found-panel below,
+  // one per line item that has any) — keyed per "booking_item.id:component
+  // name" since one line item can have more than one pending component at
+  // once. Charging for a pending item instead is deliberately NOT
+  // duplicated here — that's a financial decision better made from the
+  // central Charges page, which this panel points to instead.
+  const [pendingSavingKey, setPendingSavingKey] = useState<string | null>(null);
+  const [pendingError, setPendingError] = useState<string | null>(null);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -183,9 +193,31 @@ export function BookingDetail({
     }
   }
 
+  async function handleMarkPendingReturned(bi: BookingItem, componentName: string) {
+    const key = `${bi.id}:${componentName}`;
+    setPendingError(null);
+    setPendingSavingKey(key);
+    try {
+      await resolvePendingItem(bookingId, bi.id, componentName);
+      await load();
+    } catch (err) {
+      setPendingError(err instanceof Error ? err.message : "Failed to mark returned");
+    } finally {
+      setPendingSavingKey(null);
+    }
+  }
+
   const statusPill = booking
     ? bookingComputedStatusPill(booking.computed_status, booking.resolved_item_count, booking.active_item_count)
     : null;
+  // Deliberately layered next to computed_status rather than folded into
+  // it — computed_status still correctly means "every item returned/sold,"
+  // which is what Reports/AI-tools/idle-inventory etc. rely on it meaning;
+  // this is a second, purely visual signal that something's still
+  // genuinely outstanding even though the booking itself has closed out.
+  // Same additive-signal pattern as overdue_rentals' own
+  // next_customer_waiting flag.
+  const hasPendingItems = booking?.booking_items.some((bi) => bi.pending_components.length > 0) ?? false;
   const showSlowHint = useSlowLoadHint(loading);
 
   return (
@@ -211,6 +243,12 @@ export function BookingDetail({
               <li>
                 Status: <span className={`pill ${statusPill.className}`}>{statusPill.label}</span>
                 {statusPill.fraction && ` — ${statusPill.fraction}`}
+                {hasPendingItems && (
+                  <>
+                    {" "}
+                    <span className="pill pill-attention">Item Pending</span>
+                  </>
+                )}
               </li>
               {booking.gst_applicable && (
                 <li>
@@ -342,6 +380,37 @@ export function BookingDetail({
                         ))}
                       </div>
                     </>
+                  )}
+
+                  {bi.pending_components.length > 0 && (
+                    <div className="found-panel">
+                      <p>
+                        <strong>Still missing, not charged for:</strong>
+                      </p>
+                      {bi.return_notes && <p className="wizard-hint">"{bi.return_notes}"</p>}
+                      <ul className="review-list">
+                        {bi.pending_components.map((name) => {
+                          const key = `${bi.id}:${name}`;
+                          return (
+                            <li key={name}>
+                              {name}{" "}
+                              <button
+                                type="button"
+                                className="btn-secondary btn-compact"
+                                disabled={pendingSavingKey === key}
+                                onClick={() => handleMarkPendingReturned(bi, name)}
+                              >
+                                {pendingSavingKey === key ? "Saving…" : "Mark Returned"}
+                              </button>
+                            </li>
+                          );
+                        })}
+                      </ul>
+                      <p className="wizard-hint">
+                        To charge for this instead, use the <Link to="/charges">Charges</Link> page.
+                      </p>
+                      {pendingError && <p className="wizard-error">{pendingError}</p>}
+                    </div>
                   )}
 
                   {/* Only meaningful for a unique item — there's a real physical

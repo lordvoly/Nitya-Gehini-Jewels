@@ -1,5 +1,6 @@
 import { apiFetch } from "./api";
 import type { BookingCustomerSummary, BookingItemSummary, BookingItemStatus, BookingItemType } from "./bookings";
+import type { PendingItem } from "./pendingItems";
 
 // Both rows below are now booking_items-grain, not Booking-grain — "due
 // today" / "overdue" are inherently per-item concepts once a family
@@ -103,6 +104,10 @@ export interface DashboardSummary {
   occasions_this_week: OccasionRow[];
   outstanding_balance: number;
   outstanding_balance_count: number;
+  // Every checklist entry flagged missing at return time and never
+  // formally charged for — see lib/pendingItems.ts. Independent of
+  // outstanding_balance; a fully-paid booking can still have one of these.
+  pending_items: PendingItem[];
   stats: DashboardStats;
 }
 
