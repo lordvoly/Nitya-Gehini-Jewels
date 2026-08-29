@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
+import { Star } from "lucide-react";
 import QRCode from "qrcode";
 import { fetchBooking, type Booking } from "../lib/bookings";
 import { fetchShopSettings, type ShopSettings } from "../lib/shopSettings";
@@ -8,6 +9,8 @@ import { bookingItemStatusPill } from "../lib/statusPill";
 import { buildWhatsAppLink } from "../lib/whatsapp";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { ReceiptSkeleton } from "../components/common/Skeleton";
+import { InstagramIcon } from "../components/common/InstagramIcon";
+import { INSTAGRAM_HANDLE, INSTAGRAM_URL, GOOGLE_REVIEW_URL } from "../lib/socialLinks";
 import ngjLogo from "../assets/images/ngj-logo.png";
 import "../styles/shared.css";
 
@@ -206,6 +209,15 @@ export default function ReceiptPage() {
           <p className="wizard-hint">Scan to view this booking</p>
         </div>
       )}
+
+      <div className="receipt-social">
+        <a href={INSTAGRAM_URL} target="_blank" rel="noopener noreferrer" className="receipt-social-link">
+          <InstagramIcon size={16} /> Follow us on Instagram @{INSTAGRAM_HANDLE}
+        </a>
+        <a href={GOOGLE_REVIEW_URL} target="_blank" rel="noopener noreferrer" className="receipt-social-link">
+          <Star size={16} strokeWidth={2} /> Loved our service? Review us on Google
+        </a>
+      </div>
     </div>
   );
 }
