@@ -2,7 +2,12 @@ import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
 import { istToday, istRangeForPreset } from "../lib/dates.js";
 import { recordPayment } from "../lib/payments.js";
-import { computePendingComponentNames, getChargedNamesByBookingItem } from "../lib/pendingItemsData.js";
+import {
+  computePendingComponentNames,
+  getChargesByBookingItem,
+  chargedNamesFrom,
+  type BookingItemCharge,
+} from "../lib/pendingItemsData.js";
 import type { AuthedRequest } from "../middleware/auth.js";
 
 export const bookingsRouter = Router();
@@ -135,14 +140,26 @@ async function attachChains<T extends ChainableBookingItem>(
 // map, no per-item round trip of its own. Shared by GET / and
 // getBookingDetail() below, same "one function, not two reimplementations"
 // rule as everything else in this file.
+//
+// Attaches two related-but-distinct things off the same one charges query:
+// pending_components (still missing, never charged for — disappears the
+// moment a charge IS raised) and item_charges (every charge ever raised
+// against this item, resolved or not — a permanent record that never
+// disappears, even once resolved/paid, so "this booking once had a
+// lost/damaged item" stays visible on the booking itself rather than only
+// living on the Charges page until resolution).
 async function attachPendingComponents<T extends { id: string; return_checklist?: Record<string, boolean> | null }>(
   items: T[],
-): Promise<(T & { pending_components: string[] })[]> {
-  const chargedByBookingItem = await getChargedNamesByBookingItem(items.map((bi) => bi.id));
-  return items.map((bi) => ({
-    ...bi,
-    pending_components: computePendingComponentNames(bi.return_checklist ?? null, chargedByBookingItem.get(bi.id) ?? new Set<string>()),
-  }));
+): Promise<(T & { pending_components: string[]; item_charges: BookingItemCharge[] })[]> {
+  const chargesByBookingItem = await getChargesByBookingItem(items.map((bi) => bi.id));
+  return items.map((bi) => {
+    const charges = chargesByBookingItem.get(bi.id) ?? [];
+    return {
+      ...bi,
+      pending_components: computePendingComponentNames(bi.return_checklist ?? null, chargedNamesFrom(charges)),
+      item_charges: charges,
+    };
+  });
 }
 
 const BOOKING_LIST_SELECT = `*, customers(name, phone, customer_type), booking_items(${BOOKING_ITEMS_EMBED})`;
@@ -206,14 +223,15 @@ bookingsRouter.get("/", async (req, res) => {
     ]),
   );
 
-  // Same "flagged missing at return, never charged for" annotation
-  // getBookingDetail() below adds — computed once here across every
-  // booking_item on the page, not per booking, so BookingsList's cards can
-  // show an "Item Pending" badge without a click-through.
+  // Same "flagged missing at return, never charged for" + "ever had a
+  // lost/damaged charge" annotation getBookingDetail() below adds —
+  // computed once here across every booking_item on the page, not per
+  // booking, so BookingsList's cards can show the "Item Pending"/"Item
+  // Charged" badges without a click-through.
   const pendingByItemId = new Map(
     (await attachPendingComponents((bookings ?? []).flatMap((b) => (b.booking_items ?? []) as ChainableBookingItem[]))).map((bi) => [
       bi.id,
-      bi.pending_components,
+      { pending_components: bi.pending_components, item_charges: bi.item_charges },
     ]),
   );
 
@@ -235,7 +253,8 @@ bookingsRouter.get("/", async (req, res) => {
     booking_items: ((b.booking_items ?? []) as ChainableBookingItem[]).map((bi) => ({
       ...bi,
       ...chainsByItemId.get(bi.id),
-      pending_components: pendingByItemId.get(bi.id) ?? [],
+      pending_components: pendingByItemId.get(bi.id)?.pending_components ?? [],
+      item_charges: pendingByItemId.get(bi.id)?.item_charges ?? [],
     })),
     total_paid: financialsByBookingId.get(b.id)?.total_paid ?? 0,
     balance_due: financialsByBookingId.get(b.id)?.balance_due ?? 0,

@@ -17,7 +17,7 @@ import {
   type PaymentAmountEdit,
 } from "../../lib/payments";
 import { toNumberOrNull } from "../../lib/numbers";
-import { bookingItemStatusPill, bookingComputedStatusPill } from "../../lib/statusPill";
+import { bookingItemStatusPill, bookingComputedStatusPill, bookingChargeStatusPill } from "../../lib/statusPill";
 import { formatDateDisplay } from "../../lib/dates";
 
 export function BookingDetail({
@@ -218,6 +218,10 @@ export function BookingDetail({
   // Same additive-signal pattern as overdue_rentals' own
   // next_customer_waiting flag.
   const hasPendingItems = booking?.booking_items.some((bi) => bi.pending_components.length > 0) ?? false;
+  // A permanent marker, unlike hasPendingItems above — see
+  // bookingChargeStatusPill's own comment for why this doesn't disappear
+  // once every charge is resolved.
+  const chargeStatusPill = booking ? bookingChargeStatusPill(booking.booking_items.flatMap((bi) => bi.item_charges)) : null;
   const showSlowHint = useSlowLoadHint(loading);
 
   return (
@@ -247,6 +251,12 @@ export function BookingDetail({
                   <>
                     {" "}
                     <span className="pill pill-attention">Item Pending</span>
+                  </>
+                )}
+                {chargeStatusPill && (
+                  <>
+                    {" "}
+                    <span className={`pill ${chargeStatusPill.className}`}>{chargeStatusPill.label}</span>
                   </>
                 )}
               </li>
@@ -410,6 +420,28 @@ export function BookingDetail({
                         To charge for this instead, use the <Link to="/charges">Charges</Link> page.
                       </p>
                       {pendingError && <p className="wizard-error">{pendingError}</p>}
+                    </div>
+                  )}
+
+                  {bi.item_charges.length > 0 && (
+                    <div className="found-panel">
+                      <p>
+                        <strong>Lost/damaged item charges:</strong>
+                      </p>
+                      <ul className="review-list">
+                        {bi.item_charges.map((c) => (
+                          <li key={c.id}>
+                            {c.description} — ₹{c.charge_amount}{" "}
+                            {c.resolved ? (
+                              <span className="pill pill-info">
+                                Resolved{c.resolved_at ? ` ${formatDateDisplay(c.resolved_at)}` : ""}
+                              </span>
+                            ) : (
+                              <span className="pill pill-attention">Unpaid</span>
+                            )}
+                          </li>
+                        ))}
+                      </ul>
                     </div>
                   )}
 

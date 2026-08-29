@@ -1,5 +1,5 @@
 import type { ItemStatus } from "./items";
-import type { BookingComputedStatus, BookingItemStatus, BookingItemType } from "./bookings";
+import type { BookingComputedStatus, BookingItemCharge, BookingItemStatus, BookingItemType } from "./bookings";
 
 export interface PillInfo {
   className: string;
@@ -76,4 +76,22 @@ export function bookingComputedStatusPill(
     case "cancelled":
       return { className: "pill-neutral", label: "Cancelled", fraction: null };
   }
+}
+
+// A permanent marker across a booking's own item_charges history — unlike
+// bookingComputedStatusPill above, this deliberately does NOT return to
+// "nothing to see here" once every charge is resolved; it just downgrades
+// from urgent (still owed) to a quiet, informational note (settled) rather
+// than disappearing, so "this booking once had a lost/damaged item" stays
+// visible on the booking itself even long after the money's been sorted
+// out. Takes every charge across every line item on the booking — call
+// with charges.flatMap(...) at the booking grain, or one item's own
+// item_charges array at the line-item grain.
+export function bookingChargeStatusPill(charges: BookingItemCharge[]): (PillInfo & { unresolvedCount: number }) | null {
+  if (charges.length === 0) return null;
+  const unresolvedCount = charges.filter((c) => !c.resolved).length;
+  if (unresolvedCount > 0) {
+    return { className: "pill-attention", label: "Item Charged", unresolvedCount };
+  }
+  return { className: "pill-info", label: "Item Charged (Resolved)", unresolvedCount: 0 };
 }

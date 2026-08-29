@@ -10,7 +10,7 @@ import {
   type BookingTimeRange,
   type BookingTypeFilter,
 } from "../../lib/bookings";
-import { bookingItemStatusPill, bookingComputedStatusPill } from "../../lib/statusPill";
+import { bookingItemStatusPill, bookingComputedStatusPill, bookingChargeStatusPill } from "../../lib/statusPill";
 import { formatDateDisplay } from "../../lib/dates";
 import { FilterDropdown } from "../common/FilterDropdown";
 import { BookingCardsSkeleton } from "../common/Skeleton";
@@ -280,6 +280,9 @@ export function BookingsList({
           // reporting purposes), this is a purely visual heads-up layered
           // next to it.
           const hasPendingItems = b.booking_items.some((bi) => bi.pending_components.length > 0);
+          // A permanent marker — see bookingChargeStatusPill's own comment
+          // for why this doesn't disappear once every charge is resolved.
+          const chargeStatusPill = bookingChargeStatusPill(b.booking_items.flatMap((bi) => bi.item_charges));
           return (
           <div className="booking-card" key={b.id}>
             <div className="booking-card-header">
@@ -304,6 +307,7 @@ export function BookingsList({
                 <span className={`pill ${statusPill.className}`}>{statusPill.label}</span>
                 {statusPill.fraction && <span className="status-fraction">{statusPill.fraction}</span>}
                 {hasPendingItems && <span className="pill pill-attention">Item Pending</span>}
+                {chargeStatusPill && <span className={`pill ${chargeStatusPill.className}`}>{chargeStatusPill.label}</span>}
               </div>
             </div>
 

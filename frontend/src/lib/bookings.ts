@@ -49,6 +49,19 @@ export interface BookingCustomerSummary {
   customer_type: CustomerType;
 }
 
+// Every item_charges row raised against a booking_item, resolved or not —
+// a permanent record (unlike pending_components below, which disappears
+// the moment a charge IS raised) so "this booking once had a lost/damaged
+// item" stays visible even once the charge is fully settled.
+export interface BookingItemCharge {
+  id: string;
+  description: string;
+  charge_amount: number;
+  resolved: boolean;
+  charged_at: string;
+  resolved_at: string | null;
+}
+
 export interface BookingChainLink {
   id: string;
   // Only present on future_booking_items (the "next" direction) — that's
@@ -99,6 +112,11 @@ export interface BookingItem {
   // item_charges row raised against them. Empty unless status='returned'
   // and something's still genuinely outstanding. See lib/pendingItems.ts.
   pending_components: string[];
+  // Computed server-side (bookings.ts's attachPendingComponents()), never
+  // stored — every item_charges row for this line item, resolved or not.
+  // See BookingItemCharge above for why this never goes away, unlike
+  // pending_components.
+  item_charges: BookingItemCharge[];
   // Not a DB column — present only when the backend has a non-blocking
   // heads-up for the operator (e.g. an incomplete return checklist).
   warning?: string;
