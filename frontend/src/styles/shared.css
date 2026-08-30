@@ -498,6 +498,28 @@ a {
     justify-content: flex-start;
   }
 
+  /* The receipt's own Item cell is the one place in the app that packs
+     several independent lines — name, the set's own components, this
+     booking's one-off add-ons, deposit — into a single <td>, not one
+     simple label/value pair. The generic label-left-value-right flex row
+     above assumes a single value sitting opposite its label; forced onto
+     several stacked blocks instead, every child becomes its own flex
+     column and (each wrapping internally, all vertically centered on the
+     same line by align-items: center) visually collides with its
+     neighbors — exactly the "Cancelled" pill sitting on top of the item
+     name, and Components/Additional text squeezed into narrow parallel
+     columns, seen on a real phone. Reverting to a plain block layout here
+     restores normal top-to-bottom document flow, one full-width line at a
+     time. */
+  .receipt-items td[data-label="Item"] {
+    display: block;
+  }
+
+  .receipt-items td[data-label="Item"]::before {
+    display: block;
+    margin-bottom: 4px;
+  }
+
   .data-table .row-actions {
     justify-content: flex-start;
     flex-wrap: wrap;
