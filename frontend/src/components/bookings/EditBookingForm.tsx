@@ -18,6 +18,8 @@ import { CustomerPicker } from "./CustomerPicker";
 import { bookingItemStatusPill } from "../../lib/statusPill";
 import { BookingDetailSkeleton } from "../common/Skeleton";
 import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
+import { Modal } from "../common/Modal";
+import { AddItemWizard } from "../items/AddItemWizard";
 
 interface NewItemDraft {
   type: BookingItemType;
@@ -135,6 +137,10 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   const [draft, setDraft] = useState<NewItemDraft>(emptyDraft());
   const [addingItem, setAddingItem] = useState(false);
   const [addError, setAddError] = useState<string | null>(null);
+  // "+ Create New Item" quick-add, mirroring BookingForm's own — an
+  // operator adding a new line item mid-edit shouldn't have to leave this
+  // screen to create an item that doesn't exist in the catalog yet.
+  const [showAddItemModal, setShowAddItemModal] = useState(false);
 
   const [confirmingCancelBooking, setConfirmingCancelBooking] = useState(false);
   const [cancelBookingRefund, setCancelBookingRefund] = useState("");
@@ -326,6 +332,20 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     const selected = items.find((i) => i.id === itemId) ?? null;
     const autoPrice = selected ? (draft.type === "rental" ? selected.rental_price : selected.sale_price) : null;
     setDraft((d) => ({ ...d, itemId, quantityBooked: "1", price: autoPrice != null ? String(autoPrice) : "" }));
+  }
+
+  // From the "+ Create New Item" modal — same seamless behavior
+  // BookingForm's own line-item picker already has: the freshly created
+  // item becomes this draft's selection immediately, no leaving the page
+  // or searching for it after. Computed directly from the just-created
+  // `item`, not via handleDraftItemChange (which looks the id up in the
+  // `items` array) — setItems is async, so that lookup would still miss on
+  // this same render and silently drop the auto-filled price.
+  function handleItemCreated(item: Item) {
+    setItems((prev) => [item, ...prev]);
+    const autoPrice = draft.type === "rental" ? item.rental_price : item.sale_price;
+    setDraft((d) => ({ ...d, itemId: item.id, quantityBooked: "1", price: autoPrice != null ? String(autoPrice) : "" }));
+    setShowAddItemModal(false);
   }
 
   function handleDraftTypeChange(type: BookingItemType) {
@@ -710,6 +730,14 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
                   ))}
               </select>
             </label>
+            <button type="button" className="btn-secondary" onClick={() => setShowAddItemModal(true)}>
+              + Create New Item
+            </button>
+            {showAddItemModal && (
+              <Modal onClose={() => setShowAddItemModal(false)}>
+                <AddItemWizard onItemCreated={handleItemCreated} onViewItems={() => setShowAddItemModal(false)} />
+              </Modal>
+            )}
 
             {selectedDraftItem()?.tracking_type === "quantity" && (
               <label className="field-label">
