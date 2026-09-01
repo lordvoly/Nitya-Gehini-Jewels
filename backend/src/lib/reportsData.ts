@@ -1,5 +1,5 @@
 import { supabase } from "./supabase.js";
-import { istDaysAgo, istToday } from "./dates.js";
+import { istDaysAgo, istToday, LIFETIME_FROM } from "./dates.js";
 
 // Shared by reports.ts (GET /api/reports) and the AI assistant's tools
 // (backend/src/tools/index.ts) — extracted so the tool answers are
@@ -588,26 +588,43 @@ export interface UpcomingBookingRevenue {
 // A current-state snapshot, NOT scoped to the report's own date range —
 // same "not scoped to the date filter" treatment as outstanding_dues and
 // repeat_customers, since "what's coming up" is inherently relative to
-// today, not a report period. expected_total/already_collected/
-// still_to_collect reuse getRevenueBreakdown's own proration math (same
-// function summary/P&L's grand_total/received/balance_remaining already
-// go through) — an advance already paid toward a future booking reduces
-// still_to_collect exactly the way it reduces balance_due anywhere else in
-// this app, never a second definition of "paid" invented here.
+// today, not a report period.
+//
+// lifetime_total is the headline figure: past_total (every non-cancelled
+// booking_item ever, pickup_date <= today — the TRUE lifetime revenue
+// figure "Lifetime" itself should show but structurally can't without
+// redefining what every other report figure means) + future_total (the
+// FULL contracted value of every future booking, not just its unpaid
+// part) — "every rupee ever priced, past and future". past_total reuses
+// getPeriodBookingItems/summarizeBookingItems with LIFETIME_FROM, the
+// exact same query Reports' own "Lifetime" preset already runs, so this
+// can never quietly diverge from that figure.
+//
+// already_collected/still_to_collect are deliberately scoped to FUTURE
+// bookings only (not the lifetime_total above) — "of the confirmed
+// upcoming work, how much is already paid vs still owed" is a distinct,
+// still-useful question, and reuses getRevenueBreakdown's own proration
+// math (the same function summary/P&L's received/balance_remaining
+// already go through) so "paid" is never redefined a second time.
 // upcoming_bookings groups the same future items by booking (one row per
 // booking, not per item) so an operator can see which specific future
-// bookings make up the total, each linking through to BookingDetail —
+// bookings make up future_total, each linking through to BookingDetail —
 // expected_amount there is the CONTRACTED value for that booking's future
 // items (FOC-zeroed), not itself split into paid/due; BookingDetail
 // already shows that booking's own real total_paid/balance_due in full.
 export async function getExpectedRevenue(): Promise<{
-  expected_total: number;
+  lifetime_total: number;
+  past_total: number;
+  future_total: number;
   already_collected: number;
   still_to_collect: number;
   upcoming_bookings: UpcomingBookingRevenue[];
 }> {
+  const pastItems = await getPeriodBookingItems(LIFETIME_FROM, istToday());
+  const { total_revenue: past_total } = summarizeBookingItems(pastItems);
+
   const futureItems = await getFutureBookingItems();
-  const { grand_total, received, balance_remaining } = await getRevenueBreakdown(futureItems);
+  const { grand_total: future_total, received, balance_remaining } = await getRevenueBreakdown(futureItems);
 
   const byBooking = new Map<
     string,
@@ -649,7 +666,9 @@ export async function getExpectedRevenue(): Promise<{
     .sort((a, b) => a.nearest_pickup_date.localeCompare(b.nearest_pickup_date));
 
   return {
-    expected_total: grand_total,
+    lifetime_total: past_total + future_total,
+    past_total,
+    future_total,
     already_collected: received,
     still_to_collect: balance_remaining,
     upcoming_bookings,

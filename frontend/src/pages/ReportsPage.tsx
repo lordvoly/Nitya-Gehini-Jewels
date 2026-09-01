@@ -529,9 +529,24 @@ export default function ReportsPage() {
       <div id="expected-revenue-section" className="dashboard-section">
         <h2>Expected Revenue</h2>
         <p className="wizard-hint">
-          Confirmed bookings whose pickup date hasn't happened yet — not scoped to the date range above, and not
-          included in any other figure on this page, since every range (including Lifetime) stops at today.
+          Not scoped to the date range above. Total is every rupee ever priced, past and future — the figure
+          "Lifetime" would show if every other range on this page didn't stop at today.
         </p>
+        <div className="stat-card stat-card-wide">
+          <div className="stat-value">₹{expected_revenue.lifetime_total}</div>
+          <div className="stat-label">Total expected revenue (lifetime)</div>
+        </div>
+        <div className="stat-grid">
+          <div className="stat-card">
+            <div className="stat-value">₹{expected_revenue.past_total}</div>
+            <div className="stat-label">Past (up to today)</div>
+          </div>
+          <div className="stat-card">
+            <div className="stat-value">₹{expected_revenue.future_total}</div>
+            <div className="stat-label">Upcoming (confirmed, full value)</div>
+          </div>
+        </div>
+
         {expected_revenue.upcoming_bookings.length === 0 ? (
           <div className="empty-state">
             <h3>Nothing upcoming</h3>
@@ -539,19 +554,18 @@ export default function ReportsPage() {
           </div>
         ) : (
           <>
+            <p className="wizard-hint">
+              Of the ₹{expected_revenue.future_total} upcoming, here's what's already collected vs. still owed:
+            </p>
             <div className="stat-grid">
-              <div className="stat-card">
-                <div className="stat-value">₹{expected_revenue.expected_total}</div>
-                <div className="stat-label">Expected total</div>
-              </div>
               <div className="stat-card">
                 <div className="stat-value">₹{expected_revenue.already_collected}</div>
                 <div className="stat-label">Already collected</div>
               </div>
-            </div>
-            <div className="stat-card stat-card-wide">
-              <div className="stat-value">₹{expected_revenue.still_to_collect}</div>
-              <div className="stat-label">Still to collect</div>
+              <div className="stat-card">
+                <div className="stat-value">₹{expected_revenue.still_to_collect}</div>
+                <div className="stat-label">Still to collect</div>
+              </div>
             </div>
             <div className="table-wrap">
               <table className="data-table">

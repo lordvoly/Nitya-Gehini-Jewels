@@ -103,8 +103,11 @@ export function istRangeForPreset(preset: string): { from: string; to: string } 
 // before this shop's real data could possibly start, so every row in the
 // DB falls within [from, today] with no need to teach the report query
 // functions (shared with the AI assistant's tools) a second "no lower
-// bound" code path just for this one preset.
-const LIFETIME_FROM = "2000-01-01";
+// bound" code path just for this one preset. Exported so
+// getExpectedRevenue() (reportsData.ts) can reuse the exact same anchor for
+// its own "true past total, no date-range cap" figure, rather than a second
+// hardcoded "2000-01-01" that could quietly drift from this one.
+export const LIFETIME_FROM = "2000-01-01";
 
 /**
  * Reports' own quick-select presets — always resolves to a concrete

@@ -118,12 +118,17 @@ export interface UpcomingBookingRevenue {
 
 // A current-state snapshot, NOT scoped to the report's date range — same
 // "not scoped to the date filter" treatment as outstanding_dues/
-// repeat_customers. Covers every non-cancelled booking_item whose pickup
-// date is still in the future — the exact set every other report figure
-// (including "Lifetime") silently excludes, since every preset's upper
-// bound resolves to today.
+// repeat_customers. lifetime_total = past_total (every non-cancelled
+// booking_item ever, pickup_date <= today — true lifetime revenue, the
+// figure "Lifetime" itself should show but structurally can't) +
+// future_total (the FULL contracted value of every still-upcoming
+// booking) — "every rupee ever priced, past and future". already_collected
+// /still_to_collect are scoped to future bookings only — a distinct
+// question ("of the confirmed upcoming work, how much is already paid").
 export interface ExpectedRevenue {
-  expected_total: number;
+  lifetime_total: number;
+  past_total: number;
+  future_total: number;
   already_collected: number;
   still_to_collect: number;
   upcoming_bookings: UpcomingBookingRevenue[];
