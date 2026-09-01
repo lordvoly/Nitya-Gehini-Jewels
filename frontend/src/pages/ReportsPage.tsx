@@ -33,6 +33,10 @@ export default function ReportsPage() {
   // than inferred from period.from/to, since a preset's own resolved
   // dates could coincidentally match hand-picked ones.
   const [activePreset, setActivePreset] = useState<RangePreset | null>("month");
+  // Which side of the Payment Methods section is showing — client-side
+  // only, since both breakdowns already come back in the same response
+  // (no reason to round-trip to the backend just to flip this).
+  const [paymentMethodsView, setPaymentMethodsView] = useState<"received" | "refunded">("received");
 
   // First load: explicitly request the "Past Month" preset (the new
   // default, replacing the old "this calendar month" one) so activePreset
@@ -113,7 +117,8 @@ export default function ReportsPage() {
   if (error && !data) return <div className="page wizard-error">{error}</div>;
   if (!data) return null;
 
-  const { summary, most_booked_items, revenue_trend, repeat_customers, idle_inventory, pnl, outstanding_dues, payment_methods } = data;
+  const { summary, most_booked_items, revenue_trend, repeat_customers, idle_inventory, pnl, outstanding_dues, payment_methods, refund_methods } = data;
+  const shownBreakdown = paymentMethodsView === "received" ? payment_methods : refund_methods;
 
   const sections = [
     { id: "overview-section", label: "Overview" },
@@ -254,19 +259,41 @@ export default function ReportsPage() {
       <div id="payment-methods-section" className="dashboard-section">
         <h2>Payment Methods</h2>
         <p className="wizard-hint">
-          Money actually received this period, split by how it came in — by collection date, not booking date.
-          Refunds and lost/damaged-item charge adjustments aren't counted here.
+          Money actually received or refunded this period, split by how it moved — by collection/refund date, not
+          booking date. A resolved lost/damaged-item charge (a write-off — no real money moves) never counts here.
         </p>
-        {payment_methods.by_method.length === 0 ? (
+        <div className="toggle-group">
+          <button
+            type="button"
+            className={paymentMethodsView === "received" ? "toggle-btn active" : "toggle-btn"}
+            onClick={() => setPaymentMethodsView("received")}
+          >
+            Received
+          </button>
+          <button
+            type="button"
+            className={paymentMethodsView === "refunded" ? "toggle-btn active" : "toggle-btn"}
+            onClick={() => setPaymentMethodsView("refunded")}
+          >
+            Refunded
+          </button>
+        </div>
+        {paymentMethodsView === "refunded" && (
+          <p className="wizard-hint">
+            Only refunds recorded since the method picker was added will show a real method — older refunds may
+            still be filed under whichever method was in place before this section existed.
+          </p>
+        )}
+        {shownBreakdown.by_method.length === 0 ? (
           <div className="empty-state">
-            <h3>No payments recorded</h3>
+            <h3>{paymentMethodsView === "received" ? "No payments recorded" : "No refunds recorded"}</h3>
             <p>Try a wider date range.</p>
           </div>
         ) : (
           <>
             <div className="stat-card stat-card-wide">
-              <div className="stat-value">₹{payment_methods.total}</div>
-              <div className="stat-label">Total received</div>
+              <div className="stat-value">₹{shownBreakdown.total}</div>
+              <div className="stat-label">{paymentMethodsView === "received" ? "Total received" : "Total refunded"}</div>
             </div>
             <div className="table-wrap">
               <table className="data-table">
@@ -274,15 +301,15 @@ export default function ReportsPage() {
                   <tr>
                     <th>Method</th>
                     <th>Amount</th>
-                    <th>Payments</th>
+                    <th>{paymentMethodsView === "received" ? "Payments" : "Refunds"}</th>
                   </tr>
                 </thead>
                 <tbody>
-                  {payment_methods.by_method.map((m) => (
+                  {shownBreakdown.by_method.map((m) => (
                     <tr key={m.method}>
-                      <td data-label="Method">{PAYMENT_METHOD_LABELS[m.method] ?? m.method}</td>
+                      <td data-label="Method">{PAYMENT_METHOD_LABELS[m.method as keyof typeof PAYMENT_METHOD_LABELS] ?? m.method}</td>
                       <td data-label="Amount">₹{m.amount}</td>
-                      <td data-label="Payments">{m.count}</td>
+                      <td data-label={paymentMethodsView === "received" ? "Payments" : "Refunds"}>{m.count}</td>
                     </tr>
                   ))}
                 </tbody>

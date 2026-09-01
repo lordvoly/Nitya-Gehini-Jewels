@@ -978,10 +978,18 @@ bookingsRouter.post("/:bookingId/items/:bookingItemId/cancel", async (req: Authe
   }
 
   if (requestedRefund != null && requestedRefund > 0) {
+    // Required once there's an actual refund to record — same "no default,
+    // ask" treatment advance_method already gets on POST /api/bookings.
+    // Lets Reports' refund-by-method breakdown mean something real instead
+    // of everything landing under a hardcoded "other".
+    const refundMethod = req.body?.refund_method;
+    if (!refundMethod) {
+      return res.status(400).json({ error: "refund_method is required when recording a refund" });
+    }
     const { error: refundError } = await supabase.from("payments").insert({
       booking_id: req.params.bookingId,
       amount: -requestedRefund,
-      method: "other",
+      method: refundMethod,
       type: "refund",
       payment_date: istToday(),
       notes: `Refund for removing item from booking`,
@@ -1034,10 +1042,16 @@ bookingsRouter.post("/:id/cancel", async (req: AuthedRequest, res) => {
   }
 
   if (refundAmount > 0) {
+    // Same required-once-there's-money treatment as the single-item cancel
+    // endpoint just above — see its own comment for why.
+    const refundMethod = req.body?.refund_method;
+    if (!refundMethod) {
+      return res.status(400).json({ error: "refund_method is required when recording a refund" });
+    }
     const { error: refundError } = await supabase.from("payments").insert({
       booking_id: req.params.id,
       amount: -refundAmount,
-      method: "other",
+      method: refundMethod,
       type: "refund",
       payment_date: istToday(),
       notes: "Refund for cancelling booking",

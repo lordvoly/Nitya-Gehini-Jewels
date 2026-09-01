@@ -14,6 +14,7 @@ import {
 } from "../../lib/bookings";
 import { ArrowLeft } from "lucide-react";
 import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
+import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/payments";
 import { CustomerPicker } from "./CustomerPicker";
 import { bookingItemStatusPill } from "../../lib/statusPill";
 import { BookingDetailSkeleton } from "../common/Skeleton";
@@ -137,6 +138,10 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   // actually completes the removal — separate from bookings.notes (never
   // shown on a receipt); this one IS, once the item is cancelled.
   const [removeReasons, setRemoveReasons] = useState<Record<string, string>>({});
+  // How the refund actually went back — only relevant once refundNeeded has
+  // an entry for this item (no refund, no method to pick). Defaults to cash
+  // like BookingForm's own advance-payment method select.
+  const [removeMethods, setRemoveMethods] = useState<Record<string, PaymentMethod>>({});
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [draft, setDraft] = useState<NewItemDraft>(emptyDraft());
@@ -152,6 +157,9 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   // Same optional reason as removeReasons above, one shared value applied
   // to every item this whole-booking cancel touches.
   const [cancelBookingReason, setCancelBookingReason] = useState("");
+  // Same optional-until-there's-money-to-record treatment as removeMethods
+  // above, applied once to the whole booking's refund.
+  const [cancelBookingMethod, setCancelBookingMethod] = useState<PaymentMethod>("cash");
   const [cancellingBooking, setCancellingBooking] = useState(false);
   const [cancelBookingError, setCancelBookingError] = useState<string | null>(null);
 
@@ -291,7 +299,8 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     try {
       const pending = refundNeeded[bi.id];
       const reason = removeReasons[bi.id]?.trim() || undefined;
-      const result = await cancelBookingItem(bookingId, bi.id, pending ? toNumberOrNull(pending.amount) ?? 0 : undefined, reason);
+      const method = pending ? removeMethods[bi.id] ?? "cash" : undefined;
+      const result = await cancelBookingItem(bookingId, bi.id, pending ? toNumberOrNull(pending.amount) ?? 0 : undefined, reason, method);
       if (result.type === "refund_needed") {
         setRefundNeeded((all) => ({ ...all, [bi.id]: { message: result.message, amount: String(result.refundAmountNeeded) } }));
         return;
@@ -303,6 +312,11 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
         return next;
       });
       setRemoveReasons((all) => {
+        const next = { ...all };
+        delete next[bi.id];
+        return next;
+      });
+      setRemoveMethods((all) => {
         const next = { ...all };
         delete next[bi.id];
         return next;
@@ -327,13 +341,19 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
       delete next[itemId];
       return next;
     });
+    setRemoveMethods((all) => {
+      const next = { ...all };
+      delete next[itemId];
+      return next;
+    });
   }
 
   async function handleCancelBooking() {
     setCancelBookingError(null);
     setCancellingBooking(true);
     try {
-      await cancelBooking(bookingId, toNumberOrNull(cancelBookingRefund) ?? 0, cancelBookingReason.trim() || undefined);
+      const refundAmt = toNumberOrNull(cancelBookingRefund) ?? 0;
+      await cancelBooking(bookingId, refundAmt, cancelBookingReason.trim() || undefined, refundAmt > 0 ? cancelBookingMethod : undefined);
       setConfirmingCancelBooking(false);
       await load();
     } catch (err) {
@@ -678,6 +698,19 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
                         />
                       </label>
                       <label className="field-label">
+                        Refund Method
+                        <select
+                          value={removeMethods[bi.id] ?? "cash"}
+                          onChange={(e) => setRemoveMethods((all) => ({ ...all, [bi.id]: e.target.value as PaymentMethod }))}
+                        >
+                          {PAYMENT_METHODS.map((m) => (
+                            <option key={m} value={m}>
+                              {PAYMENT_METHOD_LABELS[m]}
+                            </option>
+                          ))}
+                        </select>
+                      </label>
+                      <label className="field-label">
                         Reason (optional)
                         <input
                           type="text"
@@ -920,6 +953,18 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
                   />
                 </label>
                 <p className="wizard-hint">Pre-filled with the total already paid — edit if keeping part of it.</p>
+                {(toNumberOrNull(cancelBookingRefund) ?? 0) > 0 && (
+                  <label className="field-label">
+                    Refund Method
+                    <select value={cancelBookingMethod} onChange={(e) => setCancelBookingMethod(e.target.value as PaymentMethod)}>
+                      {PAYMENT_METHODS.map((m) => (
+                        <option key={m} value={m}>
+                          {PAYMENT_METHOD_LABELS[m]}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                )}
                 <label className="field-label">
                   Reason (optional)
                   <input

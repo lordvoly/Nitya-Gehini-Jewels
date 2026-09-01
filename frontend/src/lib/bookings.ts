@@ -326,6 +326,7 @@ export async function cancelBookingItem(
   bookingItemId: string,
   refundAmount?: number,
   reason?: string,
+  refundMethod?: string,
 ): Promise<CancelItemResult> {
   try {
     const item = await apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${bookingItemId}/cancel`, {
@@ -333,6 +334,7 @@ export async function cancelBookingItem(
       body: JSON.stringify({
         ...(refundAmount != null ? { refund_amount: refundAmount } : {}),
         ...(reason ? { reason } : {}),
+        ...(refundMethod ? { refund_method: refundMethod } : {}),
       }),
     });
     return { type: "cancelled", item };
@@ -353,10 +355,14 @@ export async function cancelBookingItem(
 // caller-supplied (pre-filled from the already-loaded booking.total_paid,
 // editable) — no probe-first round trip needed the way single-item
 // removal has, since the frontend already has that number.
-export function cancelBooking(bookingId: string, refundAmount: number, reason?: string) {
+export function cancelBooking(bookingId: string, refundAmount: number, reason?: string, refundMethod?: string) {
   return apiFetch<{ ok: true; cancelled_item_count: number }>(`/api/bookings/${bookingId}/cancel`, {
     method: "POST",
-    body: JSON.stringify({ refund_amount: refundAmount, ...(reason ? { reason } : {}) }),
+    body: JSON.stringify({
+      refund_amount: refundAmount,
+      ...(reason ? { reason } : {}),
+      ...(refundMethod ? { refund_method: refundMethod } : {}),
+    }),
   });
 }
 

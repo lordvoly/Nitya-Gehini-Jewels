@@ -77,6 +77,21 @@ export interface PaymentMethodBreakdown {
   by_method: PaymentMethodTotal[];
 }
 
+export interface RefundMethodTotal {
+  method: PaymentMethod;
+  amount: number;
+  count: number;
+}
+
+// Genuine refunds only (item removed / whole booking cancelled) — never a
+// lost/damaged-item charge write-off, which never moves real money. See
+// getRefundMethodBreakdown's own comment in reportsData.ts for how the two
+// are told apart even though both share payments.type = 'refund'.
+export interface RefundMethodBreakdown {
+  total: number;
+  by_method: RefundMethodTotal[];
+}
+
 // A current-state snapshot, NOT scoped to the report's date range — same
 // "not scoped to the date filter" treatment as repeat_customers.
 export interface OutstandingDue {
@@ -102,6 +117,7 @@ export interface ReportsResponse {
   pnl: Pnl;
   outstanding_dues: OutstandingDue[];
   payment_methods: PaymentMethodBreakdown;
+  refund_methods: RefundMethodBreakdown;
 }
 
 // `range` (a quick-select preset) and `from`/`to` (the calendar pickers)

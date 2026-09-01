@@ -424,6 +424,51 @@ export async function getPaymentMethodBreakdown(from: string, to: string): Promi
   return { total, by_method };
 }
 
+export interface RefundMethodTotal {
+  method: string;
+  amount: number;
+  count: number;
+}
+
+// Genuine refunds only — money actually handed back to a customer (an item
+// removed from a booking, or a whole booking cancelled), never a
+// lost/damaged-item charge write-off. Both share payments.type = 'refund'
+// but are structurally distinguishable by sign: a real refund is recorded
+// with a NEGATIVE amount (it reduces total_paid, per booking_financials'
+// sum(amount) formula — see the two refund insert sites in bookings.ts),
+// while resolving a charge is deliberately POSITIVE (it nets the charge's
+// own negative entry back out; see itemCharges.ts's own comment — no real
+// money leaves the shop for that case, so it doesn't belong in a "refunds
+// by method" view). Scoped by payment_date, same as
+// getPaymentMethodBreakdown.
+export async function getRefundMethodBreakdown(from: string, to: string): Promise<{ total: number; by_method: RefundMethodTotal[] }> {
+  const { data, error } = await supabase
+    .from("payments")
+    .select("method, amount")
+    .eq("type", "refund")
+    .lt("amount", 0)
+    .gte("payment_date", from)
+    .lte("payment_date", to);
+  if (error) throw error;
+
+  const totals = new Map<string, { amount: number; count: number }>();
+  for (const p of data ?? []) {
+    const amt = Math.abs(Number(p.amount));
+    const existing = totals.get(p.method);
+    if (existing) {
+      existing.amount += amt;
+      existing.count += 1;
+    } else {
+      totals.set(p.method, { amount: amt, count: 1 });
+    }
+  }
+  const by_method = [...totals.entries()]
+    .map(([method, v]) => ({ method, amount: v.amount, count: v.count }))
+    .sort((a, b) => b.amount - a.amount);
+  const total = by_method.reduce((sum, m) => sum + m.amount, 0);
+  return { total, by_method };
+}
+
 // Outstanding dues — a current-state snapshot, not scoped to any date
 // range: every booking still owed money, regardless of when it was made.
 // booking_financials has no real FK to bookings (it's a view), so
