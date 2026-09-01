@@ -1,4 +1,5 @@
 import { apiFetch } from "./api";
+import type { PaymentMethod } from "./payments";
 
 export interface ReportsSummary {
   total_bookings: number;
@@ -60,6 +61,22 @@ export interface Pnl {
   by_category: PnlCategoryTotal[];
 }
 
+export interface PaymentMethodTotal {
+  method: PaymentMethod;
+  amount: number;
+  count: number;
+}
+
+// Genuine money received this period, split by how it came in — scoped by
+// payment_date (when it was actually collected), not the same [from, to]
+// meaning as pickup-date-scoped figures above, though it uses the same
+// resolved period. Refunds and lost/damaged-item charge adjustments are
+// excluded — see getPaymentMethodBreakdown's own comment in reportsData.ts.
+export interface PaymentMethodBreakdown {
+  total: number;
+  by_method: PaymentMethodTotal[];
+}
+
 // A current-state snapshot, NOT scoped to the report's date range — same
 // "not scoped to the date filter" treatment as repeat_customers.
 export interface OutstandingDue {
@@ -84,6 +101,7 @@ export interface ReportsResponse {
   idle_inventory: IdleInventoryItem[];
   pnl: Pnl;
   outstanding_dues: OutstandingDue[];
+  payment_methods: PaymentMethodBreakdown;
 }
 
 // `range` (a quick-select preset) and `from`/`to` (the calendar pickers)

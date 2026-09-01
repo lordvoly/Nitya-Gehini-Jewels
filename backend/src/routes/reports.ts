@@ -11,6 +11,7 @@ import {
   getFinancialSummary,
   getOutstandingDues,
   getRevenueTrend,
+  getPaymentMethodBreakdown,
 } from "../lib/reportsData.js";
 
 export const reportsRouter = Router();
@@ -76,6 +77,7 @@ reportsRouter.get("/", async (req, res) => {
     const idle_inventory = await getIdleInventory();
     const pnl = await getFinancialSummary(from, to);
     const outstanding_dues = await getOutstandingDues();
+    const payment_methods = await getPaymentMethodBreakdown(from, to);
 
     res.json({
       period: { from, to },
@@ -87,6 +89,7 @@ reportsRouter.get("/", async (req, res) => {
       idle_inventory,
       pnl,
       outstanding_dues,
+      payment_methods,
     });
   } catch (err) {
     res.status(500).json({ error: err instanceof Error ? err.message : "Unknown error" });

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { fetchReports, type ReportsResponse } from "../lib/reports";
+import { PAYMENT_METHOD_LABELS } from "../lib/payments";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { ListPageSkeleton } from "../components/common/Skeleton";
 import { MostBookedBarChart } from "../components/reports/MostBookedBarChart";
@@ -112,12 +113,13 @@ export default function ReportsPage() {
   if (error && !data) return <div className="page wizard-error">{error}</div>;
   if (!data) return null;
 
-  const { summary, most_booked_items, revenue_trend, repeat_customers, idle_inventory, pnl, outstanding_dues } = data;
+  const { summary, most_booked_items, revenue_trend, repeat_customers, idle_inventory, pnl, outstanding_dues, payment_methods } = data;
 
   const sections = [
     { id: "overview-section", label: "Overview" },
     { id: "revenue-trend-section", label: "Revenue Trend" },
     { id: "pnl-section", label: "P&L" },
+    { id: "payment-methods-section", label: "Payment Methods" },
     { id: "most-booked-section", label: "Most-Booked" },
     { id: "repeat-customers-section", label: "Repeat Customers" },
     { id: "idle-inventory-section", label: "Idle Inventory" },
@@ -246,6 +248,47 @@ export default function ReportsPage() {
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      <div id="payment-methods-section" className="dashboard-section">
+        <h2>Payment Methods</h2>
+        <p className="wizard-hint">
+          Money actually received this period, split by how it came in — by collection date, not booking date.
+          Refunds and lost/damaged-item charge adjustments aren't counted here.
+        </p>
+        {payment_methods.by_method.length === 0 ? (
+          <div className="empty-state">
+            <h3>No payments recorded</h3>
+            <p>Try a wider date range.</p>
+          </div>
+        ) : (
+          <>
+            <div className="stat-card stat-card-wide">
+              <div className="stat-value">₹{payment_methods.total}</div>
+              <div className="stat-label">Total received</div>
+            </div>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Method</th>
+                    <th>Amount</th>
+                    <th>Payments</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {payment_methods.by_method.map((m) => (
+                    <tr key={m.method}>
+                      <td data-label="Method">{PAYMENT_METHOD_LABELS[m.method] ?? m.method}</td>
+                      <td data-label="Amount">₹{m.amount}</td>
+                      <td data-label="Payments">{m.count}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
 

@@ -382,6 +382,48 @@ export async function getFinancialSummary(from: string, to: string) {
   };
 }
 
+export interface PaymentMethodTotal {
+  method: string;
+  amount: number;
+  count: number;
+}
+
+// Genuine money received this period, split by how it came in (cash / UPI /
+// card / bank transfer / other). Scoped by payment_date — when the money
+// was actually collected — not pickup_date like summary/revenue above;
+// "how much did we take in via UPI this month" is a collection-date
+// question, not a booking-date one. Only real money in counts: type =
+// 'payment' AND amount > 0 — this excludes refunds (money going back out)
+// and the negative 'payment' rows a lost/damaged-item charge writes (see
+// the return endpoint in bookings.ts), which are a balance adjustment on
+// the books, not actual cash/UPI/etc. changing hands.
+export async function getPaymentMethodBreakdown(from: string, to: string): Promise<{ total: number; by_method: PaymentMethodTotal[] }> {
+  const { data, error } = await supabase
+    .from("payments")
+    .select("method, amount")
+    .eq("type", "payment")
+    .gt("amount", 0)
+    .gte("payment_date", from)
+    .lte("payment_date", to);
+  if (error) throw error;
+
+  const totals = new Map<string, { amount: number; count: number }>();
+  for (const p of data ?? []) {
+    const existing = totals.get(p.method);
+    if (existing) {
+      existing.amount += Number(p.amount);
+      existing.count += 1;
+    } else {
+      totals.set(p.method, { amount: Number(p.amount), count: 1 });
+    }
+  }
+  const by_method = [...totals.entries()]
+    .map(([method, v]) => ({ method, amount: v.amount, count: v.count }))
+    .sort((a, b) => b.amount - a.amount);
+  const total = by_method.reduce((sum, m) => sum + m.amount, 0);
+  return { total, by_method };
+}
+
 // Outstanding dues — a current-state snapshot, not scoped to any date
 // range: every booking still owed money, regardless of when it was made.
 // booking_financials has no real FK to bookings (it's a view), so
