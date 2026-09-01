@@ -990,9 +990,15 @@ bookingsRouter.post("/:bookingId/items/:bookingItemId/cancel", async (req: Authe
     if (refundError) return res.status(400).json({ error: `Refund couldn't be recorded: ${refundError.message}` });
   }
 
+  // Optional — a cancellation reason isn't required to remove an item
+  // (same softness return_notes already has), but when given it's stored
+  // on the item itself so it can be shown on the invoice later, not just
+  // this one response.
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() || null : null;
+
   const { data, error } = await supabase
     .from("booking_items")
-    .update({ status: "cancelled" })
+    .update({ status: "cancelled", cancellation_reason: reason })
     .eq("id", bookingItem.id)
     .select()
     .single();
@@ -1040,9 +1046,14 @@ bookingsRouter.post("/:id/cancel", async (req: AuthedRequest, res) => {
     if (refundError) return res.status(400).json({ error: `Refund couldn't be recorded: ${refundError.message}` });
   }
 
+  // Same optional reason as the single-item cancel endpoint, applied as
+  // one shared value across every item this call cancels — a whole-booking
+  // cancel is one decision, not a separate reason per line.
+  const reason = typeof req.body?.reason === "string" ? req.body.reason.trim() || null : null;
+
   const { error: cancelError } = await supabase
     .from("booking_items")
-    .update({ status: "cancelled" })
+    .update({ status: "cancelled", cancellation_reason: reason })
     .in(
       "id",
       items.map((i) => i.id),

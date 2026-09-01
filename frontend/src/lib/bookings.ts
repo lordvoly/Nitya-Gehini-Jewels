@@ -98,6 +98,12 @@ export interface BookingItem {
   return_checklist: Record<string, boolean> | null;
   return_notes: string | null;
   custom_addons: string[];
+  // Set only at the moment this item is cancelled (see the two cancel
+  // endpoints in bookings.ts) — deliberately separate from the booking's
+  // own `notes` field (internal-only, never shown on a receipt); this one
+  // IS shown on the invoice for a cancelled item. Optional to provide, so
+  // always null for anything not cancelled.
+  cancellation_reason: string | null;
   created_at: string;
   updated_at: string;
   items: BookingItemSummary | null;
@@ -315,11 +321,19 @@ export type CancelItemResult =
   | { type: "cancelled"; item: BookingItem }
   | { type: "refund_needed"; message: string; refundAmountNeeded: number };
 
-export async function cancelBookingItem(bookingId: string, bookingItemId: string, refundAmount?: number): Promise<CancelItemResult> {
+export async function cancelBookingItem(
+  bookingId: string,
+  bookingItemId: string,
+  refundAmount?: number,
+  reason?: string,
+): Promise<CancelItemResult> {
   try {
     const item = await apiFetch<BookingItem>(`/api/bookings/${bookingId}/items/${bookingItemId}/cancel`, {
       method: "POST",
-      body: JSON.stringify(refundAmount != null ? { refund_amount: refundAmount } : {}),
+      body: JSON.stringify({
+        ...(refundAmount != null ? { refund_amount: refundAmount } : {}),
+        ...(reason ? { reason } : {}),
+      }),
     });
     return { type: "cancelled", item };
   } catch (e) {
@@ -339,10 +353,10 @@ export async function cancelBookingItem(bookingId: string, bookingItemId: string
 // caller-supplied (pre-filled from the already-loaded booking.total_paid,
 // editable) — no probe-first round trip needed the way single-item
 // removal has, since the frontend already has that number.
-export function cancelBooking(bookingId: string, refundAmount: number) {
+export function cancelBooking(bookingId: string, refundAmount: number, reason?: string) {
   return apiFetch<{ ok: true; cancelled_item_count: number }>(`/api/bookings/${bookingId}/cancel`, {
     method: "POST",
-    body: JSON.stringify({ refund_amount: refundAmount }),
+    body: JSON.stringify({ refund_amount: refundAmount, ...(reason ? { reason } : {}) }),
   });
 }
 

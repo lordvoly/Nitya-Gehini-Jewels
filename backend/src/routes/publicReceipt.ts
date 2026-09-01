@@ -36,7 +36,8 @@ publicReceiptRouter.get("/receipt/:token", publicReceiptLimiter, async (req, res
        customers(name),
        booking_items(type, pickup_date, return_date, status, price_charged, is_foc,
                       deposit_amount, deposit_collected, deposit_refunded, deposit_refund_date,
-                      custom_addons, quantity_booked, items(item_code, name, item_type, components))`,
+                      custom_addons, quantity_booked, cancellation_reason,
+                      items(item_code, name, item_type, components))`,
     )
     .eq("share_token", req.params.token)
     .maybeSingle();
@@ -74,6 +75,11 @@ publicReceiptRouter.get("/receipt/:token", publicReceiptLimiter, async (req, res
         // BookingForm itself shows read-only at booking time.
         components: item?.item_type === "set" ? (item?.components ?? []) : [],
         custom_addons: bi.custom_addons ?? [],
+        // Only ever set at cancellation time (see bookings.ts's cancel
+        // endpoints), so this is naturally null for anything not cancelled
+        // — no extra status check needed to keep it out of an active item's
+        // response.
+        cancellation_reason: bi.cancellation_reason ?? null,
         deposit: bi.deposit_collected
           ? { amount: bi.deposit_amount, refunded: bi.deposit_refunded, refund_date: bi.deposit_refund_date }
           : null,

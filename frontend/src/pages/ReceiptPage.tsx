@@ -145,6 +145,12 @@ export default function ReceiptPage() {
                   {bi.custom_addons.length > 0 && (
                     <div className="receipt-item-addons">Additional: {bi.custom_addons.join(", ")}</div>
                   )}
+                  {/* Separate from the booking's own internal Notes (never
+                      shown on a receipt) — this is entered specifically at
+                      cancellation time to be visible here. */}
+                  {cancelled && bi.cancellation_reason && (
+                    <div className="receipt-item-addons">Reason: {bi.cancellation_reason}</div>
+                  )}
                   {/* Deliberately outside the Total/Paid/Balance figures below —
                       a deposit never flows through booking_financials (see
                       CLAUDE.md), this is purely a paper record of what was

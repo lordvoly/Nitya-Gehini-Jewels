@@ -132,6 +132,11 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
   // leave the customer overpaid — the exact amount it reports, editable
   // before the second, confirming call.
   const [refundNeeded, setRefundNeeded] = useState<Record<string, { message: string; amount: string }>>({});
+  // Optional cancellation reason, entered once at the confirm step and
+  // carried through whichever of the (possibly two) handleRemoveItem calls
+  // actually completes the removal — separate from bookings.notes (never
+  // shown on a receipt); this one IS, once the item is cancelled.
+  const [removeReasons, setRemoveReasons] = useState<Record<string, string>>({});
 
   const [showAddForm, setShowAddForm] = useState(false);
   const [draft, setDraft] = useState<NewItemDraft>(emptyDraft());
@@ -144,6 +149,9 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
 
   const [confirmingCancelBooking, setConfirmingCancelBooking] = useState(false);
   const [cancelBookingRefund, setCancelBookingRefund] = useState("");
+  // Same optional reason as removeReasons above, one shared value applied
+  // to every item this whole-booking cancel touches.
+  const [cancelBookingReason, setCancelBookingReason] = useState("");
   const [cancellingBooking, setCancellingBooking] = useState(false);
   const [cancelBookingError, setCancelBookingError] = useState<string | null>(null);
 
@@ -282,13 +290,19 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
     setRemovingId(bi.id);
     try {
       const pending = refundNeeded[bi.id];
-      const result = await cancelBookingItem(bookingId, bi.id, pending ? toNumberOrNull(pending.amount) ?? 0 : undefined);
+      const reason = removeReasons[bi.id]?.trim() || undefined;
+      const result = await cancelBookingItem(bookingId, bi.id, pending ? toNumberOrNull(pending.amount) ?? 0 : undefined, reason);
       if (result.type === "refund_needed") {
         setRefundNeeded((all) => ({ ...all, [bi.id]: { message: result.message, amount: String(result.refundAmountNeeded) } }));
         return;
       }
       setConfirmingRemoveId(null);
       setRefundNeeded((all) => {
+        const next = { ...all };
+        delete next[bi.id];
+        return next;
+      });
+      setRemoveReasons((all) => {
         const next = { ...all };
         delete next[bi.id];
         return next;
@@ -308,13 +322,18 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
       delete next[itemId];
       return next;
     });
+    setRemoveReasons((all) => {
+      const next = { ...all };
+      delete next[itemId];
+      return next;
+    });
   }
 
   async function handleCancelBooking() {
     setCancelBookingError(null);
     setCancellingBooking(true);
     try {
-      await cancelBooking(bookingId, toNumberOrNull(cancelBookingRefund) ?? 0);
+      await cancelBooking(bookingId, toNumberOrNull(cancelBookingRefund) ?? 0, cancelBookingReason.trim() || undefined);
       setConfirmingCancelBooking(false);
       await load();
     } catch (err) {
@@ -658,6 +677,16 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
                           }
                         />
                       </label>
+                      <label className="field-label">
+                        Reason (optional)
+                        <input
+                          type="text"
+                          value={removeReasons[bi.id] ?? ""}
+                          onChange={(e) => setRemoveReasons((all) => ({ ...all, [bi.id]: e.target.value }))}
+                          placeholder="e.g. Customer didn't pick up"
+                        />
+                      </label>
+                      <p className="wizard-hint">Shown on the invoice for this item — separate from the booking's internal Notes.</p>
                       <button
                         type="button"
                         className="btn-danger"
@@ -672,7 +701,17 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
                     </span>
                   ) : (
                     <span>
-                      Remove this item?{" "}
+                      Remove this item?
+                      <label className="field-label">
+                        Reason (optional)
+                        <input
+                          type="text"
+                          value={removeReasons[bi.id] ?? ""}
+                          onChange={(e) => setRemoveReasons((all) => ({ ...all, [bi.id]: e.target.value }))}
+                          placeholder="e.g. Customer didn't pick up"
+                        />
+                      </label>
+                      <p className="wizard-hint">Shown on the invoice for this item — separate from the booking's internal Notes.</p>
                       <button
                         type="button"
                         className="btn-danger"
@@ -881,6 +920,16 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
                   />
                 </label>
                 <p className="wizard-hint">Pre-filled with the total already paid — edit if keeping part of it.</p>
+                <label className="field-label">
+                  Reason (optional)
+                  <input
+                    type="text"
+                    value={cancelBookingReason}
+                    onChange={(e) => setCancelBookingReason(e.target.value)}
+                    placeholder="e.g. Customer didn't pick up"
+                  />
+                </label>
+                <p className="wizard-hint">Shown on the invoice for every item this cancels — separate from the booking's internal Notes.</p>
                 {cancelBookingError && <p className="wizard-error">{cancelBookingError}</p>}
                 <div className="wizard-actions">
                   <button type="button" className="btn-secondary" onClick={() => setConfirmingCancelBooking(false)}>

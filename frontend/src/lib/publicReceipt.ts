@@ -17,6 +17,9 @@ export interface PublicReceiptItem {
   quantity_booked: number;
   components: string[];
   custom_addons: string[];
+  // Only ever present for status === 'cancelled' — see BookingItem's own
+  // cancellation_reason in lib/bookings.ts.
+  cancellation_reason: string | null;
   deposit: { amount: number; refunded: boolean; refund_date: string | null } | null;
 }
 

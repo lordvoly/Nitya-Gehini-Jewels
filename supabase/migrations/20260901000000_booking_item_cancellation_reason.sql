@@ -1,0 +1,12 @@
+-- A short free-text reason captured at the moment a booking_item is
+-- cancelled (single-item Remove Item, or whole-booking Cancel Booking,
+-- both in backend/src/routes/bookings.ts). Deliberately separate from
+-- bookings.notes, which is an internal-only field never shown on any
+-- receipt (see CLAUDE.md) — a cancellation reason is meant to be visible
+-- on the invoice, so it needs its own column rather than overloading
+-- notes' existing "never printed" meaning. Lives on booking_items, not
+-- bookings, matching cancellation's own per-item grain (a single item in
+-- a multi-item booking can be cancelled on its own, each with its own
+-- reason) — the whole-booking cancel endpoint just applies one shared
+-- reason across every item it cancels in that batch.
+alter table booking_items add column cancellation_reason text;

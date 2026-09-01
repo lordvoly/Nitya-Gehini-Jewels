@@ -374,6 +374,9 @@ export function BookingDetail({
                         {bi.deposit_collected ? (bi.deposit_refunded ? " (refunded)" : " (collected)") : " (not collected)"}
                       </li>
                     )}
+                    {bi.status === "cancelled" && bi.cancellation_reason && (
+                      <li>Cancellation reason: {bi.cancellation_reason}</li>
+                    )}
                   </ul>
 
                   {bi.custom_addons.length > 0 && (

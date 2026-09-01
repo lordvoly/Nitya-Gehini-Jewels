@@ -108,6 +108,9 @@ export default function PublicReceiptPage() {
                   {bi.custom_addons.length > 0 && (
                     <div className="receipt-item-addons">Additional: {bi.custom_addons.join(", ")}</div>
                   )}
+                  {cancelled && bi.cancellation_reason && (
+                    <div className="receipt-item-addons">Reason: {bi.cancellation_reason}</div>
+                  )}
                   {!cancelled && bi.deposit && (
                     <div className="receipt-item-deposit">
                       Security Deposit: ₹{bi.deposit.amount}
