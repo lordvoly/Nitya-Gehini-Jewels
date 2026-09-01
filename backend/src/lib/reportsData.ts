@@ -430,6 +430,33 @@ export interface RefundMethodTotal {
   count: number;
 }
 
+// One real refund event, resolved back to the booking it belongs to — so
+// an operator looking at "we refunded ₹600 via Bank Transfer" can actually
+// find which customer/booking that was, not just the aggregate total.
+// payments.booking_id is a real FK (unlike booking_financials/booking_
+// status elsewhere in this app), so this is a genuine PostgREST embed, not
+// a separate-queries-plus-merge.
+export interface RefundDetail {
+  id: string;
+  booking_id: string;
+  booking_code: string;
+  customer_name: string;
+  method: string;
+  amount: number;
+  payment_date: string;
+  notes: string | null;
+}
+
+interface RefundPaymentRow {
+  id: string;
+  booking_id: string;
+  amount: number;
+  method: string;
+  payment_date: string;
+  notes: string | null;
+  bookings: { booking_code: string; customers: { name: string } | null } | null;
+}
+
 // Genuine refunds only — money actually handed back to a customer (an item
 // removed from a booking, or a whole booking cancelled), never a
 // lost/damaged-item charge write-off. Both share payments.type = 'refund'
@@ -441,15 +468,31 @@ export interface RefundMethodTotal {
 // money leaves the shop for that case, so it doesn't belong in a "refunds
 // by method" view). Scoped by payment_date, same as
 // getPaymentMethodBreakdown.
-export async function getRefundMethodBreakdown(from: string, to: string): Promise<{ total: number; by_method: RefundMethodTotal[] }> {
+export async function getRefundMethodBreakdown(
+  from: string,
+  to: string,
+): Promise<{ total: number; by_method: RefundMethodTotal[]; refunds: RefundDetail[] }> {
   const { data, error } = await supabase
     .from("payments")
-    .select("method, amount")
+    .select("id, booking_id, amount, method, payment_date, notes, bookings(booking_code, customers(name))")
     .eq("type", "refund")
     .lt("amount", 0)
     .gte("payment_date", from)
-    .lte("payment_date", to);
+    .lte("payment_date", to)
+    .order("payment_date", { ascending: false })
+    .returns<RefundPaymentRow[]>();
   if (error) throw error;
+
+  const refunds: RefundDetail[] = (data ?? []).map((p) => ({
+    id: p.id,
+    booking_id: p.booking_id,
+    booking_code: p.bookings?.booking_code ?? "—",
+    customer_name: p.bookings?.customers?.name ?? "—",
+    method: p.method,
+    amount: Math.abs(Number(p.amount)),
+    payment_date: p.payment_date,
+    notes: p.notes,
+  }));
 
   const totals = new Map<string, { amount: number; count: number }>();
   for (const p of data ?? []) {
@@ -466,7 +509,7 @@ export async function getRefundMethodBreakdown(from: string, to: string): Promis
     .map(([method, v]) => ({ method, amount: v.amount, count: v.count }))
     .sort((a, b) => b.amount - a.amount);
   const total = by_method.reduce((sum, m) => sum + m.amount, 0);
-  return { total, by_method };
+  return { total, by_method, refunds };
 }
 
 // Outstanding dues — a current-state snapshot, not scoped to any date

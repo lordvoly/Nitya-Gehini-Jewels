@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { Link, useLocation } from "react-router-dom";
 import { fetchReports, type ReportsResponse } from "../lib/reports";
 import { PAYMENT_METHOD_LABELS } from "../lib/payments";
+import { formatDateDisplay } from "../lib/dates";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { ListPageSkeleton } from "../components/common/Skeleton";
 import { MostBookedBarChart } from "../components/reports/MostBookedBarChart";
@@ -315,6 +316,34 @@ export default function ReportsPage() {
                 </tbody>
               </table>
             </div>
+            {paymentMethodsView === "refunded" && (
+              <div className="table-wrap">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Booking</th>
+                      <th>Customer</th>
+                      <th>Method</th>
+                      <th>Amount</th>
+                      <th>Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {refund_methods.refunds.map((r) => (
+                      <tr key={r.id}>
+                        <td data-label="Booking">
+                          <Link to={`/bookings?booking=${r.booking_id}`}>{r.booking_code}</Link>
+                        </td>
+                        <td data-label="Customer">{r.customer_name}</td>
+                        <td data-label="Method">{PAYMENT_METHOD_LABELS[r.method] ?? r.method}</td>
+                        <td data-label="Amount">₹{r.amount}</td>
+                        <td data-label="Date">{formatDateDisplay(r.payment_date)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
           </>
         )}
       </div>

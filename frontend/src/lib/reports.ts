@@ -83,6 +83,20 @@ export interface RefundMethodTotal {
   count: number;
 }
 
+// One real refund event, resolved back to the booking it belongs to — lets
+// the operator click straight through to see which item/customer a refund
+// was for, instead of only seeing the aggregate total.
+export interface RefundDetail {
+  id: string;
+  booking_id: string;
+  booking_code: string;
+  customer_name: string;
+  method: PaymentMethod;
+  amount: number;
+  payment_date: string;
+  notes: string | null;
+}
+
 // Genuine refunds only (item removed / whole booking cancelled) — never a
 // lost/damaged-item charge write-off, which never moves real money. See
 // getRefundMethodBreakdown's own comment in reportsData.ts for how the two
@@ -90,6 +104,7 @@ export interface RefundMethodTotal {
 export interface RefundMethodBreakdown {
   total: number;
   by_method: RefundMethodTotal[];
+  refunds: RefundDetail[];
 }
 
 // A current-state snapshot, NOT scoped to the report's date range — same
