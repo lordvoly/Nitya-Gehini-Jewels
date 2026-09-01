@@ -118,7 +118,18 @@ export default function ReportsPage() {
   if (error && !data) return <div className="page wizard-error">{error}</div>;
   if (!data) return null;
 
-  const { summary, most_booked_items, revenue_trend, repeat_customers, idle_inventory, pnl, outstanding_dues, payment_methods, refund_methods } = data;
+  const {
+    summary,
+    most_booked_items,
+    revenue_trend,
+    repeat_customers,
+    idle_inventory,
+    pnl,
+    outstanding_dues,
+    payment_methods,
+    refund_methods,
+    expected_revenue,
+  } = data;
   const shownBreakdown = paymentMethodsView === "received" ? payment_methods : refund_methods;
 
   const sections = [
@@ -130,6 +141,7 @@ export default function ReportsPage() {
     { id: "repeat-customers-section", label: "Repeat Customers" },
     { id: "idle-inventory-section", label: "Idle Inventory" },
     { id: "outstanding-dues-section", label: "Outstanding Dues" },
+    { id: "expected-revenue-section", label: "Expected Revenue" },
   ];
   function jumpTo(id: string) {
     document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
@@ -511,6 +523,67 @@ export default function ReportsPage() {
               </tbody>
             </table>
           </div>
+        )}
+      </div>
+
+      <div id="expected-revenue-section" className="dashboard-section">
+        <h2>Expected Revenue</h2>
+        <p className="wizard-hint">
+          Confirmed bookings whose pickup date hasn't happened yet — not scoped to the date range above, and not
+          included in any other figure on this page, since every range (including Lifetime) stops at today.
+        </p>
+        {expected_revenue.upcoming_bookings.length === 0 ? (
+          <div className="empty-state">
+            <h3>Nothing upcoming</h3>
+            <p>No confirmed bookings with a future pickup date.</p>
+          </div>
+        ) : (
+          <>
+            <div className="stat-grid">
+              <div className="stat-card">
+                <div className="stat-value">₹{expected_revenue.expected_total}</div>
+                <div className="stat-label">Expected total</div>
+              </div>
+              <div className="stat-card">
+                <div className="stat-value">₹{expected_revenue.already_collected}</div>
+                <div className="stat-label">Already collected</div>
+              </div>
+            </div>
+            <div className="stat-card stat-card-wide">
+              <div className="stat-value">₹{expected_revenue.still_to_collect}</div>
+              <div className="stat-label">Still to collect</div>
+            </div>
+            <div className="table-wrap">
+              <table className="data-table">
+                <thead>
+                  <tr>
+                    <th>Booking</th>
+                    <th>Customer</th>
+                    <th>Nearest Pickup</th>
+                    <th>Expected Amount</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {expected_revenue.upcoming_bookings.map((b) => (
+                    <tr key={b.booking_id}>
+                      <td data-label="Booking">
+                        <Link to={`/bookings?booking=${b.booking_id}`}>{b.booking_code}</Link>
+                      </td>
+                      <td data-label="Customer">
+                        {b.customer_id ? (
+                          <Link to={`/customers?customer=${b.customer_id}`}>{b.customer_name}</Link>
+                        ) : (
+                          b.customer_name
+                        )}
+                      </td>
+                      <td data-label="Nearest Pickup">{formatDateDisplay(b.nearest_pickup_date)}</td>
+                      <td data-label="Expected Amount">₹{b.expected_amount}</td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </>
         )}
       </div>
     </div>

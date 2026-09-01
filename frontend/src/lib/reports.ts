@@ -107,6 +107,28 @@ export interface RefundMethodBreakdown {
   refunds: RefundDetail[];
 }
 
+export interface UpcomingBookingRevenue {
+  booking_id: string;
+  booking_code: string;
+  customer_id: string | null;
+  customer_name: string;
+  nearest_pickup_date: string;
+  expected_amount: number;
+}
+
+// A current-state snapshot, NOT scoped to the report's date range — same
+// "not scoped to the date filter" treatment as outstanding_dues/
+// repeat_customers. Covers every non-cancelled booking_item whose pickup
+// date is still in the future — the exact set every other report figure
+// (including "Lifetime") silently excludes, since every preset's upper
+// bound resolves to today.
+export interface ExpectedRevenue {
+  expected_total: number;
+  already_collected: number;
+  still_to_collect: number;
+  upcoming_bookings: UpcomingBookingRevenue[];
+}
+
 // A current-state snapshot, NOT scoped to the report's date range — same
 // "not scoped to the date filter" treatment as repeat_customers.
 export interface OutstandingDue {
@@ -133,6 +155,7 @@ export interface ReportsResponse {
   outstanding_dues: OutstandingDue[];
   payment_methods: PaymentMethodBreakdown;
   refund_methods: RefundMethodBreakdown;
+  expected_revenue: ExpectedRevenue;
 }
 
 // `range` (a quick-select preset) and `from`/`to` (the calendar pickers)

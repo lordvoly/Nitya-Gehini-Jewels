@@ -1,5 +1,5 @@
 import { supabase } from "./supabase.js";
-import { istDaysAgo } from "./dates.js";
+import { istDaysAgo, istToday } from "./dates.js";
 
 // Shared by reports.ts (GET /api/reports) and the AI assistant's tools
 // (backend/src/tools/index.ts) — extracted so the tool answers are
@@ -553,4 +553,105 @@ export async function getOutstandingDues() {
     // dueFinancials is already balance_due-desc from the query, but that
     // order isn't guaranteed to survive the map above, so re-sort explicitly.
     .sort((a, b) => b.balance_due - a.balance_due);
+}
+
+// Same shape/cancelled-exclusion as getPeriodBookingItems, but the OTHER
+// half of the calendar: every non-cancelled booking_item whose pickup_date
+// is strictly after today. Exists because every date-range preset on
+// Reports — including "Lifetime" — resolves its upper bound to istToday(),
+// so a booking made today for a wedding in November was previously
+// invisible to every single report figure (total_bookings, revenue, P&L,
+// all of it), with no way to see it anywhere on this page. This is the
+// query that feeds getExpectedRevenue below.
+export async function getFutureBookingItems(): Promise<BookingItemRow[]> {
+  const { data, error } = await supabase
+    .from("booking_items")
+    .select(
+      "id, booking_id, type, price_charged, is_foc, item_id, pickup_date, items(item_code, name), bookings(customer_id, customers(name, phone, customer_type))",
+    )
+    .neq("status", "cancelled")
+    .gt("pickup_date", istToday())
+    .returns<BookingItemRow[]>();
+  if (error) throw error;
+  return data;
+}
+
+export interface UpcomingBookingRevenue {
+  booking_id: string;
+  booking_code: string;
+  customer_id: string | null;
+  customer_name: string;
+  nearest_pickup_date: string;
+  expected_amount: number;
+}
+
+// A current-state snapshot, NOT scoped to the report's own date range —
+// same "not scoped to the date filter" treatment as outstanding_dues and
+// repeat_customers, since "what's coming up" is inherently relative to
+// today, not a report period. expected_total/already_collected/
+// still_to_collect reuse getRevenueBreakdown's own proration math (same
+// function summary/P&L's grand_total/received/balance_remaining already
+// go through) — an advance already paid toward a future booking reduces
+// still_to_collect exactly the way it reduces balance_due anywhere else in
+// this app, never a second definition of "paid" invented here.
+// upcoming_bookings groups the same future items by booking (one row per
+// booking, not per item) so an operator can see which specific future
+// bookings make up the total, each linking through to BookingDetail —
+// expected_amount there is the CONTRACTED value for that booking's future
+// items (FOC-zeroed), not itself split into paid/due; BookingDetail
+// already shows that booking's own real total_paid/balance_due in full.
+export async function getExpectedRevenue(): Promise<{
+  expected_total: number;
+  already_collected: number;
+  still_to_collect: number;
+  upcoming_bookings: UpcomingBookingRevenue[];
+}> {
+  const futureItems = await getFutureBookingItems();
+  const { grand_total, received, balance_remaining } = await getRevenueBreakdown(futureItems);
+
+  const byBooking = new Map<
+    string,
+    { customer_id: string | null; customer_name: string; nearest_pickup_date: string; expected_amount: number }
+  >();
+  for (const item of futureItems) {
+    const existing = byBooking.get(item.booking_id);
+    const price = effectivePrice(item);
+    const pickupDate = item.pickup_date ?? "";
+    if (existing) {
+      existing.expected_amount += price;
+      if (pickupDate && pickupDate < existing.nearest_pickup_date) existing.nearest_pickup_date = pickupDate;
+    } else {
+      byBooking.set(item.booking_id, {
+        customer_id: item.bookings?.customer_id ?? null,
+        customer_name: item.bookings?.customers?.name ?? "—",
+        nearest_pickup_date: pickupDate,
+        expected_amount: price,
+      });
+    }
+  }
+
+  const bookingIds = [...byBooking.keys()];
+  const { data: bookingRows, error: bookingRowsError } = bookingIds.length
+    ? await supabase.from("bookings").select("id, booking_code").in("id", bookingIds)
+    : { data: [], error: null };
+  if (bookingRowsError) throw bookingRowsError;
+  const codeById = new Map((bookingRows ?? []).map((b) => [b.id, b.booking_code]));
+
+  const upcoming_bookings: UpcomingBookingRevenue[] = [...byBooking.entries()]
+    .map(([booking_id, v]) => ({
+      booking_id,
+      booking_code: codeById.get(booking_id) ?? "—",
+      customer_id: v.customer_id,
+      customer_name: v.customer_name,
+      nearest_pickup_date: v.nearest_pickup_date,
+      expected_amount: v.expected_amount,
+    }))
+    .sort((a, b) => a.nearest_pickup_date.localeCompare(b.nearest_pickup_date));
+
+  return {
+    expected_total: grand_total,
+    already_collected: received,
+    still_to_collect: balance_remaining,
+    upcoming_bookings,
+  };
 }
