@@ -16,6 +16,7 @@ import { ArrowLeft } from "lucide-react";
 import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/payments";
 import { CustomerPicker } from "./CustomerPicker";
+import { ItemPicker } from "./ItemPicker";
 import { bookingItemStatusPill } from "../../lib/statusPill";
 import { BookingDetailSkeleton } from "../common/Skeleton";
 import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
@@ -789,19 +790,12 @@ export function EditBookingForm({ bookingId, onDone, onCancel }: { bookingId: st
               </button>
             </div>
 
-            <label className="field-label">
-              Item
-              <select value={draft.itemId} onChange={(e) => handleDraftItemChange(e.target.value)}>
-                <option value="">Select an item…</option>
-                {items
-                  .filter((i) => i.tracking_type === "quantity" || i.status === "available")
-                  .map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {i.item_code} — {i.name}
-                    </option>
-                  ))}
-              </select>
-            </label>
+            <p className="field-label">Item</p>
+            <ItemPicker
+              items={items.filter((i) => i.tracking_type === "quantity" || i.status === "available")}
+              selected={selectedDraftItem()}
+              onSelect={handleDraftItemChange}
+            />
             <button type="button" className="btn-secondary" onClick={() => setShowAddItemModal(true)}>
               + Create New Item
             </button>

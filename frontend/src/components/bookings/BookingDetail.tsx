@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ImageOff, ArrowLeft, IndianRupee, Printer, Pencil } from "lucide-react";
+import { ImageOff, ArrowLeft, IndianRupee, Printer, Pencil, MessageCircleHeart } from "lucide-react";
 import {
   fetchBooking,
   updateBooking,
@@ -26,6 +26,8 @@ import {
 import { toNumberOrNull } from "../../lib/numbers";
 import { bookingItemStatusPill, bookingComputedStatusPill, bookingChargeStatusPill } from "../../lib/statusPill";
 import { formatDateDisplay } from "../../lib/dates";
+import { fetchShopSettings } from "../../lib/shopSettings";
+import { buildWhatsAppLink, buildFeedbackRequestMessage } from "../../lib/whatsapp";
 
 export function BookingDetail({
   bookingId,
@@ -92,6 +94,17 @@ export function BookingDetail({
   // central Charges page, which this panel points to instead.
   const [pendingSavingKey, setPendingSavingKey] = useState<string | null>(null);
   const [pendingError, setPendingError] = useState<string | null>(null);
+
+  // Request Feedback (WhatsApp) — independent, non-blocking fetch, same
+  // fallback-name reasoning as Dashboard's own occasion-greeting shop-name
+  // fetch: a shop-settings hiccup should degrade this one secondary button
+  // to a generic name, not fail the whole booking page.
+  const [shopName, setShopName] = useState("the shop");
+  useEffect(() => {
+    fetchShopSettings()
+      .then((s) => setShopName(s.name))
+      .catch(() => {});
+  }, []);
 
   const load = useCallback(() => {
     setLoading(true);
@@ -656,6 +669,29 @@ export function BookingDetail({
               <Printer size={15} strokeWidth={2} aria-hidden="true" />
               Print/Download Receipt
             </Link>
+            {/* Only once the booking is genuinely wrapped up — every item
+                returned/sold — asking for feedback mid-rental would be
+                premature. A real <a>, not window.location, same reasoning
+                as ReceiptPage's own WhatsApp button: mobile browsers treat
+                it as genuine user-initiated navigation. */}
+            {booking.computed_status === "completed" &&
+              (() => {
+                const feedback = buildWhatsAppLink(
+                  booking.customers?.phone,
+                  buildFeedbackRequestMessage(booking.customers?.name ?? "there", shopName),
+                );
+                return "url" in feedback ? (
+                  <a href={feedback.url} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-compact">
+                    <MessageCircleHeart size={15} strokeWidth={2} aria-hidden="true" />
+                    Request Feedback
+                  </a>
+                ) : (
+                  <button className="btn-secondary btn-compact" disabled title={feedback.error}>
+                    <MessageCircleHeart size={15} strokeWidth={2} aria-hidden="true" />
+                    Request Feedback
+                  </button>
+                );
+              })()}
             <button className="btn-primary btn-compact" onClick={onEdit}>
               <Pencil size={15} strokeWidth={2} aria-hidden="true" />
               Edit Booking

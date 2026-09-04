@@ -1,3 +1,5 @@
+import { INSTAGRAM_HANDLE, INSTAGRAM_URL, GOOGLE_REVIEW_URL } from "./socialLinks";
+
 // Builds a wa.me deep link from a stored phone number. The DB already
 // normalizes customers.phone to a clean 10-digit string at write time
 // (backend/src/routes/customers.ts's normalizePhone()), but that's not
@@ -37,4 +39,17 @@ export function buildOccasionMessage(
   return type === "birthday"
     ? `Dear ${customerName}, another year, another reason to sparkle! From all of us at *${shopName}*, we wanted to take a moment to wish you a very happy birthday. It's always a joy being part of your special moments, and we hope this year brings you as much warmth and beauty as you bring into every room you walk into. As a small gift from us to you, enjoy ${discountPercent}% off anything you rent or buy with us today — our way of saying thank you for being part of our family.`
     : `Dear ${customerName}, happy wedding anniversary! We still remember the joy of being part of your special day, and it means so much to us that our journey with you continues well beyond it. Wishing you a year ahead filled with love, laughter, and many more moments worth celebrating. As our gift to you, enjoy ${discountPercent}% off anything you rent or buy with us today, with warm wishes from all of us at *${shopName}*.`;
+}
+
+// Sent once a booking is fully wrapped up (every item returned/sold) — a
+// human, occasion-aware thank-you, not a generic "please review us" blast.
+// Written for this shop specifically (bridal jewelry — the pieces were
+// almost always for someone's big day), so it references the occasion
+// rather than a generic "purchase" or "order". Same *bold* WhatsApp syntax
+// as buildOccasionMessage for the shop name, and the Instagram handle is
+// shown as plain @text (readable on its own) with the actual URL alongside
+// it rather than relying on WhatsApp's own link-preview to convey where it
+// goes.
+export function buildFeedbackRequestMessage(customerName: string, shopName: string): string {
+  return `Dear ${customerName}, thank you for letting *${shopName}* be a part of your special day! We hope every piece you wore made you feel as radiant as the occasion deserved. If you enjoyed your experience with us, it would mean a lot if you could share a quick review on Google — it genuinely helps a small family business like ours reach more brides and families: ${GOOGLE_REVIEW_URL}\n\nAnd if you'd like a peek at our latest collections and behind-the-scenes moments, do follow us on Instagram @${INSTAGRAM_HANDLE}: ${INSTAGRAM_URL}\n\nThank you again for trusting us — it was a pleasure being part of your celebration!`;
 }

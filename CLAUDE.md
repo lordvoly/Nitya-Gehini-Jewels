@@ -1629,6 +1629,72 @@ single-`.update()` call is all-or-nothing) — but the actual end-to-end save (a
 row landing with the right `pickup_person_*` values, plus its appearance on both
 invoice views) is **not yet verified** and can't be until the migration is applied.
 
+"Request Feedback" WhatsApp button, new session — a `Request Feedback` action on
+`BookingDetail`'s action bar, shown only once `computed_status === "completed"`
+(every item returned/sold — asking mid-rental would be premature), reusing the exact
+`buildWhatsAppLink` + real-`<a>`-with-`target="_blank"` pattern the invoice-share and
+Dashboard occasion-greeting buttons already established, rather than inventing a new
+send mechanism. New `buildFeedbackRequestMessage()` (`lib/whatsapp.ts`) writes a
+message specific to this shop (bridal jewelry — "your special day", not a generic
+"your purchase") thanking the customer, asking for a Google review
+(`GOOGLE_REVIEW_URL`) and an Instagram follow (`INSTAGRAM_URL`/`INSTAGRAM_HANDLE`,
+both already centralized in `socialLinks.ts` for the receipt's own footer — reused
+here rather than re-declared), same `*bold*` WhatsApp-markdown shop name as
+`buildOccasionMessage`. `BookingDetail` gained its own independent, non-blocking
+`fetchShopSettings()` call (same "a shop-settings hiccup degrades to a generic
+fallback name, doesn't fail the page" pattern Dashboard's occasion greetings already
+use) since this page had never needed the shop's name before. A customer with no
+valid phone on file gets a genuinely disabled button with a reason in its `title`,
+same as every other WhatsApp button in this app — never a broken link.
+
+Verified live with a throwaway `ZZTEST` sale booking (a sale-type `booking_item` is
+automatically "resolved" regardless of its own status per `booking_status_v2`, so
+this alone makes `computed_status = 'completed'` with no return step needed): the
+button rendered as a real link only on the completed booking, absent on a second
+throwaway active (still-`'booked'`) rental booking. Decoded the actual `href` rather
+than trusting the code path — correct `wa.me/91<phone>` target, and the message text
+matched exactly: real customer name, the real shop name fetched live from
+`shop_settings` (not the fallback), both real URLs, and the full thoughtful copy
+verbatim. Both workspaces typecheck and build clean. Throwaway bookings/item/
+customer/admin account all cleaned up after.
+
+Item search extended to two more places, same session — feedback that the earlier
+`ItemPicker` search (originally BookingForm-only) was missed elsewhere. `EditBookingForm.tsx`'s
+"Add Item" section had the exact same flat unsearchable `<select>` the original
+BookingForm did (a leftover from before `ItemPicker` existed) — swapped for
+`ItemPicker` the same way, same `items.filter((i) => i.tracking_type === "quantity"
+|| i.status === "available")` eligibility list, same `handleDraftItemChange`
+callback, no behavior change beyond the picker itself. The other existing-item lines
+already shown per booking_item (read-only, can't be re-picked) were untouched —
+there was never a `<select>` there to begin with.
+
+**New-item catalog reference**, second half of the same request — the shop's actual
+operator (father) wanted to type a fragment like "735" while creating a *new* item
+and see every *existing* item that already uses it, so a new item's code/name can be
+chosen to fit the shop's existing numbering rather than collide with or duplicate
+something already on the shelf. Deliberately not another `ItemPicker` — this isn't
+selecting an existing item into a form, it's a read-only reference while typing a
+brand-new one. `AddItemWizard.tsx` fetches the *full* catalog once (`fetchItems()`,
+unfiltered — retired items included on purpose, since "what's already been created"
+is a naming question, not a bookability one) and matches it client-side against
+whatever's typed into Name and/or Item Code (either field independently, ≥2 chars to
+avoid noise on a single keystroke), capped at 8 results. Rendered as a `found-panel`
+"Already in the catalog:" list right under the Item Code field, each row showing its
+real status pill (or a grey "Retired" badge) — same pill treatment `ItemsList` itself
+uses — so a match against a long-retired item reads differently from one that's
+still active/sold.
+
+Verified live with two throwaway items sharing a deliberate near-miss code
+(`PKL-735A` active, `PKL-735B` sold) plus a name containing the same "735" fragment:
+typing "735" into Item Code showed both, each with its correct real status pill;
+clearing the field made the panel disappear; typing "Polki #735" into Name alone
+(Item Code left on its auto-suggested value) also correctly surfaced both — confirming
+the two fields are matched independently, not just concatenated. `EditBookingForm`'s
+new search verified separately: typing "735" into its own Add Item picker showed only
+`PKL-735A` (the sold `PKL-735B` correctly excluded by the unchanged eligibility
+filter, not by the search itself). Both workspaces typecheck and build clean.
+Throwaway items/customer/booking/admin account all cleaned up after.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.

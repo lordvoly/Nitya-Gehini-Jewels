@@ -4,6 +4,7 @@ import {
   ITEM_CATEGORIES,
   ITEM_STATUSES,
   createItem,
+  fetchItems,
   fetchNextItemCode,
   type Item,
   type ItemCategory,
@@ -64,6 +65,32 @@ export function AddItemWizard({
     // Runs once on mount; startAnother() re-fetches explicitly after reset.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Full catalog (retired items included — the point is "what's already
+  // been created" as a naming reference, not what's currently bookable),
+  // fetched once and matched client-side as the operator types — same
+  // "already loaded, filter locally" approach ItemPicker/ItemsList's own
+  // search already use, not a new backend search endpoint. Lets the
+  // operator type a fragment like "735" into Name or Item Code and see
+  // every existing item that already uses it, so a new item's code/name
+  // can be chosen to fit the same numbering rather than collide with or
+  // duplicate something already on the shelf.
+  const [allItems, setAllItems] = useState<Item[]>([]);
+  useEffect(() => {
+    fetchItems().then(setAllItems).catch(() => {});
+  }, []);
+
+  const similarItems = useMemo(() => {
+    const nameQuery = form.name.trim().toLowerCase();
+    const codeQuery = form.itemCode.trim().toLowerCase();
+    if (nameQuery.length < 2 && codeQuery.length < 2) return [];
+    return allItems
+      .filter((i) => {
+        const haystack = `${i.item_code} ${i.name}`.toLowerCase();
+        return (nameQuery.length >= 2 && haystack.includes(nameQuery)) || (codeQuery.length >= 2 && haystack.includes(codeQuery));
+      })
+      .slice(0, 8);
+  }, [allItems, form.name, form.itemCode]);
 
   const visibleSteps = useMemo<StepKey[]>(
     () => ["photo", "basics", ...(form.item_type === "set" ? (["components"] as StepKey[]) : []), "prices", "review"],
@@ -201,6 +228,27 @@ export function AddItemWizard({
           <p className="wizard-hint">
             Suggested automatically — edit it if you'd rather use your own code.
           </p>
+
+          {similarItems.length > 0 && (
+            <div className="found-panel">
+              <p>
+                <strong>Already in the catalog:</strong>
+              </p>
+              <ul className="review-list">
+                {similarItems.map((i) => (
+                  <li key={i.id}>
+                    {i.item_code} — {i.name}{" "}
+                    {!i.is_active ? (
+                      <span className="pill pill-neutral">Retired</span>
+                    ) : (
+                      <span className={`pill ${itemStatusPill(i.status).className}`}>{itemStatusPill(i.status).label}</span>
+                    )}
+                  </li>
+                ))}
+              </ul>
+              <p className="wizard-hint">Matching what you've typed above — a quick check for existing naming/numbering.</p>
+            </div>
+          )}
 
           <p className="field-label">Category</p>
           <div className="button-grid">
