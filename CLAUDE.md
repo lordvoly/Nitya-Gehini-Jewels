@@ -1764,6 +1764,48 @@ this session's screenshot tooling (chrome/tab-strip is never in a page screensho
 — those are the app's own wine/ivory chrome color, a separate concern from the icon
 artwork itself, not part of this request.
 
+Icon zoom + transparent manifest icons, same-day follow-up, live phone-screenshot
+feedback — two real gaps the first pass's own "not verified on a real device" caveat
+existed to catch. (1) The opaque master built above kept the source's own generous
+black margin around the ring design (a `sharp` `.trim()` check found the actual
+content only fills 538×540 of the source's 841×656 canvas, ~64% width) — every icon
+built from it inherited that same "small logo floating in a lot of black" look, most
+visible on the real home-screen shortcut in the phone screenshot. Fixed by trimming
+to the true content bounding box first and re-padding with only a small 7% margin
+(not zero — a tiny margin still matters so the design doesn't touch the very edge
+once the OS applies its own rounded-corner mask), *then* resizing down to each
+target — same favicon-16/32 + apple-touch-icon files, just re-cropped, kept
+opaque-black (iOS/browser-tab icons are meant to be opaque; Apple's own guidance is
+against transparency there). (2) The user separately flagged the brief PWA splash
+shown on launch (Android composites the manifest's `icon-192`/`icon-512` over its
+`background_color` for both that splash and, on some launchers, the home-screen icon
+itself) — no code controls this (confirmed by grep: no splash/loading component
+exists anywhere in the app), so a solid-black icon there just reads as a black card
+sitting on the ivory background_color instead of blending in. Fixed by switching
+*only* `icon-192.png`/`icon-512.png` to the already-transparent invoice logo
+(`frontend/src/assets/images/ngj-logo.png` — confirmed via the same trim check to
+already be a tight 399×400 crop, no further cropping needed there) instead of the
+opaque master, at a smaller 5% margin — so the manifest-driven surfaces show the
+gold logo directly on ivory, matching the receipt's own presentation, while
+favicon/apple-touch-icon deliberately stay on the opaque black version.
+
+Verified: raw-pixel corner checks (not just visual) confirm favicon-16/32 and
+apple-touch-icon are fully opaque black (alpha 255) at every corner, while
+icon-192/512 are genuinely transparent (alpha 0) there — not just "PNG format
+supports alpha" but actually transparent pixels. Visually re-inspected all 5 at
+their real sizes: the 16px/32px favicons are now legibly "NGJ" rather than an
+indistinct blob (the earlier session's own flagged tradeoff, improved as a side
+effect of the tighter crop, though still small); apple-touch-icon and the two
+manifest icons all show the design filling nearly the full frame with only the
+intentional small margin. `npm run build:frontend` succeeds and copies all 5
+correctly into `dist/`; confirmed live via the dev server that all 5 plus
+`manifest.webmanifest` still serve `200`/correct content-type at their unchanged
+filenames. Same real-device-verification gap as before, still open: what the actual
+Android splash screen and home-screen icon render as on a physical phone hasn't
+been seen directly, only inferred from how Android/PWA icon+splash compositing is
+documented to work — the user's own next phone screenshot (same channel that caught
+the original zoom issue) is the way to close this out for good.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.
