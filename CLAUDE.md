@@ -1806,6 +1806,22 @@ been seen directly, only inferred from how Android/PWA icon+splash compositing i
 documented to work — the user's own next phone screenshot (same channel that caught
 the original zoom issue) is the way to close this out for good.
 
+**That real-device gap closed, and it turned out to matter** — the transparent
+`icon-192`/`icon-512` swap above rendered white on the operator's actual Android
+home screen, reported live: Android's adaptive-icon/themed-icon system extracts a
+silhouette from a transparent icon with no defined background layer and can render
+it washed-out/monochrome white rather than showing the artwork as designed. Reverted
+immediately: `icon-192.png`/`icon-512.png` now come from the exact same opaque
+black zoomed master as `favicon-16/32`/`apple-touch-icon` (just resized), not the
+transparent invoice logo — so the "zoomed in" improvement stays, but the
+splash/home-screen-icon experiment that caused the white-icon regression is fully
+undone. All 5 icon files are opaque black again, confirmed via the same raw-corner-
+pixel check (alpha 255 at every corner, all 5 files). `npm run build:frontend`
+succeeds and copies all 5 correctly into `dist/`. The "how does the manifest-driven
+splash/icon actually look on a real device" question is now answered — badly, for
+transparency — so there's no remaining open verification gap here: opaque black is
+the confirmed-correct choice for every one of these 5 files.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.
