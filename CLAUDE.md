@@ -1695,6 +1695,39 @@ new search verified separately: typing "735" into its own Add Item picker showed
 filter, not by the search itself). Both workspaces typecheck and build clean.
 Throwaway items/customer/booking/admin account all cleaned up after.
 
+`ItemPicker` reworked into a real hybrid combobox, same session, follow-up feedback —
+the search-only version above still required typing before anything showed, losing
+the old `<select>`'s "just click and browse everything" quick-pick affordance. Now a
+click/focus opens a real anchored dropdown (full eligible list, query always resets
+to `""` on open so browsing is never blocked by whatever's currently selected) that
+narrows live as soon as the operator types — same anchored-menu/outside-click/Escape
+pattern already proven by `common/FilterDropdown.tsx` (BookingsList's Show/Sort/Time
+controls), just full-width and scrollable (`max-height: 280px`) instead of that one's
+compact fixed option set, since this lists up to 25 real items rather than a handful
+of filter values. Selecting an option closes the dropdown and shows the picked
+item's label directly in the field (no separate found-panel/"Change Item" button
+anymore — clicking the field again reopens the dropdown to change it); a small "×"
+appears next to a selection to clear it outright. New CSS (`shared.css`):
+`.combo-picker`/`.combo-picker-field`/`.combo-picker-clear`/`.combo-picker-menu`/
+`.combo-picker-option`. Used unchanged by both `BookingForm.tsx` and
+`EditBookingForm.tsx` — no prop changes, so both pickers picked up the new behavior
+for free.
+
+Verified live against real production items: clicking the empty field opened the
+full scrollable catalog immediately; typing "polki #800" narrowed it to exactly the
+2 real matches; selecting one closed the dropdown, showed its label in the field, and
+correctly re-triggered price auto-fill and the Components list (confirming
+`handleItemChange` still fires through the new component); clicking the now-filled
+field again reopened the full unfiltered list (not filtered to the current
+selection); Escape closed the dropdown while leaving the selection untouched;
+clicking outside while a no-match query was typed closed the dropdown and reverted
+the field to blank with nothing selected; the "×" button cleared a selection
+correctly. Both workspaces typecheck and build clean. No throwaway bookings/items
+were created for this check — only the picker's own open/search/select/clear
+behavior was exercised against the real, already-loaded item catalog, nothing
+written to the database; only a throwaway admin account was created and deleted
+after.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.

@@ -2409,6 +2409,90 @@ a.chart-tooltip-title:hover {
   font-weight: 600;
 }
 
+/* ItemPicker's hybrid combobox — same anchored-menu shape as
+   .filter-dropdown-menu above, but full-width (spans its field, not a
+   compact fixed set) and scrollable, since it lists up to MAX_RESULTS real
+   items rather than a handful of filter options. */
+.combo-picker {
+  position: relative;
+  margin-bottom: 16px;
+}
+
+.combo-picker-field {
+  position: relative;
+}
+
+.combo-picker-field .search-input {
+  margin-bottom: 0;
+  padding-right: 36px;
+}
+
+.combo-picker-clear {
+  position: absolute;
+  right: 6px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 28px;
+  height: 28px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border: none;
+  border-radius: 50%;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.combo-picker-clear:hover {
+  background: var(--wine-soft);
+  color: var(--ink);
+}
+
+.combo-picker-menu {
+  position: absolute;
+  top: calc(100% + 4px);
+  left: 0;
+  right: 0;
+  z-index: 20;
+  max-height: 280px;
+  overflow-y: auto;
+  background: var(--surface);
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  box-shadow: 0 6px 20px rgba(43, 33, 41, 0.18);
+  padding: 4px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  transform-origin: top;
+  animation: menu-open 140ms ease-out;
+}
+
+.combo-picker-option {
+  min-height: var(--tap);
+  padding: 8px 10px;
+  font-size: 14px;
+  font-family: inherit;
+  text-align: left;
+  border: none;
+  border-radius: var(--radius);
+  background: transparent;
+  color: var(--ink);
+  cursor: pointer;
+}
+
+.combo-picker-option:hover {
+  background: var(--wine-soft);
+}
+
+.combo-picker-hint {
+  padding: 6px 10px;
+  margin: 0;
+}
+
 .date-range-row {
   margin-bottom: 8px;
 }
