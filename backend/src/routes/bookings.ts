@@ -1254,6 +1254,13 @@ bookingsRouter.patch("/:bookingId/items/:bookingItemId", async (req, res) => {
 // warning-not-rollback pattern as every other secondary write in this
 // file) — the pickup confirmation itself already succeeded and shouldn't
 // be undone by a payments-table hiccup.
+//
+// pickup_person_type is required on every confirmation (father's explicit
+// request — a real record of who physically took the item, since it's
+// often not the customer themselves). 'self' needs nothing further;
+// 'family'/'porter' require a name and phone, hard-validated up front same
+// as the payment fields, and are also shown on the invoice (ReceiptPage,
+// PublicReceiptPage) so there's a paper trail of who to hold accountable.
 bookingsRouter.post("/:bookingId/items/:bookingItemId/confirm-pickup", async (req: AuthedRequest, res) => {
   const { data: bookingItem, error: fetchError } = await supabase
     .from("booking_items")
@@ -1267,15 +1274,33 @@ bookingsRouter.post("/:bookingId/items/:bookingItemId/confirm-pickup", async (re
     return res.status(409).json({ error: `This item is already '${bookingItem.status}' and can't be confirmed for pickup` });
   }
 
-  const { amount, method, payment_date } = req.body ?? {};
+  const { amount, method, payment_date, pickup_person_type, pickup_person_name, pickup_person_phone } = req.body ?? {};
   const paymentAmount = amount != null ? Number(amount) : 0;
   if (paymentAmount > 0 && !method) {
     return res.status(400).json({ error: "method is required when recording a payment" });
   }
 
+  if (!["self", "family", "porter"].includes(pickup_person_type)) {
+    return res.status(400).json({ error: "pickup_person_type must be one of self, family, porter" });
+  }
+  // Only 'self' needs no further detail — the customer already on the
+  // booking. 'family'/'porter' record who actually showed up, so a name and
+  // phone are required for those, same "validate before touching the DB"
+  // pattern the payment fields above already use.
+  const needsPickupDetails = pickup_person_type !== "self";
+  if (needsPickupDetails && (!pickup_person_name?.trim() || !pickup_person_phone?.trim())) {
+    return res.status(400).json({ error: "Name and phone are required when someone other than the customer is picking up" });
+  }
+
   const { data, error } = await supabase
     .from("booking_items")
-    .update({ status: "out", actual_pickup_date: istToday() })
+    .update({
+      status: "out",
+      actual_pickup_date: istToday(),
+      pickup_person_type,
+      pickup_person_name: needsPickupDetails ? pickup_person_name.trim() : null,
+      pickup_person_phone: needsPickupDetails ? pickup_person_phone.trim() : null,
+    })
     .eq("id", bookingItem.id)
     .select()
     .single();
@@ -1306,8 +1331,10 @@ bookingsRouter.post("/:bookingId/items/:bookingItemId/confirm-pickup", async (re
 // completed, once still upcoming). Exact mirror of confirm-pickup: only
 // valid from 'out' (409 otherwise, so an already-returned or never-picked
 // item gives a clear reason rather than a silent no-op), reverts to
-// 'booked' and clears actual_pickup_date. Deliberately does NOT touch
-// payments — if a payment really was collected at pickup, reversing the
+// 'booked' and clears actual_pickup_date along with the pickup_person_*
+// fields — an undone pickup has no "who collected it" record any more than
+// it has an actual_pickup_date. Deliberately does NOT touch payments — if a
+// payment really was collected at pickup, reversing the
 // pickup status is a separate concern from reversing money; that stays a
 // manual Edit Payment correction, same scoping as return processing never
 // reaching into payments either.
@@ -1326,7 +1353,13 @@ bookingsRouter.post("/:bookingId/items/:bookingItemId/undo-pickup", async (req: 
 
   const { data, error } = await supabase
     .from("booking_items")
-    .update({ status: "booked", actual_pickup_date: null })
+    .update({
+      status: "booked",
+      actual_pickup_date: null,
+      pickup_person_type: null,
+      pickup_person_name: null,
+      pickup_person_phone: null,
+    })
     .eq("id", bookingItem.id)
     .select()
     .single();

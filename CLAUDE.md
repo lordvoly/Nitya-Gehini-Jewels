@@ -1552,6 +1552,83 @@ This item code could not be found in the system" for the bad one, with no crash 
 no `.chat-error` panel, confirming a single failing tool call inside a batch can no
 longer take down the whole conversation. Throwaway admin account deleted after.
 
+Item search/autocomplete in booking creation, new session — operator feedback: the
+per-line item picker in `BookingForm` was a flat `<select>` over every eligible item,
+with no way to search it (unlike Customers, which already has search-first
+`CustomerPicker`). New `ItemPicker.tsx` mirrors that same search-first pattern
+(search box → tappable result list → a "found panel" with a "Change Item" button)
+but filters client-side rather than hitting the backend — the eligible items list is
+already fully loaded on the booking form, same substring-match logic (name or
+`item_code`, case-insensitive) `ItemsList`'s own item search already uses. Results
+cap at 25 with a "N more — keep typing" hint so a broad query doesn't dump a huge
+list. Wired into `BookingForm.tsx` via the same `handleItemChange` callback the old
+`<select>` used, so price/quantity auto-fill, the "+ Create New Item" modal flow, and
+the quantity-item "(N on hand)" hint all kept working unchanged — this was a pure
+UI-layer swap, no backend change.
+
+Verified live against real production data (throwaway admin account, deleted after):
+typing a name fragment ("polki") correctly narrowed the full list to matching real
+items; typing an item code ("zz-0003", one of three throwaway `ZZ-000N` items seeded
+for this check) narrowed to the exact match including its quantity "(N on hand)"
+hint; selecting it correctly auto-filled Price Charged and revealed the Quantity
+field; "Change Item" cleared back to the full list; a no-match query showed a clear
+empty state with "+ Create New Item" still reachable. All three throwaway items and
+the throwaway admin cleaned up after; real data untouched.
+
+Pickup-person tracking ("Picked Up By"), new session — request from the shop's
+actual daily operator (father): an item isn't always collected by the customer
+themselves, and there was no record of who actually walked out with it. Confirm
+Pickup (`ConfirmPickupForm.tsx`) now requires choosing one of **Self / Family /
+Porter** before it can be submitted (no default — same "operator must actively
+choose, never silently assume" reasoning as every other required choice on this
+form); choosing Family or Porter reveals required Name and Phone fields for that
+person, both hard-validated client-side (submit button stays disabled until
+satisfied) and again server-side before any write, same "validate before touching
+the DB" pattern the payment fields on this same endpoint already use. New migration
+(`supabase/migrations/20260904000000_pickup_person.sql`) adds a `pickup_person_type`
+enum (`self`/`family`/`porter`) plus `pickup_person_name`/`pickup_person_phone` to
+`booking_items` — all nullable, set only by `POST .../confirm-pickup` and cleared
+again by `POST .../undo-pickup` (an undone pickup has no "who collected it" record
+any more than it has an `actual_pickup_date`), exactly mirroring how
+`actual_pickup_date` itself is already handled by both endpoints. Shown on
+`BookingDetail`'s item card, the Confirm Pickup success panel, and — the other half
+of the request — both invoice views (`ReceiptPage.tsx` staff view and
+`PublicReceiptPage.tsx`'s customer-facing `/r/:token` link), as a "Picked up by:
+Family — Name (Phone)"-style line per item, only once pickup is actually confirmed.
+
+The public receipt endpoint (`publicReceipt.ts`) is the one place this needed a
+second thought: that route has a standing, deliberate rule excluding phone numbers
+from its whitelist (see the WhatsApp-sharing session) — but that rule was about the
+*customer's own* phone, kept off a forwardable link for privacy. `pickup_person_phone`
+is a different field entirely, purpose-built to appear on the invoice per this
+session's explicit request (a paper trail of who to hold accountable), not the
+customer's contact info, so it was deliberately included rather than treated as
+covered by the existing exclusion — called out explicitly in that route's own doc
+comment so a future session doesn't "fix" it back out by pattern-matching the old
+rule.
+
+**Verification note — a genuine capability gap, same recurring one.** Typechecks and
+a full production build passed clean on both workspaces. The full UI flow was
+verified live against a real booking (throwaway admin/item/customer/booking, all
+`ZZTEST`-prefixed, created directly via the service-role key and fully deleted
+after): the three-way toggle renders with nothing pre-selected, the submit button is
+correctly disabled with no selection *and* with Family selected but Name/Phone
+empty, selecting Family correctly reveals labeled "Family Member's Name"/"Family
+Member's Phone" fields, and filling both correctly re-enables submit. Submitting was
+then attempted for real and failed with Postgrest's own "Could not find the
+'pickup_person_name' column of 'booking_items' in the schema cache" — expected and
+informative, not a bug: this environment has no Supabase CLI link with DB credentials
+and no direct Postgres connection string (the same recurring gap noted in several
+earlier sessions — `supabase/.temp/` exists from an earlier `supabase link`, but
+`db push`/`migration list` both hang waiting on a DB password this environment
+doesn't have), so `20260904000000_pickup_person.sql` could not be applied by Claude
+and still needs to be run by the user via the Supabase SQL editor before this feature
+is live. Confirmed the failure surfaced cleanly through the form's existing error
+state with no crash, and that the failed attempt left no partial row (Supabase's
+single-`.update()` call is all-or-nothing) — but the actual end-to-end save (a real
+row landing with the right `pickup_person_*` values, plus its appearance on both
+invoice views) is **not yet verified** and can't be until the migration is applied.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.
@@ -1668,9 +1745,10 @@ and `20260813120000_shop_settings.sql` after that. Eight tables:
   `booking_items`.
 - **booking_items** — one row per physical item within a booking: `booking_id`,
   `item_id`, `type` (rental/sale, per item), `pickup_date`/`return_date`, `status`,
-  `price_charged` (snapshot), deposit fields, `return_checklist`, `custom_addons`. A
-  booking's overall status is computed from its `booking_items`' statuses, never
-  stored.
+  `price_charged` (snapshot), deposit fields, `return_checklist`, `custom_addons`,
+  `pickup_person_type`/`pickup_person_name`/`pickup_person_phone` (who physically
+  collected the item — set by confirm-pickup, cleared by undo-pickup). A booking's
+  overall status is computed from its `booking_items`' statuses, never stored.
 - **payments** — `booking_id` points at the parent `bookings` row (one running balance
   per family transaction); `booking_financials` view aggregates over `booking_items`
   grouped by `booking_id` into `total_paid`/`balance_due`. `type` (`payment`/`refund`)

@@ -1,4 +1,5 @@
 import { apiFetch } from "./api";
+import type { PickupPersonType } from "./bookings";
 
 // Mirrors backend/src/routes/publicReceipt.ts's explicit whitelist exactly
 // — this is a deliberately narrower shape than Booking (lib/bookings.ts),
@@ -21,6 +22,14 @@ export interface PublicReceiptItem {
   // cancellation_reason in lib/bookings.ts.
   cancellation_reason: string | null;
   deposit: { amount: number; refunded: boolean; refund_date: string | null } | null;
+  // Only present once pickup is actually confirmed — see BookingItem's own
+  // pickup_person_* fields in lib/bookings.ts. Unlike the customer's own
+  // phone (deliberately excluded from this whole shape), the backend keeps
+  // this one in — it's the paper trail this feature exists to put on the
+  // invoice, not the customer's own contact info.
+  pickup_person_type: PickupPersonType | null;
+  pickup_person_name: string | null;
+  pickup_person_phone: string | null;
 }
 
 export interface PublicReceipt {

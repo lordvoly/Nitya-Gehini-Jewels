@@ -1,5 +1,12 @@
 import { useState, type FormEvent } from "react";
-import { confirmPickup, type Booking, type BookingItem } from "../../lib/bookings";
+import {
+  confirmPickup,
+  PICKUP_PERSON_TYPES,
+  PICKUP_PERSON_TYPE_LABELS,
+  type Booking,
+  type BookingItem,
+  type PickupPersonType,
+} from "../../lib/bookings";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/payments";
 import { toNumberOrNull } from "../../lib/numbers";
 
@@ -31,14 +38,25 @@ export function ConfirmPickupForm({
   // Left blank on purpose — the backend defaults to today in IST when this
   // is omitted, same pattern as ReturnForm's actual_return_date.
   const [paymentDate, setPaymentDate] = useState("");
+  // No default selection — the operator must actively pick one, same
+  // "don't silently assume Self" reasoning as every other required choice
+  // on this form. Father's explicit request: a real record of who
+  // physically took the item, since it's often not the customer themselves.
+  const [pickupPersonType, setPickupPersonType] = useState<PickupPersonType | null>(null);
+  const [pickupPersonName, setPickupPersonName] = useState("");
+  const [pickupPersonPhone, setPickupPersonPhone] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BookingItem | null>(null);
 
   const numericAmount = toNumberOrNull(amount) ?? 0;
+  const needsPickupDetails = pickupPersonType === "family" || pickupPersonType === "porter";
+  const canSubmit =
+    pickupPersonType !== null && (!needsPickupDetails || (pickupPersonName.trim() && pickupPersonPhone.trim()));
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!pickupPersonType) return;
     setError(null);
     setSaving(true);
     try {
@@ -46,6 +64,9 @@ export function ConfirmPickupForm({
         amount: numericAmount > 0 ? numericAmount : undefined,
         method: numericAmount > 0 ? method : undefined,
         payment_date: numericAmount > 0 ? paymentDate || null : null,
+        pickup_person_type: pickupPersonType,
+        pickup_person_name: needsPickupDetails ? pickupPersonName.trim() : undefined,
+        pickup_person_phone: needsPickupDetails ? pickupPersonPhone.trim() : undefined,
       });
       setResult(updated);
     } catch (err) {
@@ -66,6 +87,12 @@ export function ConfirmPickupForm({
         {numericAmount > 0 && (
           <p className="wizard-hint">
             ₹{numericAmount} ({PAYMENT_METHOD_LABELS[method]}) recorded.
+          </p>
+        )}
+        {result.pickup_person_type && (
+          <p className="wizard-hint">
+            Picked up by: {PICKUP_PERSON_TYPE_LABELS[result.pickup_person_type]}
+            {result.pickup_person_name ? ` — ${result.pickup_person_name} (${result.pickup_person_phone})` : ""}
           </p>
         )}
         {result.warning && (
@@ -89,6 +116,33 @@ export function ConfirmPickupForm({
         <p className="wizard-hint">
           {item.items?.item_code} — {item.items?.name} · {booking.customers?.name}
         </p>
+
+        <p className="field-label">Picked Up By</p>
+        <div className="toggle-group">
+          {PICKUP_PERSON_TYPES.map((t) => (
+            <button
+              type="button"
+              key={t}
+              className={pickupPersonType === t ? "toggle-btn active" : "toggle-btn"}
+              onClick={() => setPickupPersonType(t)}
+            >
+              {PICKUP_PERSON_TYPE_LABELS[t]}
+            </button>
+          ))}
+        </div>
+
+        {needsPickupDetails && (
+          <>
+            <label className="field-label">
+              {pickupPersonType === "family" ? "Family Member's" : "Porter's"} Name
+              <input type="text" value={pickupPersonName} onChange={(e) => setPickupPersonName(e.target.value)} />
+            </label>
+            <label className="field-label">
+              {pickupPersonType === "family" ? "Family Member's" : "Porter's"} Phone
+              <input type="tel" value={pickupPersonPhone} onChange={(e) => setPickupPersonPhone(e.target.value)} />
+            </label>
+          </>
+        )}
 
         <label className="field-label">
           Payment Amount (₹)
@@ -122,7 +176,7 @@ export function ConfirmPickupForm({
         <button type="button" className="btn-secondary" onClick={onCancel}>
           Cancel
         </button>
-        <button type="submit" className="btn-primary" disabled={saving}>
+        <button type="submit" className="btn-primary" disabled={saving || !canSubmit}>
           {saving ? "Saving…" : "Confirm Pickup"}
         </button>
       </div>

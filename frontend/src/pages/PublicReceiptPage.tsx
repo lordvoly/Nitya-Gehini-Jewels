@@ -3,6 +3,7 @@ import { useParams } from "react-router-dom";
 import { Star } from "lucide-react";
 import QRCode from "qrcode";
 import { fetchPublicReceipt, type PublicReceipt } from "../lib/publicReceipt";
+import { PICKUP_PERSON_TYPE_LABELS } from "../lib/bookings";
 import { formatDateDisplay } from "../lib/dates";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { ReceiptSkeleton } from "../components/common/Skeleton";
@@ -117,6 +118,12 @@ export default function PublicReceiptPage() {
                       {bi.deposit.refunded
                         ? ` (Refunded${bi.deposit.refund_date ? ` ${formatDateDisplay(bi.deposit.refund_date)}` : ""})`
                         : " (Held — not yet refunded)"}
+                    </div>
+                  )}
+                  {!cancelled && bi.pickup_person_type && (
+                    <div className="receipt-item-addons">
+                      Picked up by: {PICKUP_PERSON_TYPE_LABELS[bi.pickup_person_type]}
+                      {bi.pickup_person_name ? ` — ${bi.pickup_person_name} (${bi.pickup_person_phone})` : ""}
                     </div>
                   )}
                 </td>

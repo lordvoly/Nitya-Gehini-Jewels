@@ -1,7 +1,14 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
 import { ImageOff, ArrowLeft, IndianRupee, Printer, Pencil } from "lucide-react";
-import { fetchBooking, updateBooking, undoPickup, type Booking, type BookingItem } from "../../lib/bookings";
+import {
+  fetchBooking,
+  updateBooking,
+  undoPickup,
+  PICKUP_PERSON_TYPE_LABELS,
+  type Booking,
+  type BookingItem,
+} from "../../lib/bookings";
 import { resolvePendingItem } from "../../lib/pendingItems";
 import { BookingDetailSkeleton } from "../common/Skeleton";
 import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
@@ -376,6 +383,12 @@ export function BookingDetail({
                     )}
                     {bi.status === "cancelled" && bi.cancellation_reason && (
                       <li>Cancellation reason: {bi.cancellation_reason}</li>
+                    )}
+                    {bi.pickup_person_type && (
+                      <li>
+                        Picked up by: {PICKUP_PERSON_TYPE_LABELS[bi.pickup_person_type]}
+                        {bi.pickup_person_name ? ` — ${bi.pickup_person_name} (${bi.pickup_person_phone})` : ""}
+                      </li>
                     )}
                   </ul>
 

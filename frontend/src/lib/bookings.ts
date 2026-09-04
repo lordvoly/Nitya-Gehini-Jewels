@@ -5,6 +5,18 @@ import type { CustomerType } from "./customers";
 // ── Real types (Checkpoint b/§8 design) ─────────────────────────────────
 
 export type BookingItemType = "rental" | "sale";
+// Who physically collected the item at pickup — set on confirm-pickup,
+// cleared on undo-pickup. 'self' needs no further detail; 'family'/'porter'
+// carry a name+phone (see BookingItem's pickup_person_* fields below).
+export type PickupPersonType = "self" | "family" | "porter";
+
+export const PICKUP_PERSON_TYPES: PickupPersonType[] = ["self", "family", "porter"];
+
+export const PICKUP_PERSON_TYPE_LABELS: Record<PickupPersonType, string> = {
+  self: "Self",
+  family: "Family",
+  porter: "Porter",
+};
 export type BookingType = BookingItemType; // same meaning, now per-item
 export type BookingItemStatus = "booked" | "out" | "returned" | "cancelled";
 export type BookingComputedStatus = "active" | "completed" | "cancelled";
@@ -86,6 +98,12 @@ export interface BookingItem {
   return_date: string | null;
   actual_pickup_date: string | null;
   actual_return_date: string | null;
+  // Set only once confirm-pickup is actually submitted — null for anything
+  // still 'booked' or undone via undo-pickup. name/phone are only ever
+  // present alongside 'family'/'porter'; 'self' carries both as null.
+  pickup_person_type: PickupPersonType | null;
+  pickup_person_name: string | null;
+  pickup_person_phone: string | null;
   status: BookingItemStatus;
   price_charged: number;
   // The real listed price stays here untouched even when is_foc is true —
@@ -284,10 +302,15 @@ export function processReturn(bookingId: string, bookingItemId: string, payload:
 // Payment fields are all optional together — omit amount (or send 0) to
 // confirm pickup with nothing collected right now. When amount > 0, method
 // is required (validated server-side before anything is written).
+// pickup_person_type is required (validated server-side); name/phone are
+// required alongside it only for 'family'/'porter'.
 export interface ConfirmPickupPayload {
   amount?: number;
   method?: PaymentMethod;
   payment_date?: string | null;
+  pickup_person_type: PickupPersonType;
+  pickup_person_name?: string;
+  pickup_person_phone?: string;
 }
 
 export function confirmPickup(bookingId: string, bookingItemId: string, payload: ConfirmPickupPayload) {

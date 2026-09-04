@@ -24,10 +24,14 @@ const publicReceiptLimiter = rateLimit({
 // any other page in the app. Returns a narrow, explicitly whitelisted
 // subset of booking data — never the full row — so nothing beyond what's
 // already printed on the staff-facing receipt (ReceiptPage.tsx) is
-// exposed: no notes, no payment/audit history, no phone numbers, and an
-// FOC item's price_charged (the untouched "what it would have cost"
-// reference value — see BookingItem's own doc comment) is nulled out
-// rather than forwarded to a link that could end up anywhere.
+// exposed: no notes, no payment/audit history, no customer phone numbers,
+// and an FOC item's price_charged (the untouched "what it would have
+// cost" reference value — see BookingItem's own doc comment) is nulled out
+// rather than forwarded to a link that could end up anywhere. The one
+// exception is pickup_person_phone — the phone number of whoever actually
+// collected the item (family member/porter), not the customer's own — kept
+// in because this is exactly the paper-trail-on-the-invoice the feature
+// exists for, per explicit request.
 publicReceiptRouter.get("/receipt/:token", publicReceiptLimiter, async (req, res) => {
   const { data: booking, error } = await supabase
     .from("bookings")
@@ -37,6 +41,7 @@ publicReceiptRouter.get("/receipt/:token", publicReceiptLimiter, async (req, res
        booking_items(type, pickup_date, return_date, status, price_charged, is_foc,
                       deposit_amount, deposit_collected, deposit_refunded, deposit_refund_date,
                       custom_addons, quantity_booked, cancellation_reason,
+                      pickup_person_type, pickup_person_name, pickup_person_phone,
                       items(item_code, name, item_type, components))`,
     )
     .eq("share_token", req.params.token)
@@ -83,6 +88,11 @@ publicReceiptRouter.get("/receipt/:token", publicReceiptLimiter, async (req, res
         deposit: bi.deposit_collected
           ? { amount: bi.deposit_amount, refunded: bi.deposit_refunded, refund_date: bi.deposit_refund_date }
           : null,
+        // Only ever set once pickup is actually confirmed (see
+        // POST .../confirm-pickup) — null for anything still 'booked'.
+        pickup_person_type: bi.pickup_person_type ?? null,
+        pickup_person_name: bi.pickup_person_name ?? null,
+        pickup_person_phone: bi.pickup_person_phone ?? null,
       };
     }),
     total_paid: financials?.total_paid ?? 0,

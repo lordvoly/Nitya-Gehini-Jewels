@@ -146,6 +146,7 @@ export const HELP_CONTENT: HelpGroup[] = [
         title: "Confirming an item has been picked up",
         body: [
           "A booking on its own just means an item has been reserved — it doesn't mean it's actually left the shop yet. When the customer actually comes to collect it, open that booking and tap **Confirm Pickup** on that item. This applies to both rentals and sales — a sale doesn't have a return step, but it's still useful to know whether the customer has actually taken it yet.",
+          "You'll be asked who's actually picking it up — **Self**, **Family**, or **Porter**. For Family or Porter, you also need to enter that person's name and phone number, so there's a record of who to follow up with if the item doesn't come back correctly. This shows up on the invoice too.",
           "You can optionally collect a payment at the same time — the amount box is pre-filled with whatever balance is still owed, but you can change it or clear it to 0 if nothing's being collected right now.",
         ],
       },

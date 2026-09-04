@@ -2,7 +2,7 @@ import { useEffect, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Star } from "lucide-react";
 import QRCode from "qrcode";
-import { fetchBooking, type Booking } from "../lib/bookings";
+import { fetchBooking, PICKUP_PERSON_TYPE_LABELS, type Booking } from "../lib/bookings";
 import { fetchShopSettings, type ShopSettings } from "../lib/shopSettings";
 import { formatDateDisplay } from "../lib/dates";
 import { bookingItemStatusPill } from "../lib/statusPill";
@@ -164,6 +164,15 @@ export default function ReceiptPage() {
                       {bi.deposit_refunded
                         ? ` (Refunded${bi.deposit_refund_date ? ` ${formatDateDisplay(bi.deposit_refund_date)}` : ""})`
                         : " (Held — not yet refunded)"}
+                    </div>
+                  )}
+                  {/* Only present once pickup is actually confirmed (see
+                      confirm-pickup) — a real record of who physically
+                      collected the item, per explicit request. */}
+                  {!cancelled && bi.pickup_person_type && (
+                    <div className="receipt-item-addons">
+                      Picked up by: {PICKUP_PERSON_TYPE_LABELS[bi.pickup_person_type]}
+                      {bi.pickup_person_name ? ` — ${bi.pickup_person_name} (${bi.pickup_person_phone})` : ""}
                     </div>
                   )}
                 </td>

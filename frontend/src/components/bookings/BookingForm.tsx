@@ -12,6 +12,7 @@ import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/payments";
 import { formatDateDisplay } from "../../lib/dates";
 import { CustomerPicker } from "./CustomerPicker";
+import { ItemPicker } from "./ItemPicker";
 import { Modal } from "../common/Modal";
 import { AddItemWizard } from "../items/AddItemWizard";
 
@@ -342,18 +343,8 @@ export function BookingForm() {
                     )}
                   </div>
 
-                  <label className="field-label">
-                Item
-                <select value={row.itemId} onChange={(e) => handleItemChange(row, e.target.value)}>
-                  <option value="">Select an item…</option>
-                  {eligibleItems.map((i) => (
-                    <option key={i.id} value={i.id}>
-                      {i.item_code} — {i.name}
-                      {i.tracking_type === "quantity" ? ` (${i.quantity_on_hand ?? 0} on hand)` : ""}
-                    </option>
-                  ))}
-                </select>
-              </label>
+                  <p className="field-label">Item</p>
+              <ItemPicker items={eligibleItems} selected={selected} onSelect={(id) => handleItemChange(row, id)} />
               <button type="button" className="btn-secondary" onClick={() => setAddingItemForRow(row.key)}>
                 + Create New Item
               </button>
