@@ -1728,6 +1728,42 @@ behavior was exercised against the real, already-loaded item catalog, nothing
 written to the database; only a throwaway admin account was created and deleted
 after.
 
+Favicon/app-icon swapped to the real shop logo, new session — the original favicon
+work (2026-08-13) used a generated "NGJ" wine-on-ivory monogram since no real logo
+existed yet at the time; the real logo (`NON Tech/NGJ logo.png`, already in the
+repo, used since for the receipt header) was explicitly requested here instead, so
+every icon-tab, "Add to Home Screen", browser bookmark - now shows it. Source is
+841×656 (not square) with a solid opaque black background (confirmed via a raw
+pixel-alpha check, not assumed from how it looked) — padded to an 841×841 square
+with matching black `extend()` fill first (not cropped, so the circular design isn't
+clipped), then resized down from that square master to each existing target:
+`favicon-16x16.png`, `favicon-32x32.png`, `apple-touch-icon.png` (180×180),
+`icon-192.png`, `icon-512.png` — same filenames/sizes `index.html`/
+`manifest.webmanifest` already reference, so neither needed touching, just the pixel
+content. Used the user-level `sharp` install from the earlier favicon session (not
+added to the app's own dependencies) via a scratch-directory script, same one-time
+asset-prep approach as that session and the receipt logo's own chroma-key
+processing.
+
+Verified: all 5 files confirmed the correct pixel dimensions and PNG format via
+`sharp` metadata; visually inspected each — the two smallest sizes (16px/32px, real
+browser-tab favicon sizes) render as a legible gold ring/blob but the "NGJ" text and
+individual peacock feathers are illegible at that size (flagged, not hidden — a
+known, unavoidable tradeoff of this intricate a design at 16-32px, the exact reason
+the original favicon session chose a bold monogram instead; the user's explicit
+request here was to use the real logo regardless); apple-touch-icon (180×180, what
+iOS actually uses for a home-screen shortcut — the primary "create a shortcut" case
+this request was about) renders clearly legible, full "NGJ" wordmark and "Nitya
+Gehini Jewels" subtext both readable. `npm run build:frontend` succeeds and copies
+all 5 correctly into `dist/`; confirmed live via the dev server that all 5 files plus
+`manifest.webmanifest` are served with `200`/correct `image/png` (`application/
+manifest+json` for the manifest) — same verification method the original favicon
+session used, since a rendered browser-tab favicon still can't be captured through
+this session's screenshot tooling (chrome/tab-strip is never in a page screenshot).
+`theme-color`/manifest `background_color`/`theme_color` deliberately left untouched
+— those are the app's own wine/ivory chrome color, a separate concern from the icon
+artwork itself, not part of this request.
+
 ## Tech stack
 
 - **Frontend**: React + Vite + TypeScript, `frontend/`, deployed on Vercel.
