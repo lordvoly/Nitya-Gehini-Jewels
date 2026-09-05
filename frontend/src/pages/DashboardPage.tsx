@@ -1,5 +1,5 @@
-import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
-import { Link } from "react-router-dom";
+import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
+import { Link, useNavigate, type NavigateFunction } from "react-router-dom";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { fetchDashboardSummary, type DashboardSummary, type PickupDueBookingItem, type OccasionRow } from "../lib/dashboard";
 import { useAuth } from "../lib/auth";
@@ -184,7 +184,35 @@ function occasionPill(type: OccasionRow["type"]) {
   );
 }
 
+// Makes an entire card row navigate to its booking, replacing the old
+// per-row "View" button — the card itself IS the affordance now. Nested
+// links (item name, customer name) still need their own onClick to call
+// stopPropagation(), or a click on either would bubble up and re-navigate
+// to the booking instead of following the more specific link. tabIndex +
+// onKeyDown give the row the same Enter/Space activation a real link or
+// button would have, since a <tr> has no native click semantics of its
+// own.
+function bookingRowProps(navigate: NavigateFunction, bookingId: string) {
+  const go = () => navigate(`/bookings?booking=${bookingId}`);
+  return {
+    className: "dashboard-carousel-row-clickable",
+    tabIndex: 0,
+    onClick: go,
+    onKeyDown: (e: KeyboardEvent<HTMLTableRowElement>) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        go();
+      }
+    },
+  };
+}
+
+function stopRowClick(e: { stopPropagation: () => void }) {
+  e.stopPropagation();
+}
+
 export default function DashboardPage() {
+  const navigate = useNavigate();
   const { session } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
@@ -291,28 +319,26 @@ export default function DashboardPage() {
         id="pending-items-section"
         title="Items Pending"
         count={pending_items.length}
-        headers={["Item", "Booking / Customer", "Missing", ""]}
+        headers={["Item", "Booking / Customer", "Missing"]}
         emptyMessage="Nothing flagged as still missing."
       >
         {pending_items.map((p) => (
-          <tr key={`${p.booking_item_id}-${p.component_name}`}>
+          <tr key={`${p.booking_item_id}-${p.component_name}`} {...bookingRowProps(navigate, p.booking_id)}>
             <td data-label="Item">
-              <Link to={`/items/${p.item_id}`}>
+              <Link to={`/items/${p.item_id}`} onClick={stopRowClick}>
                 {p.item_code} — {p.item_name}
               </Link>
             </td>
             <td data-label="Booking / Customer">
-              {p.booking_code} · {p.customer_name}
+              {p.booking_code} ·{" "}
+              <Link to={`/customers?customer=${p.customer_id}`} onClick={stopRowClick}>
+                {p.customer_name}
+              </Link>
             </td>
             <td data-label="Missing">
               {p.component_name}
               {p.actual_return_date ? ` · returned ${formatDateDisplay(p.actual_return_date)}` : ""}
               {p.return_notes && <span className="dashboard-table-note">"{p.return_notes}"</span>}
-            </td>
-            <td className="row-actions">
-              <Link to={`/bookings?booking=${p.booking_id}`} className="btn-secondary btn-compact">
-                View
-              </Link>
             </td>
           </tr>
         ))}
@@ -322,22 +348,20 @@ export default function DashboardPage() {
         id="items-due-section"
         title="Today's Returns Due"
         count={due_today.length}
-        headers={["Item", "Booking / Customer", ""]}
+        headers={["Item", "Booking / Customer"]}
         emptyMessage="Nothing due back today."
       >
         {due_today.map((b) => (
-          <tr key={b.id}>
+          <tr key={b.id} {...bookingRowProps(navigate, b.booking_id)}>
             <td data-label="Item">
-              <Link to={`/items/${b.item_id}`}>
+              <Link to={`/items/${b.item_id}`} onClick={stopRowClick}>
                 {b.items?.item_code} — {b.items?.name}
               </Link>
             </td>
             <td data-label="Booking / Customer">
-              {b.bookings?.booking_code} · {b.customers?.name}
-            </td>
-            <td className="row-actions">
-              <Link to={`/bookings?booking=${b.booking_id}`} className="btn-secondary btn-compact">
-                View
+              {b.bookings?.booking_code} ·{" "}
+              <Link to={`/customers?customer=${b.bookings?.customer_id}`} onClick={stopRowClick}>
+                {b.customers?.name}
               </Link>
             </td>
           </tr>
@@ -348,20 +372,23 @@ export default function DashboardPage() {
         id="overdue-section"
         title="Overdue Rentals"
         count={overdue.length}
-        headers={["Item", "Booking / Customer", "Days Overdue", ""]}
+        headers={["Item", "Booking / Customer", "Days Overdue"]}
         emptyMessage="Nothing overdue."
       >
         {[...urgentOverdue, ...otherOverdue].map((b) => {
           const days = Math.abs(b.days_until_return);
           return (
-            <tr key={b.id}>
+            <tr key={b.id} {...bookingRowProps(navigate, b.booking_id)}>
               <td data-label="Item">
-                <Link to={`/items/${b.item_id}`}>
+                <Link to={`/items/${b.item_id}`} onClick={stopRowClick}>
                   {b.items?.item_code} — {b.items?.name}
                 </Link>
               </td>
               <td data-label="Booking / Customer">
-                {b.booking_code} · {b.customers?.name}
+                {b.booking_code} ·{" "}
+                <Link to={`/customers?customer=${b.customer_id}`} onClick={stopRowClick}>
+                  {b.customers?.name}
+                </Link>
               </td>
               <td data-label="Days Overdue">
                 {days} day{days === 1 ? "" : "s"} overdue
@@ -370,11 +397,6 @@ export default function DashboardPage() {
                     Next: {b.next_booking_code} — {b.next_customer_name} ({b.next_pickup_date})
                   </span>
                 )}
-              </td>
-              <td className="row-actions">
-                <Link to={`/bookings?booking=${b.booking_id}`} className="btn-secondary btn-compact">
-                  View
-                </Link>
               </td>
             </tr>
           );
@@ -385,23 +407,25 @@ export default function DashboardPage() {
         id="pickups-due-section"
         title="Today's Pickups Due"
         count={pickups_due_today.length}
-        headers={["Item", "Booking / Customer", ""]}
+        headers={["Item", "Booking / Customer"]}
         emptyMessage="Nothing to prep for pickup today."
       >
         {pickups_due_today.map((p) => (
-          <tr key={p.id}>
+          <tr key={p.id} {...bookingRowProps(navigate, p.booking_id)}>
             <td data-label="Item">
-              <Link to={`/items/${p.item_id}`}>
+              <Link to={`/items/${p.item_id}`} onClick={stopRowClick}>
                 {p.items?.item_code} — {p.items?.name}
               </Link>
             </td>
             <td data-label="Booking / Customer">
-              {p.bookings?.booking_code} · {p.customers?.name ?? "—"}
-            </td>
-            <td className="row-actions">
-              <Link to={`/bookings?booking=${p.booking_id}`} className="btn-secondary btn-compact">
-                View
-              </Link>
+              {p.bookings?.booking_code} ·{" "}
+              {p.customers ? (
+                <Link to={`/customers?customer=${p.bookings?.customer_id}`} onClick={stopRowClick}>
+                  {p.customers.name}
+                </Link>
+              ) : (
+                "—"
+              )}
             </td>
           </tr>
         ))}
@@ -411,22 +435,25 @@ export default function DashboardPage() {
         id="week-pickups-section"
         title="This Week's Pickups Due"
         count={weekPickups.length}
-        headers={["Day", "Item", "Customer", ""]}
+        headers={["Day", "Item", "Customer"]}
         emptyMessage="Nothing else due for pickup this week."
       >
         {weekPickups.map((p) => (
-          <tr key={p.id}>
+          <tr key={p.id} {...bookingRowProps(navigate, p.booking_id)}>
             <td data-label="Day">{p.dayLabel}</td>
             <td data-label="Item">
-              <Link to={`/items/${p.item_id}`}>
+              <Link to={`/items/${p.item_id}`} onClick={stopRowClick}>
                 {p.items?.item_code} — {p.items?.name}
               </Link>
             </td>
-            <td data-label="Customer">{p.customers?.name ?? "—"}</td>
-            <td className="row-actions">
-              <Link to={`/bookings?booking=${p.booking_id}`} className="btn-secondary btn-compact">
-                View
-              </Link>
+            <td data-label="Customer">
+              {p.customers ? (
+                <Link to={`/customers?customer=${p.bookings?.customer_id}`} onClick={stopRowClick}>
+                  {p.customers.name}
+                </Link>
+              ) : (
+                "—"
+              )}
             </td>
           </tr>
         ))}

@@ -9,6 +9,7 @@ import {
   MoreHorizontal,
   NotebookPen,
   IndianRupee,
+  PackageCheck,
 } from "lucide-react";
 import { Modal } from "../common/Modal";
 import {
@@ -527,7 +528,8 @@ export function BookingDetail({
                   {(canConfirmPickup || canReturn || canUndoPickup) && (
                     <div className="line-item-actions">
                       {canConfirmPickup && (
-                        <button className="btn-secondary" onClick={() => onConfirmPickup(booking, bi)}>
+                        <button className="btn-secondary btn-compact" onClick={() => onConfirmPickup(booking, bi)}>
+                          <PackageCheck size={14} strokeWidth={2} aria-hidden="true" />
                           Confirm Pickup
                         </button>
                       )}

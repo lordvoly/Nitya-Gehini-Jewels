@@ -2008,6 +2008,19 @@ a.chart-tooltip-title:hover {
   padding: 12px 14px;
 }
 
+/* The card itself is the "View" affordance now (replacing a per-row
+   button) — cursor + a pressed-state background give it the same
+   clickable feel as everywhere else in the app, without needing an
+   actual <a>/<button> to wrap a whole <tr>. */
+.dashboard-carousel-row-clickable {
+  cursor: pointer;
+}
+
+.dashboard-carousel-row-clickable:hover,
+.dashboard-carousel-row-clickable:active {
+  background: var(--wine-soft);
+}
+
 /* The single empty-state row ("Nothing needs attention today.") — already
    full-width like every other card now, this override from the old
    fixed-card-width layout is no longer needed but harmless to keep. */
