@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ImageOff, ArrowLeft, IndianRupee, Printer, Pencil, MessageCircleHeart } from "lucide-react";
+import { ImageOff, ArrowLeft, Printer, Pencil, MessageCircleHeart, MoreHorizontal, NotebookPen } from "lucide-react";
+import { Modal } from "../common/Modal";
 import {
   fetchBooking,
   updateBooking,
@@ -49,6 +50,15 @@ export function BookingDetail({
   const [error, setError] = useState<string | null>(null);
 
   const [showPaymentForm, setShowPaymentForm] = useState(false);
+  // The bottom action bar was carrying up to 5 buttons at once (Back,
+  // Record Payment, Print/Download Receipt, Request Feedback, Edit
+  // Booking) — too many big pills for one mobile row. Print/Download
+  // Receipt and Request Feedback (the two purely-informational/
+  // communication actions, neither one the "main" thing you'd do from
+  // this screen) move into this overflow sheet instead, same Modal-based
+  // pattern the app header's own "More" menu already uses for Reports/
+  // Expenses/Charges — not a new UI concept, just reused here.
+  const [showMoreMenu, setShowMoreMenu] = useState(false);
   const [amount, setAmount] = useState("");
   const [method, setMethod] = useState<PaymentMethod>("cash");
   // Left blank on purpose — the backend defaults to today in IST when this
@@ -331,18 +341,22 @@ export function BookingDetail({
                 {booking.notes_updated_at && (
                   <p className="wizard-hint">Last updated {formatDateDisplay(booking.notes_updated_at.slice(0, 10))}</p>
                 )}
-                <div className="wizard-actions">
-                  <button
-                    type="button"
-                    className="btn-secondary"
-                    onClick={() => {
-                      setNotesInput(booking.notes ?? "");
-                      setEditingNotes(true);
-                    }}
-                  >
-                    {booking.notes ? "Edit Notes" : "Add Notes"}
-                  </button>
-                </div>
+                {/* Was a full-width .btn-secondary pill — oversized for what
+                    is a low-frequency, non-primary action. A small icon
+                    link, same .link-button treatment as "+ Record Payment"
+                    above, reads as clearly as the pill did without the
+                    visual weight. */}
+                <button
+                  type="button"
+                  className="link-button notes-edit-link"
+                  onClick={() => {
+                    setNotesInput(booking.notes ?? "");
+                    setEditingNotes(true);
+                  }}
+                >
+                  <NotebookPen size={15} strokeWidth={2} aria-hidden="true" />
+                  {booking.notes ? "Edit Notes" : "Add Notes"}
+                </button>
               </>
             )}
 
@@ -614,6 +628,18 @@ export function BookingDetail({
               </ul>
             )}
 
+            {/* Lives right next to the section it actually belongs to,
+                instead of sitting in the generic bottom action bar with
+                every other button on this page — same "+ Add..." link
+                treatment as elsewhere in the app, not a big pill, since
+                this is a frequent enough action that it shouldn't need
+                to look heavier than it is. */}
+            {!showPaymentForm && (
+              <button type="button" className="link-button record-payment-link" onClick={() => setShowPaymentForm(true)}>
+                + Record Payment
+              </button>
+            )}
+
             {showPaymentForm && (
               <form className="wizard-step" onSubmit={handleRecordPayment}>
                 <label className="field-label">
@@ -659,39 +685,9 @@ export function BookingDetail({
         </button>
         {booking && (
           <>
-            {!showPaymentForm && (
-              <button className="btn-secondary btn-compact" onClick={() => setShowPaymentForm(true)}>
-                <IndianRupee size={15} strokeWidth={2} aria-hidden="true" />
-                Record Payment
-              </button>
-            )}
-            <Link to={`/receipt/${booking.id}`} target="_blank" className="btn-secondary btn-compact">
-              <Printer size={15} strokeWidth={2} aria-hidden="true" />
-              Print/Download Receipt
-            </Link>
-            {/* Only once the booking is genuinely wrapped up — every item
-                returned/sold — asking for feedback mid-rental would be
-                premature. A real <a>, not window.location, same reasoning
-                as ReceiptPage's own WhatsApp button: mobile browsers treat
-                it as genuine user-initiated navigation. */}
-            {booking.computed_status === "completed" &&
-              (() => {
-                const feedback = buildWhatsAppLink(
-                  booking.customers?.phone,
-                  buildFeedbackRequestMessage(booking.customers?.name ?? "there", shopName),
-                );
-                return "url" in feedback ? (
-                  <a href={feedback.url} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-compact">
-                    <MessageCircleHeart size={15} strokeWidth={2} aria-hidden="true" />
-                    Request Feedback
-                  </a>
-                ) : (
-                  <button className="btn-secondary btn-compact" disabled title={feedback.error}>
-                    <MessageCircleHeart size={15} strokeWidth={2} aria-hidden="true" />
-                    Request Feedback
-                  </button>
-                );
-              })()}
+            <button className="btn-icon" aria-label="More actions" onClick={() => setShowMoreMenu(true)}>
+              <MoreHorizontal size={17} strokeWidth={2} aria-hidden="true" />
+            </button>
             <button className="btn-primary btn-compact" onClick={onEdit}>
               <Pencil size={15} strokeWidth={2} aria-hidden="true" />
               Edit Booking
@@ -699,6 +695,62 @@ export function BookingDetail({
           </>
         )}
       </div>
+
+      {/* Print/Download Receipt and Request Feedback — the two purely
+          informational/communication actions, kept out of the main bar
+          above (see the showMoreMenu comment near this component's other
+          state) since neither is the "main" thing you'd do from this
+          screen the way Edit Booking is. */}
+      {booking && showMoreMenu && (
+        <Modal onClose={() => setShowMoreMenu(false)}>
+          <div className="more-menu">
+            <h3>More Actions</h3>
+            <div className="more-menu-list">
+              <Link
+                to={`/receipt/${booking.id}`}
+                target="_blank"
+                className="more-menu-item"
+                onClick={() => setShowMoreMenu(false)}
+              >
+                <Printer size={20} strokeWidth={2} aria-hidden="true" />
+                Print/Download Receipt
+              </Link>
+              {/* Only once the booking is genuinely wrapped up — every item
+                  returned/sold — asking for feedback mid-rental would be
+                  premature. A real <a>, not window.location, same reasoning
+                  as ReceiptPage's own WhatsApp button: mobile browsers treat
+                  it as genuine user-initiated navigation. */}
+              {booking.computed_status === "completed" &&
+                (() => {
+                  const feedback = buildWhatsAppLink(
+                    booking.customers?.phone,
+                    buildFeedbackRequestMessage(booking.customers?.name ?? "there", shopName),
+                  );
+                  return "url" in feedback ? (
+                    <a
+                      href={feedback.url}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="more-menu-item"
+                      onClick={() => setShowMoreMenu(false)}
+                    >
+                      <MessageCircleHeart size={20} strokeWidth={2} aria-hidden="true" />
+                      Request Feedback
+                    </a>
+                  ) : (
+                    <button className="more-menu-item" disabled title={feedback.error}>
+                      <MessageCircleHeart size={20} strokeWidth={2} aria-hidden="true" />
+                      Request Feedback
+                    </button>
+                  );
+                })()}
+            </div>
+            <button type="button" className="btn-secondary more-menu-close" onClick={() => setShowMoreMenu(false)}>
+              Close
+            </button>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
