@@ -1900,10 +1900,123 @@ a.chart-tooltip-title:hover {
   margin: 3px 0 0;
 }
 
-/* Dashboard's "Today"/"This Week" tables (structured-table redesign,
-   2026-09) — reuses the existing .data-table component as-is (same
-   responsive table→card behavior on mobile as Items/Customers), these two
-   classes are the only genuinely new styling the redesign needed. */
+/* Dashboard's "Today"/"This Week" tables — swipeable card carousel
+   instead of a vertically-growing list (follow-up to the structured-table
+   redesign above, per explicit request: many rows should page sideways,
+   not push the page taller). Deliberately NOT reusing the .data-table
+   mobile-card CSS's own breakpoint-scoped rules directly — this needs the
+   card treatment active at every width, including desktop, and a
+   horizontal flex tbody instead of a vertical block stack, which would
+   fight that block's own "keep breakpoint rules together" scoping if
+   layered on top of it. Some duplication of that card look (label-left/
+   value-right rows, data-label pseudo-content) is intentional here rather
+   than shared, to keep the two independent and safe to evolve separately. */
+.dashboard-carousel-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.dashboard-carousel-heading h2 {
+  margin: 0;
+}
+
+.dashboard-carousel-nav {
+  display: flex;
+  gap: 6px;
+}
+
+.dashboard-carousel-nav button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  border: 1.5px solid var(--wine);
+  background: var(--surface);
+  color: var(--wine);
+  cursor: pointer;
+}
+
+.dashboard-carousel-nav button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.dashboard-carousel {
+  display: block;
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.dashboard-carousel thead {
+  display: none;
+}
+
+.dashboard-carousel tbody {
+  display: flex;
+  gap: 12px;
+  overflow-x: auto;
+  overflow-y: hidden;
+  scroll-snap-type: x mandatory;
+  -webkit-overflow-scrolling: touch;
+  padding: 2px 2px 10px;
+  margin: -2px -2px 0;
+}
+
+.dashboard-carousel tr {
+  display: flex;
+  flex-direction: column;
+  flex: 0 0 250px;
+  scroll-snap-align: start;
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-card);
+  background: var(--surface);
+  padding: 12px 14px;
+}
+
+/* The single empty-state row ("Nothing needs attention today.") spans the
+   full width instead of sitting as a small isolated card — there's
+   nothing else to page sideways to when this is the only row. */
+.dashboard-carousel tr.dashboard-carousel-empty {
+  flex: 1 1 100%;
+}
+
+.dashboard-carousel td {
+  border-bottom: none;
+  white-space: normal;
+  padding: 4px 0;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 10px;
+}
+
+.dashboard-carousel td[data-label]::before {
+  content: attr(data-label);
+  font-size: 11.5px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  flex-shrink: 0;
+}
+
+.dashboard-carousel td:not([data-label]) {
+  justify-content: flex-start;
+}
+
+.dashboard-carousel .row-actions {
+  justify-content: flex-start;
+  flex-wrap: wrap;
+  padding-top: 10px;
+  margin-top: 6px;
+  border-top: 1px solid var(--line);
+}
+
 .dashboard-table-urgent {
   display: block;
   margin-top: 2px;

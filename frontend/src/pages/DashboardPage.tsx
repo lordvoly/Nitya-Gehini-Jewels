@@ -1,5 +1,6 @@
-import { Fragment, useEffect, useState } from "react";
+import { Fragment, useEffect, useRef, useState, type RefObject } from "react";
 import { Link } from "react-router-dom";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import {
   fetchDashboardSummary,
   type DashboardSummary,
@@ -95,6 +96,10 @@ export default function DashboardPage() {
   // worse tradeoff for something this secondary.
   const [shopName, setShopName] = useState("the shop");
   const [occasionDiscountPercent, setOccasionDiscountPercent] = useState(10);
+  // The two carousel tables' own scroll containers (their <tbody>), for
+  // CarouselNav's prev/next buttons to scrollBy() on.
+  const todayScrollRef = useRef<HTMLTableSectionElement>(null);
+  const weekScrollRef = useRef<HTMLTableSectionElement>(null);
 
   useEffect(() => {
     fetchDashboardSummary()
@@ -202,24 +207,26 @@ export default function DashboardPage() {
           shows one calm empty-state row, so the page's structure stays
           the same whether today is busy or not. */}
       <div id="items-due-section" className="dashboard-section">
-        <h2>Today ({todayRowCount})</h2>
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Type</th>
-                <th>Item</th>
-                <th>Booking / Customer</th>
-                <th>Detail</th>
-                <th></th>
+        <div className="dashboard-carousel-heading">
+          <h2>Today ({todayRowCount})</h2>
+          {todayRowCount > 1 && <CarouselNav targetRef={todayScrollRef} />}
+        </div>
+        <table className="data-table dashboard-carousel">
+          <thead>
+            <tr>
+              <th>Type</th>
+              <th>Item</th>
+              <th>Booking / Customer</th>
+              <th>Detail</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody ref={todayScrollRef}>
+            {todayRowCount === 0 && (
+              <tr className="dashboard-carousel-empty">
+                <td colSpan={5}>Nothing needs attention today.</td>
               </tr>
-            </thead>
-            <tbody>
-              {todayRowCount === 0 && (
-                <tr>
-                  <td colSpan={5}>Nothing needs attention today.</td>
-                </tr>
-              )}
+            )}
               {urgentOverdue.map((b) => (
                 <OverdueRow key={`overdue-${b.id}`} overdue={b} />
               ))}
@@ -309,8 +316,7 @@ export default function DashboardPage() {
                 </tr>
               ))}
             </tbody>
-          </table>
-        </div>
+        </table>
       </div>
 
       {/* "This Week" — this week's pickups and occasions merged into one
@@ -319,24 +325,26 @@ export default function DashboardPage() {
           deliberately not repeated here (they're in the Today table
           above) — pickups_due_this_week already excludes today. */}
       <div id="pickups-due-section" className="dashboard-section">
-        <h2>This Week ({weekRowCount})</h2>
-        <div className="table-wrap">
-          <table className="data-table">
-            <thead>
-              <tr>
-                <th>Day</th>
-                <th>Type</th>
-                <th>Item / Occasion</th>
-                <th>Customer</th>
-                <th></th>
+        <div className="dashboard-carousel-heading">
+          <h2>This Week ({weekRowCount})</h2>
+          {weekRowCount > 1 && <CarouselNav targetRef={weekScrollRef} />}
+        </div>
+        <table className="data-table dashboard-carousel">
+          <thead>
+            <tr>
+              <th>Day</th>
+              <th>Type</th>
+              <th>Item / Occasion</th>
+              <th>Customer</th>
+              <th></th>
+            </tr>
+          </thead>
+          <tbody ref={weekScrollRef}>
+            {weekRowCount === 0 && (
+              <tr className="dashboard-carousel-empty">
+                <td colSpan={5}>Nothing coming up this week.</td>
               </tr>
-            </thead>
-            <tbody>
-              {weekRowCount === 0 && (
-                <tr>
-                  <td colSpan={5}>Nothing coming up this week.</td>
-                </tr>
-              )}
+            )}
               {weekDays.map((day) => (
                 <Fragment key={day.date}>
                   {day.pickups.map((p) => (
@@ -370,8 +378,7 @@ export default function DashboardPage() {
                 </Fragment>
               ))}
             </tbody>
-          </table>
-        </div>
+        </table>
       </div>
     </div>
   );
@@ -411,6 +418,30 @@ function OverdueRow({ overdue }: { overdue: OverdueBookingItem }) {
         </Link>
       </td>
     </tr>
+  );
+}
+
+// Prev/next arrows for a swipeable carousel table — the tbody itself is
+// the real scroll container (overflow-x: auto + scroll-snap-type: x on
+// .dashboard-carousel tbody), these buttons just call scrollBy() on it for
+// mouse/keyboard users who wouldn't otherwise think to click-drag or
+// trackpad-swipe a table sideways. Deliberately no disabled-at-the-ends
+// tracking — scrollBy() already clamps harmlessly at either edge, and
+// wiring up scroll-position state for this would be more code than the
+// polish is worth.
+function CarouselNav({ targetRef }: { targetRef: RefObject<HTMLTableSectionElement> }) {
+  function scroll(direction: 1 | -1) {
+    targetRef.current?.scrollBy({ left: direction * 270, behavior: "smooth" });
+  }
+  return (
+    <div className="dashboard-carousel-nav">
+      <button type="button" aria-label="Scroll left" onClick={() => scroll(-1)}>
+        <ChevronLeft size={16} strokeWidth={2} aria-hidden="true" />
+      </button>
+      <button type="button" aria-label="Scroll right" onClick={() => scroll(1)}>
+        <ChevronRight size={16} strokeWidth={2} aria-hidden="true" />
+      </button>
+    </div>
   );
 }
 
