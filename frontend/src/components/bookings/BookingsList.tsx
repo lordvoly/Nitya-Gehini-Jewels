@@ -1,6 +1,6 @@
 import { useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { Eye, Pencil } from "lucide-react";
+import { Eye, Pencil, PackageCheck, PackageOpen } from "lucide-react";
 import {
   fetchBookings,
   type Booking,
@@ -355,12 +355,14 @@ export function BookingsList({
                     <div className="booking-card-item-actions">
                       <span className={`pill ${itemPill.className}`}>{itemPill.label}</span>
                       {!readOnly && canConfirmPickup && onConfirmPickup && (
-                        <button className="btn-secondary" onClick={() => onConfirmPickup(b, bi)}>
+                        <button className="btn-secondary btn-compact" onClick={() => onConfirmPickup(b, bi)}>
+                          <PackageCheck size={14} strokeWidth={2} aria-hidden="true" />
                           Confirm Pickup
                         </button>
                       )}
                       {!readOnly && canReturn && onProcessReturn && (
-                        <button className="btn-secondary" onClick={() => onProcessReturn(b, bi)}>
+                        <button className="btn-secondary btn-compact" onClick={() => onProcessReturn(b, bi)}>
+                          <PackageOpen size={14} strokeWidth={2} aria-hidden="true" />
                           Process Return
                         </button>
                       )}

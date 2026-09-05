@@ -10,6 +10,8 @@ import {
   NotebookPen,
   IndianRupee,
   PackageCheck,
+  PackageOpen,
+  Undo2,
 } from "lucide-react";
 import { Modal } from "../common/Modal";
 import {
@@ -534,7 +536,8 @@ export function BookingDetail({
                         </button>
                       )}
                       {canReturn && (
-                        <button className="btn-secondary" onClick={() => onProcessReturn(booking, bi)}>
+                        <button className="btn-secondary btn-compact" onClick={() => onProcessReturn(booking, bi)}>
+                          <PackageOpen size={14} strokeWidth={2} aria-hidden="true" />
                           Process Return
                         </button>
                       )}
@@ -555,7 +558,8 @@ export function BookingDetail({
                             </button>
                           </>
                         ) : (
-                          <button type="button" className="btn-secondary" onClick={() => setUndoConfirmId(bi.id)}>
+                          <button type="button" className="btn-secondary btn-compact" onClick={() => setUndoConfirmId(bi.id)}>
+                            <Undo2 size={14} strokeWidth={2} aria-hidden="true" />
                             Undo Pickup
                           </button>
                         ))}
