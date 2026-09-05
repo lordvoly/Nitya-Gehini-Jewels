@@ -2023,35 +2023,55 @@ a.chart-tooltip-title:hover {
   background: var(--wine);
 }
 
+/* Each field is its own label-above/value-below block rather than a
+   label-left/value-right single line — the previous side-by-side layout
+   put the value's starting position at a different x for every row
+   (whatever the label's own width happened to be, "TYPE" vs. "BOOKING /
+   CUSTOMER"), which is exactly what read as "not aligned". Stacked and
+   left-edge-aligned, every field starts at the same x regardless of its
+   label's length or its value's, and a value long enough to wrap just
+   flows onto a second line without fighting the label for space. A
+   hairline between fields (not on the last one, or on the empty-state's
+   single message cell) gives the card the structure of a real, organized
+   info sheet rather than loose stacked text. */
 .dashboard-carousel td {
-  border-bottom: none;
+  display: block;
   white-space: normal;
-  padding: 4px 0;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
+  padding: 7px 0;
+  border-bottom: 1px solid var(--line);
+}
+
+.dashboard-carousel td:last-of-type {
+  border-bottom: none;
 }
 
 .dashboard-carousel td[data-label]::before {
   content: attr(data-label);
-  font-size: 11.5px;
+  display: block;
+  margin-bottom: 3px;
+  font-size: 10.5px;
   font-weight: 700;
   color: var(--ink-soft);
   text-transform: uppercase;
-  letter-spacing: 0.03em;
-  flex-shrink: 0;
+  letter-spacing: 0.04em;
 }
 
 .dashboard-carousel td:not([data-label]) {
-  justify-content: flex-start;
+  border-bottom: none;
 }
 
+/* The action button(s) are the one cell that isn't a label/value pair —
+   overrides the block layout above back to a left-aligned row, same
+   "distinct from the data fields above it" treatment as before. */
 .dashboard-carousel .row-actions {
+  display: flex;
   justify-content: flex-start;
+  align-items: center;
   flex-wrap: wrap;
+  gap: 8px;
+  border-bottom: none;
   padding-top: 10px;
-  margin-top: 6px;
+  margin-top: 2px;
   border-top: 1px solid var(--line);
 }
 
