@@ -1900,6 +1900,26 @@ a.chart-tooltip-title:hover {
   margin: 3px 0 0;
 }
 
+/* Dashboard's "Today"/"This Week" tables (structured-table redesign,
+   2026-09) — reuses the existing .data-table component as-is (same
+   responsive table→card behavior on mobile as Items/Customers), these two
+   classes are the only genuinely new styling the redesign needed. */
+.dashboard-table-urgent {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 700;
+  color: var(--clay);
+}
+
+.dashboard-table-note {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  color: var(--ink-soft);
+  font-style: italic;
+}
+
 .dashboard-day-group-label {
   font-size: 13px;
   font-weight: 700;

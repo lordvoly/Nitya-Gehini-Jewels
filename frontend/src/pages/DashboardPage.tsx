@@ -1,7 +1,12 @@
-import { useEffect, useState } from "react";
+import { Fragment, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { ImageOff } from "lucide-react";
-import { fetchDashboardSummary, type DashboardSummary, type PickupDueBookingItem, type OccasionRow } from "../lib/dashboard";
+import {
+  fetchDashboardSummary,
+  type DashboardSummary,
+  type PickupDueBookingItem,
+  type OccasionRow,
+  type OverdueBookingItem,
+} from "../lib/dashboard";
 import type { PendingItem } from "../lib/pendingItems";
 import { useAuth } from "../lib/auth";
 import { DashboardAlerts } from "../components/dashboard/DashboardAlerts";
@@ -11,57 +16,6 @@ import { formatDateDisplay, addDaysToDateString, formatWeekdayDate } from "../li
 import { fetchShopSettings } from "../lib/shopSettings";
 import { buildWhatsAppLink, buildOccasionMessage } from "../lib/whatsapp";
 import "../styles/shared.css";
-
-// One card per physical item due for pickup — thumbnail+name link to the
-// item's own detail page (Feature A/B convention), booking code links to
-// the booking, same "everything links out, nothing duplicates an action"
-// rule the rest of the Dashboard already follows. Not a single big Link
-// like Returns Due's rows, since this row needs two different link
-// destinations at once.
-function PickupRow({ pickup }: { pickup: PickupDueBookingItem }) {
-  return (
-    <div className="found-panel dashboard-pickup-row">
-      <Link to={`/items/${pickup.item_id}`} className="line-item-thumb-link" aria-label={`View ${pickup.items?.name}`}>
-        {pickup.items?.photos?.[0] ? (
-          <img src={pickup.items.photos[0]} alt="" className="line-item-thumb" />
-        ) : (
-          <span className="line-item-thumb line-item-thumb-placeholder" aria-hidden="true">
-            <ImageOff size={16} strokeWidth={2} />
-          </span>
-        )}
-      </Link>
-      <div className="dashboard-pickup-info">
-        <Link to={`/items/${pickup.item_id}`} className="dashboard-row-title">
-          {pickup.items?.item_code} — {pickup.items?.name}
-        </Link>
-        <p className="dashboard-row-meta">
-          {pickup.customers?.name ?? "—"} ·{" "}
-          <Link to={`/bookings?booking=${pickup.booking_id}`}>{pickup.bookings?.booking_code}</Link> ·{" "}
-          {formatDateDisplay(pickup.pickup_date)}
-        </p>
-      </div>
-    </div>
-  );
-}
-
-// One row per missing-and-never-charged-for component — a single Link
-// (like Returns Due's rows) straight to the booking, since there's only
-// one meaningful destination here, not two like PickupRow's thumbnail vs.
-// booking split.
-function PendingItemRow({ pending }: { pending: PendingItem }) {
-  return (
-    <Link to={`/bookings?booking=${pending.booking_id}`} className="overdue-panel dashboard-link">
-      <p className="dashboard-row-title">
-        {pending.component_name} — {pending.item_code} · {pending.item_name}
-      </p>
-      <p className="dashboard-row-meta">
-        {pending.booking_code} · {pending.customer_name}
-        {pending.actual_return_date ? ` · returned ${formatDateDisplay(pending.actual_return_date)}` : ""}
-      </p>
-      {pending.return_notes && <p className="dashboard-row-meta">"{pending.return_notes}"</p>}
-    </Link>
-  );
-}
 
 // Groups an already pickup_date-ascending list into per-day buckets, each
 // labeled "Tomorrow" or "Wed 19 Aug" — never a raw ISO date. `today` is
@@ -107,43 +61,27 @@ function groupOccasionsByDay(occasions: OccasionRow[], today: string) {
     }));
 }
 
-// One row per birthday/anniversary — WhatsApp greeting button reuses the
-// exact wa.me pattern the invoice-share feature already established
-// (buildWhatsAppLink), just with occasion-specific pre-filled text instead
-// of a receipt link. Primary phone only, same as buildWhatsAppLink's own
-// default. A customer with no valid phone on file gets a genuinely
-// disabled button with a reason in its title, never a broken link — same
-// treatment ReceiptPage's own WhatsApp button already uses.
-function OccasionRowItem({
-  occasion,
-  shopName,
-  discountPercent,
-}: {
-  occasion: OccasionRow;
-  shopName: string;
-  discountPercent: number;
-}) {
-  const message = buildOccasionMessage(occasion.type, occasion.name, shopName, discountPercent);
-  const whatsapp = buildWhatsAppLink(occasion.phone, message);
-  return (
-    <div className="found-panel dashboard-occasion-row">
-      <div className="dashboard-occasion-info">
-        <p className="dashboard-row-title">{occasion.name}</p>
-        <span className={`pill ${occasion.type === "birthday" ? "pill-active" : "pill-info"}`}>
-          {occasion.type === "birthday" ? "Birthday" : "Anniversary"}
-        </span>
-      </div>
-      {"url" in whatsapp ? (
-        <a href={whatsapp.url} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-compact">
-          Send Greeting
-        </a>
-      ) : (
-        <button className="btn-secondary btn-compact" disabled title={whatsapp.error}>
-          Send Greeting
-        </button>
-      )}
-    </div>
-  );
+// Merges the two independently-day-grouped lists above into one
+// chronological agenda — a pickup and an occasion landing on the same day
+// share that day's bucket, sorted by date, rather than pickups and
+// occasions living in two separate tables the operator has to cross-
+// reference by eye.
+function mergeWeekByDay(
+  pickupGroups: ReturnType<typeof groupPickupsByDay>,
+  occasionGroups: ReturnType<typeof groupOccasionsByDay>,
+) {
+  const byDate = new Map<string, { date: string; label: string; pickups: PickupDueBookingItem[]; occasions: OccasionRow[] }>();
+  for (const g of pickupGroups) {
+    const entry = byDate.get(g.date) ?? { date: g.date, label: g.label, pickups: [], occasions: [] };
+    entry.pickups = g.items;
+    byDate.set(g.date, entry);
+  }
+  for (const g of occasionGroups) {
+    const entry = byDate.get(g.date) ?? { date: g.date, label: g.label, pickups: [], occasions: [] };
+    entry.occasions = g.items;
+    byDate.set(g.date, entry);
+  }
+  return [...byDate.values()].sort((a, b) => a.date.localeCompare(b.date));
 }
 
 export default function DashboardPage() {
@@ -204,6 +142,11 @@ export default function DashboardPage() {
   const otherOverdue = overdue.filter((b) => !b.next_customer_waiting);
   const weekPickupGroups = groupPickupsByDay(pickups_due_this_week, summary.today);
   const weekOccasionGroups = groupOccasionsByDay(occasions_this_week, summary.today);
+  const weekDays = mergeWeekByDay(weekPickupGroups, weekOccasionGroups);
+
+  const todayRowCount =
+    overdue.length + due_today.length + pickups_due_today.length + pending_items.length + occasions_today.length;
+  const weekRowCount = pickups_due_this_week.length + occasions_this_week.length;
 
   return (
     <div className="page">
@@ -249,125 +192,279 @@ export default function DashboardPage() {
         </Link>
       </div>
 
-      {pending_items.length > 0 && (
-        <div id="pending-items-section">
-          <div className="dashboard-section">
-            <h2>Items Pending ({pending_items.length})</h2>
-            <p className="wizard-hint">
-              Flagged as still missing when a return was processed — not yet formally charged for.
-            </p>
-            {pending_items.map((p) => (
-              <PendingItemRow key={`${p.booking_item_id}-${p.component_name}`} pending={p} />
-            ))}
-          </div>
-        </div>
-      )}
-
-      <div id="items-due-section">
-        <div className="dashboard-section">
-          <h2>Today's Returns Due ({due_today.length})</h2>
-          {due_today.length === 0 && <p className="wizard-hint">Nothing due back today.</p>}
-          {due_today.map((b) => (
-            <Link key={b.id} to={`/bookings?booking=${b.booking_id}`} className="found-panel dashboard-link">
-              <p className="dashboard-row-title">
-                {b.items?.item_code} — {b.items?.name}
-              </p>
-              <p className="dashboard-row-meta">
-                {b.bookings?.booking_code} · {b.customers?.name}
-              </p>
-            </Link>
-          ))}
-        </div>
-
-        <div className="dashboard-section">
-          <h2>Overdue Rentals ({overdue.length})</h2>
-          {overdue.length === 0 && <p className="wizard-hint">Nothing overdue.</p>}
-          {urgentOverdue.map((b) => (
-            <Link key={b.id} to={`/bookings?booking=${b.booking_id}`} className="overdue-panel urgent dashboard-link">
-              <p>
-                <span className="pill pill-attention">Next customer waiting</span>
-              </p>
-              <p className="dashboard-row-title">
-                {b.items?.item_code} — {b.items?.name}
-              </p>
-              <p className="dashboard-row-meta">
-                {b.booking_code} · {b.customers?.name} · {Math.abs(b.days_until_return)} day
-                {Math.abs(b.days_until_return) === 1 ? "" : "s"} overdue
-              </p>
-              <p className="dashboard-row-meta">
-                Next: {b.next_booking_code} — {b.next_customer_name} ({b.next_pickup_date})
-              </p>
-            </Link>
-          ))}
-          {otherOverdue.map((b) => (
-            <Link key={b.id} to={`/bookings?booking=${b.booking_id}`} className="overdue-panel dashboard-link">
-              <p className="dashboard-row-title">
-                {b.items?.item_code} — {b.items?.name}
-              </p>
-              <p className="dashboard-row-meta">
-                {b.booking_code} · {b.customers?.name} · {Math.abs(b.days_until_return)} day
-                {Math.abs(b.days_until_return) === 1 ? "" : "s"} overdue
-              </p>
-            </Link>
-          ))}
+      {/* "Today" — every same-day-urgent signal (overdue, returns due,
+          pickups due, missing-item follow-ups) as one structured table
+          instead of four separate panel-stacked sections. Sorted by
+          urgency, not by which data source it came from: overdue-with-
+          next-customer-waiting first, then other overdue, then today's
+          returns/pickups, then open missing-item follow-ups. The table
+          itself always renders (never disappears) — a quiet day just
+          shows one calm empty-state row, so the page's structure stays
+          the same whether today is busy or not. */}
+      <div id="items-due-section" className="dashboard-section">
+        <h2>Today ({todayRowCount})</h2>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Type</th>
+                <th>Item</th>
+                <th>Booking / Customer</th>
+                <th>Detail</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {todayRowCount === 0 && (
+                <tr>
+                  <td colSpan={5}>Nothing needs attention today.</td>
+                </tr>
+              )}
+              {urgentOverdue.map((b) => (
+                <OverdueRow key={`overdue-${b.id}`} overdue={b} />
+              ))}
+              {otherOverdue.map((b) => (
+                <OverdueRow key={`overdue-${b.id}`} overdue={b} />
+              ))}
+              {due_today.map((b) => (
+                <tr key={`due-${b.id}`}>
+                  <td data-label="Type">
+                    <span className="pill pill-active">Return Due</span>
+                  </td>
+                  <td data-label="Item">
+                    <Link to={`/items/${b.item_id}`}>
+                      {b.items?.item_code} — {b.items?.name}
+                    </Link>
+                  </td>
+                  <td data-label="Booking / Customer">
+                    {b.bookings?.booking_code} · {b.customers?.name}
+                  </td>
+                  <td data-label="Detail">Due today</td>
+                  <td className="row-actions">
+                    <Link to={`/bookings?booking=${b.booking_id}`} className="btn-secondary btn-compact">
+                      View
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+              {pickups_due_today.map((p) => (
+                <tr key={`pickup-${p.id}`}>
+                  <td data-label="Type">
+                    <span className="pill pill-info">Pickup</span>
+                  </td>
+                  <td data-label="Item">
+                    <Link to={`/items/${p.item_id}`}>
+                      {p.items?.item_code} — {p.items?.name}
+                    </Link>
+                  </td>
+                  <td data-label="Booking / Customer">
+                    {p.bookings?.booking_code} · {p.customers?.name ?? "—"}
+                  </td>
+                  <td data-label="Detail">Due today</td>
+                  <td className="row-actions">
+                    <Link to={`/bookings?booking=${p.booking_id}`} className="btn-secondary btn-compact">
+                      View
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+              {pending_items.map((p) => (
+                <tr key={`pending-${p.booking_item_id}-${p.component_name}`}>
+                  <td data-label="Type">
+                    <span className="pill pill-attention">Missing Item</span>
+                  </td>
+                  <td data-label="Item">
+                    <Link to={`/items/${p.item_id}`}>
+                      {p.item_code} — {p.item_name}
+                    </Link>
+                  </td>
+                  <td data-label="Booking / Customer">
+                    {p.booking_code} · {p.customer_name}
+                  </td>
+                  <td data-label="Detail">
+                    {p.component_name}
+                    {p.actual_return_date ? ` · returned ${formatDateDisplay(p.actual_return_date)}` : ""}
+                    {p.return_notes && <span className="dashboard-table-note">"{p.return_notes}"</span>}
+                  </td>
+                  <td className="row-actions">
+                    <Link to={`/bookings?booking=${p.booking_id}`} className="btn-secondary btn-compact">
+                      View
+                    </Link>
+                  </td>
+                </tr>
+              ))}
+              {occasions_today.map((o) => (
+                <tr key={`today-occasion-${o.customer_id}-${o.type}`}>
+                  <td data-label="Type">
+                    <span className={`pill ${o.type === "birthday" ? "pill-active" : "pill-info"}`}>
+                      {o.type === "birthday" ? "Birthday" : "Anniversary"}
+                    </span>
+                  </td>
+                  <td data-label="Item">—</td>
+                  <td data-label="Booking / Customer">{o.name}</td>
+                  <td data-label="Detail">Today</td>
+                  <td className="row-actions">
+                    <GreetingAction occasion={o} shopName={shopName} discountPercent={occasionDiscountPercent} />
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
         </div>
       </div>
 
-      <div id="pickups-due-section">
-        <div className="dashboard-section">
-          <h2>Today's Pickups Due ({pickups_due_today.length})</h2>
-          {pickups_due_today.length === 0 && <p className="wizard-hint">Nothing to prep for pickup today.</p>}
-          {pickups_due_today.map((p) => (
-            <PickupRow key={p.id} pickup={p} />
-          ))}
-        </div>
-
-        <div className="dashboard-section">
-          <h2>This Week's Pickups Due ({pickups_due_this_week.length})</h2>
-          {pickups_due_this_week.length === 0 && <p className="wizard-hint">Nothing else due for pickup this week.</p>}
-          {weekPickupGroups.map((group) => (
-            <div key={group.date}>
-              <p className="dashboard-day-group-label">{group.label}</p>
-              {group.items.map((p) => (
-                <PickupRow key={p.id} pickup={p} />
+      {/* "This Week" — this week's pickups and occasions merged into one
+          day-by-day agenda instead of two separately-headed sections, each
+          split again into "today"/"this week". Today's own pickups are
+          deliberately not repeated here (they're in the Today table
+          above) — pickups_due_this_week already excludes today. */}
+      <div id="pickups-due-section" className="dashboard-section">
+        <h2>This Week ({weekRowCount})</h2>
+        <div className="table-wrap">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Day</th>
+                <th>Type</th>
+                <th>Item / Occasion</th>
+                <th>Customer</th>
+                <th></th>
+              </tr>
+            </thead>
+            <tbody>
+              {weekRowCount === 0 && (
+                <tr>
+                  <td colSpan={5}>Nothing coming up this week.</td>
+                </tr>
+              )}
+              {weekDays.map((day) => (
+                <Fragment key={day.date}>
+                  {day.pickups.map((p) => (
+                    <tr key={`week-pickup-${p.id}`}>
+                      <td data-label="Day">{day.label}</td>
+                      <td data-label="Type">
+                        <span className="pill pill-neutral">Pickup</span>
+                      </td>
+                      <td data-label="Item / Occasion">
+                        <Link to={`/items/${p.item_id}`}>
+                          {p.items?.item_code} — {p.items?.name}
+                        </Link>
+                      </td>
+                      <td data-label="Customer">{p.customers?.name ?? "—"}</td>
+                      <td className="row-actions">
+                        <Link to={`/bookings?booking=${p.booking_id}`} className="btn-secondary btn-compact">
+                          View
+                        </Link>
+                      </td>
+                    </tr>
+                  ))}
+                  {day.occasions.map((o) => (
+                    <WeekOccasionRow
+                      key={`week-occasion-${o.customer_id}-${o.type}`}
+                      dayLabel={day.label}
+                      occasion={o}
+                      shopName={shopName}
+                      discountPercent={occasionDiscountPercent}
+                    />
+                  ))}
+                </Fragment>
               ))}
-            </div>
-          ))}
-        </div>
-      </div>
-
-      <div id="occasions-section">
-        <div className="dashboard-section">
-          <h2>Today's Occasions ({occasions_today.length})</h2>
-          {occasions_today.length === 0 && <p className="wizard-hint">No birthdays or anniversaries today.</p>}
-          {occasions_today.map((o) => (
-            <OccasionRowItem
-              key={`${o.customer_id}-${o.type}`}
-              occasion={o}
-              shopName={shopName}
-              discountPercent={occasionDiscountPercent}
-            />
-          ))}
-        </div>
-
-        <div className="dashboard-section">
-          <h2>This Week's Occasions ({occasions_this_week.length})</h2>
-          {occasions_this_week.length === 0 && <p className="wizard-hint">No birthdays or anniversaries later this week.</p>}
-          {weekOccasionGroups.map((group) => (
-            <div key={group.date}>
-              <p className="dashboard-day-group-label">{group.label}</p>
-              {group.items.map((o) => (
-                <OccasionRowItem
-                  key={`${o.customer_id}-${o.type}`}
-                  occasion={o}
-                  shopName={shopName}
-                  discountPercent={occasionDiscountPercent}
-                />
-              ))}
-            </div>
-          ))}
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
+  );
+}
+
+// One overdue rental's row — same for both the "next customer waiting"
+// case and the plain-overdue case, differing only in the Detail cell.
+// Urgency here is communicated the way this app already does it elsewhere
+// (a pill inside the cell, e.g. bookingItemStatusPill's own "Pickup
+// Overdue" pill), not a separate visual language just for this table.
+function OverdueRow({ overdue }: { overdue: OverdueBookingItem }) {
+  const days = Math.abs(overdue.days_until_return);
+  return (
+    <tr>
+      <td data-label="Type">
+        <span className="pill pill-attention">Overdue</span>
+      </td>
+      <td data-label="Item">
+        <Link to={`/items/${overdue.item_id}`}>
+          {overdue.items?.item_code} — {overdue.items?.name}
+        </Link>
+      </td>
+      <td data-label="Booking / Customer">
+        {overdue.booking_code} · {overdue.customers?.name}
+      </td>
+      <td data-label="Detail">
+        {days} day{days === 1 ? "" : "s"} overdue
+        {overdue.next_customer_waiting && (
+          <span className="dashboard-table-urgent">
+            Next: {overdue.next_booking_code} — {overdue.next_customer_name} ({overdue.next_pickup_date})
+          </span>
+        )}
+      </td>
+      <td className="row-actions">
+        <Link to={`/bookings?booking=${overdue.booking_id}`} className="btn-secondary btn-compact">
+          View
+        </Link>
+      </td>
+    </tr>
+  );
+}
+
+// The WhatsApp greeting action, shared by This Week's occasion rows and
+// Today's Occasions table below — same wa.me pattern the invoice-share
+// feature established, just with occasion-specific pre-filled text. A
+// customer with no valid phone on file gets a genuinely disabled button
+// with a reason in its title, never a broken link.
+function GreetingAction({
+  occasion,
+  shopName,
+  discountPercent,
+}: {
+  occasion: OccasionRow;
+  shopName: string;
+  discountPercent: number;
+}) {
+  const message = buildOccasionMessage(occasion.type, occasion.name, shopName, discountPercent);
+  const whatsapp = buildWhatsAppLink(occasion.phone, message);
+  return "url" in whatsapp ? (
+    <a href={whatsapp.url} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-compact">
+      Send Greeting
+    </a>
+  ) : (
+    <button className="btn-secondary btn-compact" disabled title={whatsapp.error}>
+      Send Greeting
+    </button>
+  );
+}
+
+function WeekOccasionRow({
+  dayLabel,
+  occasion,
+  shopName,
+  discountPercent,
+}: {
+  dayLabel: string;
+  occasion: OccasionRow;
+  shopName: string;
+  discountPercent: number;
+}) {
+  return (
+    <tr>
+      <td data-label="Day">{dayLabel}</td>
+      <td data-label="Type">
+        <span className={`pill ${occasion.type === "birthday" ? "pill-active" : "pill-info"}`}>
+          {occasion.type === "birthday" ? "Birthday" : "Anniversary"}
+        </span>
+      </td>
+      <td data-label="Item / Occasion">—</td>
+      <td data-label="Customer">{occasion.name}</td>
+      <td className="row-actions">
+        <GreetingAction occasion={occasion} shopName={shopName} discountPercent={discountPercent} />
+      </td>
+    </tr>
   );
 }
