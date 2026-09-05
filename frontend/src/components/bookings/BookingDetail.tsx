@@ -1,6 +1,15 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { Link } from "react-router-dom";
-import { ImageOff, ArrowLeft, Printer, Pencil, MessageCircleHeart, MoreHorizontal, NotebookPen } from "lucide-react";
+import {
+  ImageOff,
+  ArrowLeft,
+  Printer,
+  Pencil,
+  MessageCircleHeart,
+  MoreHorizontal,
+  NotebookPen,
+  IndianRupee,
+} from "lucide-react";
 import { Modal } from "../common/Modal";
 import {
   fetchBooking,
@@ -617,8 +626,9 @@ export function BookingDetail({
                           </div>
                         ) : (
                           <div className="line-item-actions">
-                            <button type="button" className="btn-secondary" onClick={() => startEditPayment(p)}>
-                              Edit Payment
+                            <button type="button" className="btn-secondary btn-compact" onClick={() => startEditPayment(p)}>
+                              <Pencil size={13} strokeWidth={2} aria-hidden="true" />
+                              Edit
                             </button>
                           </div>
                         ))}
@@ -636,7 +646,8 @@ export function BookingDetail({
                 to look heavier than it is. */}
             {!showPaymentForm && (
               <button type="button" className="link-button record-payment-link" onClick={() => setShowPaymentForm(true)}>
-                + Record Payment
+                <IndianRupee size={15} strokeWidth={2} aria-hidden="true" />
+                Record Payment
               </button>
             )}
 

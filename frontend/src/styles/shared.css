@@ -2273,11 +2273,7 @@ a.chart-tooltip-title:hover {
   flex-wrap: wrap;
 }
 
-.record-payment-link {
-  color: var(--wine);
-  font-weight: 600;
-}
-
+.record-payment-link,
 .notes-edit-link {
   display: inline-flex;
   align-items: center;
