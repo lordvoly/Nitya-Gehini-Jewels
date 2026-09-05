@@ -1900,10 +1900,15 @@ a.chart-tooltip-title:hover {
   margin: 3px 0 0;
 }
 
-/* Dashboard's "Today"/"This Week" tables — swipeable card carousel
-   instead of a vertically-growing list (follow-up to the structured-table
-   redesign above, per explicit request: many rows should page sideways,
-   not push the page taller). Deliberately NOT reusing the .data-table
+/* Dashboard's per-category tables (Items Pending, Today's Returns Due,
+   Overdue Rentals, Today's/This Week's Pickups Due, Today's/This Week's
+   Occasions) — swipeable card carousel instead of a vertically-growing
+   list (follow-up to the structured-table redesign above: many rows
+   should page sideways, not push the page taller). An earlier version of
+   this merged everything into two combined "Today"/"This Week" tables by
+   urgency, which turned out to hide real per-category detail the operator
+   needed — reverted back to one table per data source, keeping the
+   carousel/swipe treatment. Deliberately NOT reusing the .data-table
    mobile-card CSS's own breakpoint-scoped rules directly — this needs the
    card treatment active at every width, including desktop, and a
    horizontal flex tbody instead of a vertical block stack, which would
@@ -1956,9 +1961,15 @@ a.chart-tooltip-title:hover {
   display: none;
 }
 
+/* One card fills the whole row at a time (not several at fixed width) —
+   two cards sitting side by side looked asymmetric when a section
+   happened to have exactly two, and this is more uniform across every
+   section regardless of its count. No gap between cards: each one IS a
+   full "page", so the dots below (activeIndex = round(scrollLeft /
+   clientWidth) in DashboardPage.tsx) land on exact whole numbers — a
+   visible gap would throw that math off by the gap's own width. */
 .dashboard-carousel tbody {
   display: flex;
-  gap: 12px;
   overflow-x: auto;
   overflow-y: hidden;
   scroll-snap-type: x mandatory;
@@ -1970,7 +1981,7 @@ a.chart-tooltip-title:hover {
 .dashboard-carousel tr {
   display: flex;
   flex-direction: column;
-  flex: 0 0 250px;
+  flex: 0 0 100%;
   scroll-snap-align: start;
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
@@ -1978,11 +1989,38 @@ a.chart-tooltip-title:hover {
   padding: 12px 14px;
 }
 
-/* The single empty-state row ("Nothing needs attention today.") spans the
-   full width instead of sitting as a small isolated card — there's
-   nothing else to page sideways to when this is the only row. */
+/* The single empty-state row ("Nothing needs attention today.") — already
+   full-width like every other card now, this override from the old
+   fixed-card-width layout is no longer needed but harmless to keep. */
 .dashboard-carousel tr.dashboard-carousel-empty {
   flex: 1 1 100%;
+}
+
+/* Dot pagination — the "this is swipeable, and here's how many" cue that
+   used to come from a sliver of the next card peeking into view (lost
+   now that each card is full-width). Only rendered when count > 1
+   (DashboardPage.tsx); clicking a dot jumps straight to that card. */
+.dashboard-carousel-dots {
+  display: flex;
+  justify-content: center;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.dashboard-carousel-dot {
+  width: 6px;
+  height: 6px;
+  padding: 0;
+  border: none;
+  border-radius: 50%;
+  background: var(--line);
+  cursor: pointer;
+}
+
+.dashboard-carousel-dot.active {
+  width: 16px;
+  border-radius: var(--radius-pill);
+  background: var(--wine);
 }
 
 .dashboard-carousel td {
