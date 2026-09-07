@@ -15,6 +15,7 @@ import {
 } from "../../lib/items";
 import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
 import { itemStatusPill } from "../../lib/statusPill";
+import { fireCompletionConfetti } from "../../lib/confetti";
 import { PhotoPicker } from "./PhotoPicker";
 
 const COMMON_COMPONENTS = ["Necklace", "Earrings", "Tika", "Bangles", "Maang Tikka", "Ring"];
@@ -54,6 +55,15 @@ export function AddItemWizard({
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [saved, setSaved] = useState<Item | null>(null);
+
+  // Fires once per successful save, including every item in a row when
+  // the operator keeps hitting "Add Another" — each one is its own
+  // complete success here, unlike a return's "only once the whole
+  // booking wraps up" condition (there's no partial-vs-complete concept
+  // for a single new item).
+  useEffect(() => {
+    if (saved) fireCompletionConfetti();
+  }, [saved]);
 
   // Pre-fill the (editable) item code with the server's suggested next
   // NGJ-000N — a default to speed up the common case, not a lock-in; the
