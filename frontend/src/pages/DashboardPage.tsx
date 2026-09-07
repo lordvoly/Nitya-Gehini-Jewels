@@ -1,7 +1,13 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Link, useNavigate, type NavigateFunction } from "react-router-dom";
-import { ChevronLeft, ChevronRight } from "lucide-react";
-import { fetchDashboardSummary, type DashboardSummary, type PickupDueBookingItem, type OccasionRow } from "../lib/dashboard";
+import { ChevronLeft, ChevronRight, Bell } from "lucide-react";
+import {
+  fetchDashboardSummary,
+  type DashboardSummary,
+  type PickupDueBookingItem,
+  type OccasionRow,
+  type OverdueBookingItem,
+} from "../lib/dashboard";
 import { useAuth } from "../lib/auth";
 import { DashboardAlerts } from "../components/dashboard/DashboardAlerts";
 import { DashboardSkeleton } from "../components/common/Skeleton";
@@ -10,7 +16,7 @@ import { hasShownBootIntro, markBootIntroShown } from "../lib/appBootIntro";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { formatDateDisplay, addDaysToDateString, formatWeekdayDate } from "../lib/dates";
 import { fetchShopSettings } from "../lib/shopSettings";
-import { buildWhatsAppLink, buildOccasionMessage } from "../lib/whatsapp";
+import { buildWhatsAppLink, buildOccasionMessage, buildOverdueReminderMessage } from "../lib/whatsapp";
 import "../styles/shared.css";
 
 // Flattens an already pickup_date-ascending list into rows each carrying
@@ -213,6 +219,32 @@ function stopRowClick(e: { stopPropagation: () => void }) {
   e.stopPropagation();
 }
 
+// WhatsApp nudge for a single overdue rental — same wa.me pattern as
+// GreetingAction below, just for the thing that actually needs chasing
+// here: the item hasn't come back yet. Every overdue row gets this, not
+// only the next_customer_waiting/urgent ones — the point is chasing it
+// before it becomes urgent, not only after. A customer with no valid
+// phone on file gets a genuinely disabled button with a reason in its
+// title, never a broken link, same as every other WhatsApp button in
+// this app. stopRowClick keeps this from also triggering the card's own
+// navigate-to-booking click.
+function OverdueReminderAction({ booking, shopName }: { booking: OverdueBookingItem; shopName: string }) {
+  const days = Math.abs(booking.days_until_return);
+  const message = buildOverdueReminderMessage(booking.customers?.name ?? "there", booking.items?.name ?? "the item", days, shopName);
+  const whatsapp = buildWhatsAppLink(booking.customers?.phone, message);
+  return "url" in whatsapp ? (
+    <a href={whatsapp.url} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-compact" onClick={stopRowClick}>
+      <Bell size={14} strokeWidth={2} aria-hidden="true" />
+      Send Reminder
+    </a>
+  ) : (
+    <button className="btn-secondary btn-compact" disabled title={whatsapp.error} onClick={stopRowClick}>
+      <Bell size={14} strokeWidth={2} aria-hidden="true" />
+      Send Reminder
+    </button>
+  );
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const { session } = useAuth();
@@ -396,7 +428,7 @@ export default function DashboardPage() {
         id="overdue-section"
         title="Overdue Rentals"
         count={overdue.length}
-        headers={["Item", "Booking / Customer", "Days Overdue"]}
+        headers={["Item", "Booking / Customer", "Days Overdue", ""]}
         emptyMessage="Nothing overdue."
       >
         {[...urgentOverdue, ...otherOverdue].map((b) => {
@@ -421,6 +453,9 @@ export default function DashboardPage() {
                     Next: {b.next_booking_code} — {b.next_customer_name} ({b.next_pickup_date})
                   </span>
                 )}
+              </td>
+              <td className="row-actions">
+                <OverdueReminderAction booking={b} shopName={shopName} />
               </td>
             </tr>
           );

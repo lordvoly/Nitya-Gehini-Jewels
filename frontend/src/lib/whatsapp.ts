@@ -53,3 +53,13 @@ export function buildOccasionMessage(
 export function buildFeedbackRequestMessage(customerName: string, shopName: string): string {
   return `Dear ${customerName}, thank you for letting *${shopName}* be a part of your special day! We hope every piece you wore made you feel as radiant as the occasion deserved. If you enjoyed your experience with us, it would mean a lot if you could share a quick review on Google — it genuinely helps a small family business like ours reach more brides and families: ${GOOGLE_REVIEW_URL}\n\nAnd if you'd like a peek at our latest collections and behind-the-scenes moments, do follow us on Instagram @${INSTAGRAM_HANDLE}: ${INSTAGRAM_URL}\n\nThank you again for trusting us — it was a pleasure being part of your celebration!`;
 }
+
+// Dashboard "Overdue Rentals" — a gentle nudge for a rental that's actually
+// gone past its return date (booking_items.status = 'out', return_date in
+// the past; see the overdue_rentals view), not the separate
+// "pickup_overdue" concept (a rental never confirmed picked up). Every
+// overdue row gets this action, not just the next_customer_waiting/urgent
+// ones — the point is chasing it before it becomes urgent, not only after.
+export function buildOverdueReminderMessage(customerName: string, itemName: string, daysOverdue: number, shopName: string): string {
+  return `Dear ${customerName}, this is a gentle reminder from *${shopName}* that ${itemName} was due back with us ${daysOverdue} day${daysOverdue === 1 ? "" : "s"} ago. Could you please arrange to return it at your earliest convenience? If you need a little more time, just let us know — happy to help. Thank you!`;
+}
