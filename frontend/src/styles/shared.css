@@ -1282,6 +1282,49 @@ button.more-menu-item {
   margin-top: 16px;
 }
 
+/* Dashboard's first-load-only logo intro (LogoIntroLoader) — a short
+   branded moment before falling back to the regular shimmer skeleton. The
+   ring spins around the logo rather than the logo itself, so "NGJ" stays
+   upright and legible throughout. */
+.logo-intro {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 60vh;
+}
+
+.logo-intro-ring {
+  position: relative;
+  width: 88px;
+  height: 88px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.logo-intro-ring::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  border-radius: 50%;
+  border: 3px solid var(--line);
+  border-top-color: var(--wine);
+  animation: logo-intro-spin 1s linear infinite;
+}
+
+.logo-intro-img {
+  width: 62px;
+  height: 62px;
+  object-fit: contain;
+  border-radius: 50%;
+}
+
+@keyframes logo-intro-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* ── Empty states ─────────────────────────────────────────────────────── */
 
 .empty-state {
@@ -3378,6 +3421,10 @@ a.chart-tooltip-title:hover {
   .skeleton {
     animation: none;
     background: var(--line);
+  }
+
+  .logo-intro-ring::before {
+    animation: none;
   }
 
   .alpha-index {

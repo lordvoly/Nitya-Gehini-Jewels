@@ -5,6 +5,8 @@ import { fetchDashboardSummary, type DashboardSummary, type PickupDueBookingItem
 import { useAuth } from "../lib/auth";
 import { DashboardAlerts } from "../components/dashboard/DashboardAlerts";
 import { DashboardSkeleton } from "../components/common/Skeleton";
+import { LogoIntroLoader } from "../components/common/LogoIntroLoader";
+import { hasShownBootIntro, markBootIntroShown } from "../lib/appBootIntro";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { formatDateDisplay, addDaysToDateString, formatWeekdayDate } from "../lib/dates";
 import { fetchShopSettings } from "../lib/shopSettings";
@@ -223,6 +225,20 @@ export default function DashboardPage() {
   // worse tradeoff for something this secondary.
   const [shopName, setShopName] = useState("the shop");
   const [occasionDiscountPercent, setOccasionDiscountPercent] = useState(10);
+  // True only on the very first Dashboard mount of this app session (see
+  // appBootIntro.ts) — logging in and landing here plays the intro;
+  // navigating away to another tab and back does not. For that one
+  // first-boot mount, stays true for up to 5s regardless of how long the
+  // fetch itself actually takes — a fast (warm-backend) load never sees
+  // the plain skeleton at all, since `loading` itself flips false and this
+  // becomes moot; a slow (cold-start) load falls through to the regular
+  // DashboardSkeleton once this expires, same as every other mount always
+  // has.
+  const [showIntro, setShowIntro] = useState(() => !hasShownBootIntro());
+
+  useEffect(() => {
+    markBootIntroShown();
+  }, []);
 
   useEffect(() => {
     fetchDashboardSummary()
@@ -230,6 +246,12 @@ export default function DashboardPage() {
       .catch((e) => setError(e instanceof Error ? e.message : "Failed to load dashboard"))
       .finally(() => setLoading(false));
   }, []);
+
+  useEffect(() => {
+    if (!showIntro) return;
+    const handle = setTimeout(() => setShowIntro(false), 5000);
+    return () => clearTimeout(handle);
+  }, [showIntro]);
 
   useEffect(() => {
     fetchShopSettings()
@@ -241,6 +263,8 @@ export default function DashboardPage() {
   }, []);
 
   const showSlowHint = useSlowLoadHint(loading);
+
+  if (loading && showIntro) return <LogoIntroLoader />;
 
   if (loading)
     return (
