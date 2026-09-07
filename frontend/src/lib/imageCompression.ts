@@ -1,18 +1,49 @@
 // Client-side compression before upload — a modern phone photo (JPEG or
 // HEIC) can reasonably be 10-25MB, comfortably exceeding almost any fixed
-// server-side ceiling we pick. Resizing to a sane max dimension and
-// re-encoding as JPEG gets a real phone photo down to a size that's fast
-// to upload and well within the backend's own backstop limit, without the
-// user ever needing to think about it — this is the real fix, not a
-// higher server-side number alone.
-const MAX_DIMENSION = 1920; // long edge, px — generous for on-screen/print use
-const JPEG_QUALITY = 0.82;
-// Below this, compressing is pure overhead (decode + re-encode time) for
-// no real benefit — already well under any size limit that matters here.
-const SKIP_COMPRESSION_UNDER_BYTES = 1.5 * 1024 * 1024;
+// server-side ceiling we pick. This is the real enforcement of a ~1MB cap
+// per photo (both item and profile photos go through this same shared
+// function via PhotoPicker) — the backend's own multer limit
+// (backend/src/lib/upload.ts) is a generous 20MB backstop, not a size
+// guarantee, so this is the one place that actually keeps Storage usage
+// light.
+//
+// Rather than one fixed quality/dimension pass (which either
+// under-compresses a very detailed photo or over-compresses a simple one),
+// this tries the least aggressive combination that actually clears the
+// target: full quality ladder at the largest dimension first, only
+// stepping down to a smaller dimension if quality alone can't get there.
+// That keeps ordinary jewelry product photos close to their original
+// quality while still guaranteeing the cap for anything that needs it.
+const TARGET_BYTES = 1024 * 1024; // 1MB cap
+const DIMENSION_STEPS = [1920, 1440, 1080]; // long edge, px, largest first
+const MAX_QUALITY = 0.9;
+const MIN_QUALITY = 0.4;
+const QUALITY_STEP = 0.1;
+
+async function encodeAtDimension(bitmap: ImageBitmap, maxDimension: number): Promise<Blob | null> {
+  const scale = Math.min(1, maxDimension / Math.max(bitmap.width, bitmap.height));
+  const targetWidth = Math.round(bitmap.width * scale);
+  const targetHeight = Math.round(bitmap.height * scale);
+
+  const canvas = document.createElement("canvas");
+  canvas.width = targetWidth;
+  canvas.height = targetHeight;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return null;
+  ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
+
+  let best: Blob | null = null;
+  for (let quality = MAX_QUALITY; quality >= MIN_QUALITY; quality -= QUALITY_STEP) {
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", quality));
+    if (!blob) continue;
+    best = blob;
+    if (blob.size <= TARGET_BYTES) return best;
+  }
+  return best;
+}
 
 export async function compressImageForUpload(file: File): Promise<File> {
-  if (file.size < SKIP_COMPRESSION_UNDER_BYTES) return file;
+  if (file.size <= TARGET_BYTES) return file;
 
   let bitmap: ImageBitmap;
   try {
@@ -26,24 +57,18 @@ export async function compressImageForUpload(file: File): Promise<File> {
   }
 
   try {
-    const scale = Math.min(1, MAX_DIMENSION / Math.max(bitmap.width, bitmap.height));
-    const targetWidth = Math.round(bitmap.width * scale);
-    const targetHeight = Math.round(bitmap.height * scale);
+    let best: Blob | null = null;
+    for (const dimension of DIMENSION_STEPS) {
+      best = await encodeAtDimension(bitmap, dimension);
+      if (best && best.size <= TARGET_BYTES) break;
+    }
 
-    const canvas = document.createElement("canvas");
-    canvas.width = targetWidth;
-    canvas.height = targetHeight;
-    const ctx = canvas.getContext("2d");
-    if (!ctx) return file;
-    ctx.drawImage(bitmap, 0, 0, targetWidth, targetHeight);
-
-    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, "image/jpeg", JPEG_QUALITY));
     // A tiny/already-efficient source could theoretically grow under
     // re-encoding — only use the compressed version if it's actually smaller.
-    if (!blob || blob.size >= file.size) return file;
+    if (!best || best.size >= file.size) return file;
 
     const newName = file.name.replace(/\.\w+$/, "") + ".jpg";
-    return new File([blob], newName, { type: "image/jpeg" });
+    return new File([best], newName, { type: "image/jpeg" });
   } finally {
     bitmap.close();
   }
