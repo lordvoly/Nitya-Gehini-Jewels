@@ -1384,6 +1384,14 @@ bookingsRouter.post("/:bookingId/items/:bookingItemId/undo-pickup", async (req: 
 // non-blocking-warning-on-secondary-failure pattern as the advance
 // payment at booking creation — a failed charge insert doesn't undo an
 // already-completed return.
+//
+// returned_person_type is required on every return, mirroring
+// confirm-pickup's identical pickup_person_type requirement in the other
+// direction — a real record of who physically brought the item back,
+// since it's often not the customer themselves. 'self' needs nothing
+// further; 'family'/'porter' require a name and phone, hard-validated up
+// front same as pickup's, and are also shown on the invoice (ReceiptPage,
+// PublicReceiptPage) right alongside "Picked up by".
 bookingsRouter.post("/:bookingId/items/:bookingItemId/return", async (req: AuthedRequest, res) => {
   const { data: bookingItem, error: bookingError } = await supabase
     .from("booking_items")
@@ -1409,7 +1417,27 @@ bookingsRouter.post("/:bookingId/items/:bookingItemId/return", async (req: Authe
   }
 
   const item = bookingItem.items as { item_type: string; components: string[] | null; tracking_type: string } | null;
-  const { return_notes, actual_return_date, deposit_refunded, deposit_refund_date } = req.body ?? {};
+  const {
+    return_notes,
+    actual_return_date,
+    deposit_refunded,
+    deposit_refund_date,
+    returned_person_type,
+    returned_person_name,
+    returned_person_phone,
+  } = req.body ?? {};
+
+  // Mirrors confirm-pickup's identical pickup_person_type validation —
+  // required on every return, same "real record of who to hold
+  // accountable" reasoning, just in the return direction now. 'self' needs
+  // nothing further; 'family'/'porter' require a name and phone.
+  if (!["self", "family", "porter"].includes(returned_person_type)) {
+    return res.status(400).json({ error: "returned_person_type must be one of self, family, porter" });
+  }
+  const needsReturnedDetails = returned_person_type !== "self";
+  if (needsReturnedDetails && (!returned_person_name?.trim() || !returned_person_phone?.trim())) {
+    return res.status(400).json({ error: "Name and phone are required when someone other than the customer is returning the item" });
+  }
 
   const componentNames = item?.item_type === "set" ? item.components ?? [] : [];
   const addonNames = (bookingItem.custom_addons ?? []) as string[];
@@ -1433,6 +1461,9 @@ bookingsRouter.post("/:bookingId/items/:bookingItemId/return", async (req: Authe
     actual_return_date: effectiveReturnDate,
     return_checklist,
     return_notes: return_notes?.trim() || null,
+    returned_person_type,
+    returned_person_name: needsReturnedDetails ? returned_person_name.trim() : null,
+    returned_person_phone: needsReturnedDetails ? returned_person_phone.trim() : null,
   };
   if (bookingItem.deposit_collected) {
     updatePayload.deposit_refunded = deposit_refunded ?? false;

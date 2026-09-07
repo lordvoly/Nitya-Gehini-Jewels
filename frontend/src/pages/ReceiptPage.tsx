@@ -128,7 +128,10 @@ export default function ReceiptPage() {
                     {bi.items?.item_code} — {bi.items?.name}
                     {bi.quantity_booked > 1 && ` × ${bi.quantity_booked}`}
                   </span>
-                  {cancelled && <span className={`pill ${pill.className} receipt-item-pill`}>{pill.label}</span>}
+                  {/* Shown for every item, not just cancelled ones — a
+                      customer looking at their invoice has no other way to
+                      tell whether a rental has actually come back yet. */}
+                  <span className={`pill ${pill.className} receipt-item-pill`}>{pill.label}</span>
                   {/* The set's own reusable template (Necklace/Earrings/Tika/…) —
                       items.components, distinct from custom_addons below (this
                       booking's own one-off extras). Same "what's included"
@@ -173,6 +176,15 @@ export default function ReceiptPage() {
                     <div className="receipt-item-addons">
                       Picked up by: {PICKUP_PERSON_TYPE_LABELS[bi.pickup_person_type]}
                       {bi.pickup_person_name ? ` — ${bi.pickup_person_name} (${bi.pickup_person_phone})` : ""}
+                    </div>
+                  )}
+                  {/* Only present once a return is actually processed (see
+                      POST .../return) — mirrors "Picked up by" above, in the
+                      return direction. */}
+                  {!cancelled && bi.returned_person_type && (
+                    <div className="receipt-item-addons">
+                      Returned by: {PICKUP_PERSON_TYPE_LABELS[bi.returned_person_type]}
+                      {bi.returned_person_name ? ` — ${bi.returned_person_name} (${bi.returned_person_phone})` : ""}
                     </div>
                   )}
                 </td>

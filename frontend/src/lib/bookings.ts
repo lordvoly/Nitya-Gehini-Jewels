@@ -104,6 +104,12 @@ export interface BookingItem {
   pickup_person_type: PickupPersonType | null;
   pickup_person_name: string | null;
   pickup_person_phone: string | null;
+  // Mirrors pickup_person_* above, in the return direction — set only once
+  // a return is actually processed (POST .../return); there's no "undo
+  // return" endpoint to clear these on, matching actual_return_date.
+  returned_person_type: PickupPersonType | null;
+  returned_person_name: string | null;
+  returned_person_phone: string | null;
   status: BookingItemStatus;
   price_charged: number;
   // The real listed price stays here untouched even when is_foc is true —
@@ -290,6 +296,12 @@ export interface ReturnPayload {
   // Lost-and-found: one item_charges + linked payments row per entry,
   // created server-side after the return itself succeeds.
   charges?: ReturnCharge[];
+  // Required (validated server-side) — mirrors ConfirmPickupPayload's
+  // identical pickup_person_type below, in the return direction. name/phone
+  // are only sent for 'family'/'porter'.
+  returned_person_type: PickupPersonType;
+  returned_person_name?: string;
+  returned_person_phone?: string;
 }
 
 export function processReturn(bookingId: string, bookingItemId: string, payload: ReturnPayload) {

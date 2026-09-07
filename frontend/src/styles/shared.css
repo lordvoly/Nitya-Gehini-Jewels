@@ -1038,6 +1038,19 @@ button.more-menu-item {
   margin: 0 0 6px;
 }
 
+/* The two quick actions on a just-completed booking's return success
+   screen (Request Feedback / Print Receipt) — a centered row of small
+   pills, matching .wizard-success's own centered layout, distinct from
+   .wizard-actions' column/stretch treatment (built for stacked Cancel/
+   Save form pairs, not a pair of independent small buttons). */
+.success-quick-actions {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin: 10px 0;
+}
+
 .wizard-actions {
   display: flex;
   flex-direction: column;

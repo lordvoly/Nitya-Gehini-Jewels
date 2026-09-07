@@ -1,5 +1,19 @@
-import { useState, type FormEvent } from "react";
-import { processReturn, type Booking, type BookingItem, type ReturnCharge } from "../../lib/bookings";
+import { useEffect, useState, type FormEvent } from "react";
+import { Link } from "react-router-dom";
+import { Printer } from "lucide-react";
+import {
+  processReturn,
+  fetchBooking,
+  PICKUP_PERSON_TYPES,
+  PICKUP_PERSON_TYPE_LABELS,
+  type Booking,
+  type BookingItem,
+  type PickupPersonType,
+  type ReturnCharge,
+} from "../../lib/bookings";
+import { fetchShopSettings } from "../../lib/shopSettings";
+import { fireCompletionConfetti } from "../../lib/confetti";
+import { RequestFeedbackButton } from "./RequestFeedbackButton";
 import { toNumberOrNull } from "../../lib/numbers";
 
 interface ChargeDraft {
@@ -51,9 +65,39 @@ export function ReturnForm({
   const [actualReturnDate, setActualReturnDate] = useState("");
   const [depositRefunded, setDepositRefunded] = useState(false);
   const [depositRefundDate, setDepositRefundDate] = useState("");
+  // No default selection — mirrors ConfirmPickupForm's identical
+  // pickupPersonType reasoning in the other direction: the operator must
+  // actively pick one, never silently assumed Self, since the person
+  // returning an item is often not the customer themselves.
+  const [returnedPersonType, setReturnedPersonType] = useState<PickupPersonType | null>(null);
+  const [returnedPersonName, setReturnedPersonName] = useState("");
+  const [returnedPersonPhone, setReturnedPersonPhone] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [result, setResult] = useState<BookingItem | null>(null);
+  // Whether THIS return finishes off the whole booking (every item now
+  // returned/sold) — checked via a fresh fetchBooking() right after the
+  // return succeeds, rather than recomputing the completion rule
+  // client-side, since that rule already lives server-side
+  // (booking_status_v2) and duplicating it here could quietly drift out of
+  // sync. Drives both the quick actions below and the confetti — neither
+  // fires for an ordinary single-item return in a multi-item booking.
+  const [bookingCompleted, setBookingCompleted] = useState(false);
+  // Independent, non-blocking fetch — same "a shop-settings hiccup
+  // degrades to a generic fallback name" pattern already used on
+  // BookingDetail/DashboardPage, since this page had no prior need for the
+  // shop's name.
+  const [shopName, setShopName] = useState("the shop");
+
+  useEffect(() => {
+    fetchShopSettings()
+      .then((s) => setShopName(s.name))
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (result && bookingCompleted) fireCompletionConfetti();
+  }, [result, bookingCompleted]);
 
   function toggleComponent(name: string) {
     setChecklist((c) => {
@@ -69,8 +113,13 @@ export function ReturnForm({
     setCharges((all) => ({ ...all, [name]: { ...all[name], ...patch } }));
   }
 
+  const needsReturnedDetails = returnedPersonType === "family" || returnedPersonType === "porter";
+  const canSubmit =
+    returnedPersonType !== null && (!needsReturnedDetails || (returnedPersonName.trim() && returnedPersonPhone.trim()));
+
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (!returnedPersonType) return;
     setError(null);
     setSaving(true);
     try {
@@ -85,12 +134,24 @@ export function ReturnForm({
       const updated = await processReturn(booking.id, item.id, {
         return_checklist: checklistNames.length > 0 ? checklist : null,
         return_notes: returnNotes.trim() || null,
+        returned_person_type: returnedPersonType,
+        returned_person_name: needsReturnedDetails ? returnedPersonName.trim() : undefined,
+        returned_person_phone: needsReturnedDetails ? returnedPersonPhone.trim() : undefined,
         actual_return_date: actualReturnDate || null,
         deposit_refunded: item.deposit_collected ? depositRefunded : null,
         deposit_refund_date: item.deposit_collected && depositRefunded ? depositRefundDate || null : null,
         charges: chargesPayload.length > 0 ? chargesPayload : undefined,
       });
       setResult(updated);
+      // Non-blocking — this return already succeeded regardless of whether
+      // this follow-up check does. Worst case, the quick-actions/confetti
+      // below just don't appear for a genuinely-completed booking.
+      try {
+        const freshBooking = await fetchBooking(booking.id);
+        setBookingCompleted(freshBooking.computed_status === "completed");
+      } catch {
+        // ignore
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to process return");
     } finally {
@@ -104,10 +165,33 @@ export function ReturnForm({
         <p className="success-check">✓ Marked Returned</p>
         <p className="success-code">{booking.booking_code}</p>
         <p className="success-detail">{item.items?.item_code} — {item.items?.name}</p>
+        {result.returned_person_type && (
+          <p className="wizard-hint">
+            Returned by: {PICKUP_PERSON_TYPE_LABELS[result.returned_person_type]}
+            {result.returned_person_name ? ` — ${result.returned_person_name} (${result.returned_person_phone})` : ""}
+          </p>
+        )}
         {result.warning && (
           <div className="found-panel">
             <p>{result.warning}</p>
           </div>
+        )}
+        {/* Only once this return finishes off the whole booking — every
+            item now returned/sold — so the operator can send the invoice
+            or ask for feedback right from this same screen, instead of
+            navigating back to the booking and opening its More Actions
+            menu (which still has both, unchanged, for later). */}
+        {bookingCompleted && (
+          <>
+            <p className="wizard-hint">This booking is now fully completed.</p>
+            <div className="success-quick-actions">
+              <RequestFeedbackButton booking={booking} shopName={shopName} className="btn-secondary btn-compact" iconSize={14} />
+              <Link to={`/receipt/${booking.id}`} target="_blank" className="btn-secondary btn-compact">
+                <Printer size={14} strokeWidth={2} aria-hidden="true" />
+                Print/Download Receipt
+              </Link>
+            </div>
+          </>
         )}
         <div className="wizard-actions">
           <button className="btn-primary" onClick={onDone}>
@@ -125,6 +209,33 @@ export function ReturnForm({
         <p className="wizard-hint">
           {item.items?.item_code} — {item.items?.name} · {booking.customers?.name}
         </p>
+
+        <p className="field-label">Returned By</p>
+        <div className="toggle-group">
+          {PICKUP_PERSON_TYPES.map((t) => (
+            <button
+              type="button"
+              key={t}
+              className={returnedPersonType === t ? "toggle-btn active" : "toggle-btn"}
+              onClick={() => setReturnedPersonType(t)}
+            >
+              {PICKUP_PERSON_TYPE_LABELS[t]}
+            </button>
+          ))}
+        </div>
+
+        {needsReturnedDetails && (
+          <>
+            <label className="field-label">
+              {returnedPersonType === "family" ? "Family Member's" : "Porter's"} Name
+              <input type="text" value={returnedPersonName} onChange={(e) => setReturnedPersonName(e.target.value)} />
+            </label>
+            <label className="field-label">
+              {returnedPersonType === "family" ? "Family Member's" : "Porter's"} Phone
+              <input type="tel" value={returnedPersonPhone} onChange={(e) => setReturnedPersonPhone(e.target.value)} />
+            </label>
+          </>
+        )}
 
         {checklistNames.length > 0 && (
           <>
@@ -220,7 +331,7 @@ export function ReturnForm({
         <button type="button" className="btn-secondary" onClick={onCancel}>
           Cancel
         </button>
-        <button type="submit" className="btn-primary" disabled={saving}>
+        <button type="submit" className="btn-primary" disabled={saving || !canSubmit}>
           {saving ? "Saving…" : "Mark Returned"}
         </button>
       </div>

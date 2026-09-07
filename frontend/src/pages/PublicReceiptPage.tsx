@@ -4,6 +4,7 @@ import { Star } from "lucide-react";
 import QRCode from "qrcode";
 import { fetchPublicReceipt, type PublicReceipt } from "../lib/publicReceipt";
 import { PICKUP_PERSON_TYPE_LABELS } from "../lib/bookings";
+import { bookingItemStatusPill } from "../lib/statusPill";
 import { formatDateDisplay } from "../lib/dates";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { ReceiptSkeleton } from "../components/common/Skeleton";
@@ -95,6 +96,7 @@ export default function PublicReceiptPage() {
         <tbody>
           {receipt.items.map((bi, i) => {
             const cancelled = bi.status === "cancelled";
+            const pill = bookingItemStatusPill(bi);
             return (
               <tr key={i} className={cancelled ? "receipt-item-cancelled" : undefined}>
                 <td data-label="Item">
@@ -102,7 +104,10 @@ export default function PublicReceiptPage() {
                     {bi.item_code} — {bi.name}
                     {bi.quantity_booked > 1 && ` × ${bi.quantity_booked}`}
                   </span>
-                  {cancelled && <span className="pill pill-neutral receipt-item-pill">Cancelled</span>}
+                  {/* Shown for every item, not just cancelled ones — a
+                      customer looking at their invoice has no other way to
+                      tell whether a rental has actually come back yet. */}
+                  <span className={`pill ${pill.className} receipt-item-pill`}>{pill.label}</span>
                   {bi.components.length > 0 && (
                     <div className="receipt-item-addons">Components: {bi.components.join(", ")}</div>
                   )}
@@ -124,6 +129,12 @@ export default function PublicReceiptPage() {
                     <div className="receipt-item-addons">
                       Picked up by: {PICKUP_PERSON_TYPE_LABELS[bi.pickup_person_type]}
                       {bi.pickup_person_name ? ` — ${bi.pickup_person_name} (${bi.pickup_person_phone})` : ""}
+                    </div>
+                  )}
+                  {!cancelled && bi.returned_person_type && (
+                    <div className="receipt-item-addons">
+                      Returned by: {PICKUP_PERSON_TYPE_LABELS[bi.returned_person_type]}
+                      {bi.returned_person_name ? ` — ${bi.returned_person_name} (${bi.returned_person_phone})` : ""}
                     </div>
                   )}
                 </td>

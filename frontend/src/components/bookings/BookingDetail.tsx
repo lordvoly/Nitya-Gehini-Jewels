@@ -5,7 +5,6 @@ import {
   ArrowLeft,
   Printer,
   Pencil,
-  MessageCircleHeart,
   MoreHorizontal,
   NotebookPen,
   IndianRupee,
@@ -14,6 +13,7 @@ import {
   Undo2,
 } from "lucide-react";
 import { Modal } from "../common/Modal";
+import { RequestFeedbackButton } from "./RequestFeedbackButton";
 import {
   fetchBooking,
   updateBooking,
@@ -40,7 +40,6 @@ import { toNumberOrNull } from "../../lib/numbers";
 import { bookingItemStatusPill, bookingComputedStatusPill, bookingChargeStatusPill } from "../../lib/statusPill";
 import { formatDateDisplay } from "../../lib/dates";
 import { fetchShopSettings } from "../../lib/shopSettings";
-import { buildWhatsAppLink, buildFeedbackRequestMessage } from "../../lib/whatsapp";
 
 export function BookingDetail({
   bookingId,
@@ -429,6 +428,12 @@ export function BookingDetail({
                         {bi.pickup_person_name ? ` — ${bi.pickup_person_name} (${bi.pickup_person_phone})` : ""}
                       </li>
                     )}
+                    {bi.returned_person_type && (
+                      <li>
+                        Returned by: {PICKUP_PERSON_TYPE_LABELS[bi.returned_person_type]}
+                        {bi.returned_person_name ? ` — ${bi.returned_person_name} (${bi.returned_person_phone})` : ""}
+                      </li>
+                    )}
                   </ul>
 
                   {bi.custom_addons.length > 0 && (
@@ -734,33 +739,16 @@ export function BookingDetail({
               </Link>
               {/* Only once the booking is genuinely wrapped up — every item
                   returned/sold — asking for feedback mid-rental would be
-                  premature. A real <a>, not window.location, same reasoning
-                  as ReceiptPage's own WhatsApp button: mobile browsers treat
-                  it as genuine user-initiated navigation. */}
-              {booking.computed_status === "completed" &&
-                (() => {
-                  const feedback = buildWhatsAppLink(
-                    booking.customers?.phone,
-                    buildFeedbackRequestMessage(booking.customers?.name ?? "there", shopName),
-                  );
-                  return "url" in feedback ? (
-                    <a
-                      href={feedback.url}
-                      target="_blank"
-                      rel="noopener noreferrer"
-                      className="more-menu-item"
-                      onClick={() => setShowMoreMenu(false)}
-                    >
-                      <MessageCircleHeart size={20} strokeWidth={2} aria-hidden="true" />
-                      Request Feedback
-                    </a>
-                  ) : (
-                    <button className="more-menu-item" disabled title={feedback.error}>
-                      <MessageCircleHeart size={20} strokeWidth={2} aria-hidden="true" />
-                      Request Feedback
-                    </button>
-                  );
-                })()}
+                  premature. */}
+              {booking.computed_status === "completed" && (
+                <RequestFeedbackButton
+                  booking={booking}
+                  shopName={shopName}
+                  className="more-menu-item"
+                  iconSize={20}
+                  onClick={() => setShowMoreMenu(false)}
+                />
+              )}
             </div>
             <button type="button" className="btn-secondary more-menu-close" onClick={() => setShowMoreMenu(false)}>
               Close

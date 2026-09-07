@@ -28,10 +28,11 @@ const publicReceiptLimiter = rateLimit({
 // and an FOC item's price_charged (the untouched "what it would have
 // cost" reference value — see BookingItem's own doc comment) is nulled out
 // rather than forwarded to a link that could end up anywhere. The one
-// exception is pickup_person_phone — the phone number of whoever actually
-// collected the item (family member/porter), not the customer's own — kept
-// in because this is exactly the paper-trail-on-the-invoice the feature
-// exists for, per explicit request.
+// exception is pickup_person_phone/returned_person_phone — the phone
+// number of whoever actually collected/returned the item (family
+// member/porter), not the customer's own — kept in because this is
+// exactly the paper-trail-on-the-invoice the feature exists for, per
+// explicit request.
 publicReceiptRouter.get("/receipt/:token", publicReceiptLimiter, async (req, res) => {
   const { data: booking, error } = await supabase
     .from("bookings")
@@ -42,6 +43,7 @@ publicReceiptRouter.get("/receipt/:token", publicReceiptLimiter, async (req, res
                       deposit_amount, deposit_collected, deposit_refunded, deposit_refund_date,
                       custom_addons, quantity_booked, cancellation_reason,
                       pickup_person_type, pickup_person_name, pickup_person_phone,
+                      returned_person_type, returned_person_name, returned_person_phone,
                       items(item_code, name, item_type, components))`,
     )
     .eq("share_token", req.params.token)
@@ -93,6 +95,11 @@ publicReceiptRouter.get("/receipt/:token", publicReceiptLimiter, async (req, res
         pickup_person_type: bi.pickup_person_type ?? null,
         pickup_person_name: bi.pickup_person_name ?? null,
         pickup_person_phone: bi.pickup_person_phone ?? null,
+        // Mirrors pickup_person_* above in the return direction — only
+        // ever set once a return is actually processed (see POST .../return).
+        returned_person_type: bi.returned_person_type ?? null,
+        returned_person_name: bi.returned_person_name ?? null,
+        returned_person_phone: bi.returned_person_phone ?? null,
       };
     }),
     total_paid: financials?.total_paid ?? 0,

@@ -30,6 +30,11 @@ export interface PublicReceiptItem {
   pickup_person_type: PickupPersonType | null;
   pickup_person_name: string | null;
   pickup_person_phone: string | null;
+  // Mirrors pickup_person_* above, in the return direction — only present
+  // once a return is actually processed.
+  returned_person_type: PickupPersonType | null;
+  returned_person_name: string | null;
+  returned_person_phone: string | null;
 }
 
 export interface PublicReceipt {
