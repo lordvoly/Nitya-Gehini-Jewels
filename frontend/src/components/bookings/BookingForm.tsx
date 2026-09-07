@@ -11,6 +11,7 @@ import {
 import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/payments";
 import { formatDateDisplay } from "../../lib/dates";
+import { fireCompletionConfetti } from "../../lib/confetti";
 import { CustomerPicker } from "./CustomerPicker";
 import { ItemPicker } from "./ItemPicker";
 import { Modal } from "../common/Modal";
@@ -89,6 +90,14 @@ export function BookingForm() {
   useEffect(() => {
     fetchItems({ activeOnly: true }).then(setItems);
   }, []);
+
+  // Fires once per successful booking, including every booking in a row
+  // when the operator keeps hitting "Add Another" via startAnother() below
+  // — same one-celebration-per-save reasoning as AddItemWizard's identical
+  // effect.
+  useEffect(() => {
+    if (saved) fireCompletionConfetti();
+  }, [saved]);
 
   // Pre-fill the (editable) booking code with the server's suggested next
   // BK-000N — a default to speed up the common case, not a lock-in; the
