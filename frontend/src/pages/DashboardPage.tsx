@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Link, useNavigate, type NavigateFunction } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Bell } from "lucide-react";
+import { ChevronLeft, ChevronRight, Bell, Gift } from "lucide-react";
 import {
   fetchDashboardSummary,
   type DashboardSummary,
@@ -201,10 +201,12 @@ function GreetingAction({
   const whatsapp = buildWhatsAppLink(occasion.phone, message);
   return "url" in whatsapp ? (
     <a href={whatsapp.url} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-compact">
+      <Gift size={14} strokeWidth={2} aria-hidden="true" />
       Send Greeting
     </a>
   ) : (
     <button className="btn-secondary btn-compact" disabled title={whatsapp.error}>
+      <Gift size={14} strokeWidth={2} aria-hidden="true" />
       Send Greeting
     </button>
   );
