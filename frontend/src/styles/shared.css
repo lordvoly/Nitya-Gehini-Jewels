@@ -2179,6 +2179,31 @@ a.chart-tooltip-title:hover {
   font-style: italic;
 }
 
+/* One line per item inside a booking's grouped "Items" cell (see
+   groupByBooking in DashboardPage.tsx) — a hairline between entries once
+   there's more than one, so a multi-item booking still reads as several
+   distinct things rather than one run-on block. */
+.dashboard-group-item {
+  padding: 4px 0;
+}
+
+.dashboard-group-item + .dashboard-group-item {
+  border-top: 1px solid var(--line);
+  margin-top: 4px;
+  padding-top: 8px;
+}
+
+/* Overdue's own item line additionally carries a per-item Send Reminder
+   button — laid out as a row so the button sits beside its item's own
+   text instead of stacking under every entry in a multi-item booking. */
+.dashboard-group-item-overdue {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
 .dashboard-day-group-label {
   font-size: 13px;
   font-weight: 700;

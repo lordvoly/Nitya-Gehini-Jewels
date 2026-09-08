@@ -34,6 +34,32 @@ function withDayLabels<T extends { }>(rows: T[], dateOf: (row: T) => string, tod
   });
 }
 
+// Groups a flat list of per-item rows into one array per booking — the 5
+// sections below are fundamentally per-booking-item events (one row per
+// physical item), which meant a booking with several items due at once
+// produced that many separate cards. Grouping collapses that into one
+// card per booking listing every qualifying item together, without
+// merging across sections — an item from the same booking with a
+// genuinely different date still lands in whichever section its own date
+// puts it in, same as before; nothing about the underlying per-item data
+// changes; this only changes how it's grouped for display. Preserves the
+// order each booking first appears in (the backend's own ordering).
+function groupByBooking<T>(rows: T[], bookingIdOf: (row: T) => string): T[][] {
+  const order: string[] = [];
+  const map = new Map<string, T[]>();
+  for (const row of rows) {
+    const key = bookingIdOf(row);
+    let group = map.get(key);
+    if (!group) {
+      group = [];
+      map.set(key, group);
+      order.push(key);
+    }
+    group.push(row);
+  }
+  return order.map((key) => map.get(key)!);
+}
+
 // Prev/next arrows for a swipeable carousel table — the tbody itself is
 // the real scroll container (overflow-x: auto + scroll-snap-type: x on
 // .dashboard-carousel tbody), these buttons just call scrollBy() on it for
@@ -322,10 +348,22 @@ export default function DashboardPage() {
     pending_items,
     stats,
   } = summary;
-  const urgentOverdue = overdue.filter((b) => b.next_customer_waiting);
-  const otherOverdue = overdue.filter((b) => !b.next_customer_waiting);
   const weekPickups = withDayLabels(pickups_due_this_week, (p: PickupDueBookingItem) => p.pickup_date, summary.today);
   const weekOccasions = withDayLabels(occasions_this_week, (o: OccasionRow) => o.date, summary.today);
+
+  const pendingItemGroups = groupByBooking(pending_items, (p) => p.booking_id);
+  const dueTodayGroups = groupByBooking(due_today, (b) => b.booking_id);
+  const pickupsDueTodayGroups = groupByBooking(pickups_due_today, (p) => p.booking_id);
+  const weekPickupGroups = groupByBooking(weekPickups, (p) => p.booking_id);
+  // A group counts as urgent if ANY of its items does — sorted first as a
+  // whole booking card, same "urgent bookings surface first" intent the
+  // old flat urgentOverdue/otherOverdue split had, just applied per
+  // booking now instead of per item.
+  const overdueGroups = groupByBooking(overdue, (b) => b.booking_id).sort((a, b) => {
+    const aUrgent = a.some((x) => x.next_customer_waiting) ? 0 : 1;
+    const bUrgent = b.some((x) => x.next_customer_waiting) ? 0 : 1;
+    return aUrgent - bUrgent;
+  });
 
   return (
     <div className="page">
@@ -374,88 +412,109 @@ export default function DashboardPage() {
       <CarouselTable
         id="pending-items-section"
         title="Items Pending"
-        count={pending_items.length}
-        headers={["Item", "Booking / Customer", "Missing"]}
+        count={pendingItemGroups.length}
+        headers={["Booking / Customer", "Missing"]}
         emptyMessage="Nothing flagged as still missing."
       >
-        {pending_items.map((p) => (
-          <tr key={`${p.booking_item_id}-${p.component_name}`} {...bookingRowProps(navigate, p.booking_id)}>
-            <td data-label="Item">
-              <Link to={`/items/${p.item_id}`} onClick={stopRowClick}>
-                {p.item_code} — {p.item_name}
-              </Link>
-            </td>
-            <td data-label="Booking / Customer">
-              {p.booking_code} ·{" "}
-              <Link to={`/customers?customer=${p.customer_id}`} onClick={stopRowClick}>
-                {p.customer_name}
-              </Link>
-            </td>
-            <td data-label="Missing">
-              {p.component_name}
-              {p.actual_return_date ? ` · returned ${formatDateDisplay(p.actual_return_date)}` : ""}
-              {p.return_notes && <span className="dashboard-table-note">"{p.return_notes}"</span>}
-            </td>
-          </tr>
-        ))}
+        {pendingItemGroups.map((group) => {
+          const first = group[0];
+          return (
+            <tr key={first.booking_id} {...bookingRowProps(navigate, first.booking_id)}>
+              <td data-label="Booking / Customer">
+                {first.booking_code} ·{" "}
+                <Link to={`/customers?customer=${first.customer_id}`} onClick={stopRowClick}>
+                  {first.customer_name}
+                </Link>
+              </td>
+              <td data-label="Missing">
+                {group.map((p) => (
+                  <div className="dashboard-group-item" key={`${p.booking_item_id}-${p.component_name}`}>
+                    <Link to={`/items/${p.item_id}`} onClick={stopRowClick}>
+                      {p.item_code} — {p.item_name}
+                    </Link>
+                    <div>
+                      {p.component_name}
+                      {p.actual_return_date ? ` · returned ${formatDateDisplay(p.actual_return_date)}` : ""}
+                    </div>
+                    {p.return_notes && <span className="dashboard-table-note">"{p.return_notes}"</span>}
+                  </div>
+                ))}
+              </td>
+            </tr>
+          );
+        })}
       </CarouselTable>
 
       <CarouselTable
         id="items-due-section"
         title="Today's Returns Due"
-        count={due_today.length}
-        headers={["Item", "Booking / Customer"]}
+        count={dueTodayGroups.length}
+        headers={["Booking / Customer", "Items"]}
         emptyMessage="Nothing due back today."
       >
-        {due_today.map((b) => (
-          <tr key={b.id} {...bookingRowProps(navigate, b.booking_id)}>
-            <td data-label="Item">
-              <Link to={`/items/${b.item_id}`} onClick={stopRowClick}>
-                {b.items?.item_code} — {b.items?.name}
-              </Link>
-            </td>
-            <td data-label="Booking / Customer">
-              {b.bookings?.booking_code} ·{" "}
-              <Link to={`/customers?customer=${b.bookings?.customer_id}`} onClick={stopRowClick}>
-                {b.customers?.name}
-              </Link>
-            </td>
-          </tr>
-        ))}
+        {dueTodayGroups.map((group) => {
+          const first = group[0];
+          return (
+            <tr key={first.booking_id} {...bookingRowProps(navigate, first.booking_id)}>
+              <td data-label="Booking / Customer">
+                {first.bookings?.booking_code} ·{" "}
+                <Link to={`/customers?customer=${first.bookings?.customer_id}`} onClick={stopRowClick}>
+                  {first.customers?.name}
+                </Link>
+              </td>
+              <td data-label="Items">
+                {group.map((b) => (
+                  <div className="dashboard-group-item" key={b.id}>
+                    <Link to={`/items/${b.item_id}`} onClick={stopRowClick}>
+                      {b.items?.item_code} — {b.items?.name}
+                    </Link>
+                  </div>
+                ))}
+              </td>
+            </tr>
+          );
+        })}
       </CarouselTable>
 
       <CarouselTable
         id="overdue-section"
         title="Overdue Rentals"
-        count={overdue.length}
-        headers={["Item", "Booking / Customer", "Days Overdue", ""]}
+        count={overdueGroups.length}
+        headers={["Booking / Customer", "Overdue Items"]}
         emptyMessage="Nothing overdue."
       >
-        {[...urgentOverdue, ...otherOverdue].map((b) => {
-          const days = Math.abs(b.days_until_return);
+        {overdueGroups.map((group) => {
+          const first = group[0];
           return (
-            <tr key={b.id} {...bookingRowProps(navigate, b.booking_id)}>
-              <td data-label="Item">
-                <Link to={`/items/${b.item_id}`} onClick={stopRowClick}>
-                  {b.items?.item_code} — {b.items?.name}
-                </Link>
-              </td>
+            <tr key={first.booking_id} {...bookingRowProps(navigate, first.booking_id)}>
               <td data-label="Booking / Customer">
-                {b.booking_code} ·{" "}
-                <Link to={`/customers?customer=${b.customer_id}`} onClick={stopRowClick}>
-                  {b.customers?.name}
+                {first.booking_code} ·{" "}
+                <Link to={`/customers?customer=${first.customer_id}`} onClick={stopRowClick}>
+                  {first.customers?.name}
                 </Link>
               </td>
-              <td data-label="Days Overdue">
-                {days} day{days === 1 ? "" : "s"} overdue
-                {b.next_customer_waiting && (
-                  <span className="dashboard-table-urgent">
-                    Next: {b.next_booking_code} — {b.next_customer_name} ({b.next_pickup_date})
-                  </span>
-                )}
-              </td>
-              <td className="row-actions">
-                <OverdueReminderAction booking={b} shopName={shopName} />
+              <td data-label="Overdue Items">
+                {group.map((b) => {
+                  const days = Math.abs(b.days_until_return);
+                  return (
+                    <div className="dashboard-group-item dashboard-group-item-overdue" key={b.id}>
+                      <div>
+                        <Link to={`/items/${b.item_id}`} onClick={stopRowClick}>
+                          {b.items?.item_code} — {b.items?.name}
+                        </Link>
+                        <div>
+                          {days} day{days === 1 ? "" : "s"} overdue
+                          {b.next_customer_waiting && (
+                            <span className="dashboard-table-urgent">
+                              Next: {b.next_booking_code} — {b.next_customer_name} ({b.next_pickup_date})
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <OverdueReminderAction booking={b} shopName={shopName} />
+                    </div>
+                  );
+                })}
               </td>
             </tr>
           );
@@ -465,57 +524,77 @@ export default function DashboardPage() {
       <CarouselTable
         id="pickups-due-section"
         title="Today's Pickups Due"
-        count={pickups_due_today.length}
-        headers={["Item", "Booking / Customer"]}
+        count={pickupsDueTodayGroups.length}
+        headers={["Booking / Customer", "Items"]}
         emptyMessage="Nothing to prep for pickup today."
       >
-        {pickups_due_today.map((p) => (
-          <tr key={p.id} {...bookingRowProps(navigate, p.booking_id)}>
-            <td data-label="Item">
-              <Link to={`/items/${p.item_id}`} onClick={stopRowClick}>
-                {p.items?.item_code} — {p.items?.name}
-              </Link>
-            </td>
-            <td data-label="Booking / Customer">
-              {p.bookings?.booking_code} ·{" "}
-              {p.customers ? (
-                <Link to={`/customers?customer=${p.bookings?.customer_id}`} onClick={stopRowClick}>
-                  {p.customers.name}
-                </Link>
-              ) : (
-                "—"
-              )}
-            </td>
-          </tr>
-        ))}
+        {pickupsDueTodayGroups.map((group) => {
+          const first = group[0];
+          return (
+            <tr key={first.booking_id} {...bookingRowProps(navigate, first.booking_id)}>
+              <td data-label="Booking / Customer">
+                {first.bookings?.booking_code} ·{" "}
+                {first.customers ? (
+                  <Link to={`/customers?customer=${first.bookings?.customer_id}`} onClick={stopRowClick}>
+                    {first.customers.name}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </td>
+              <td data-label="Items">
+                {group.map((p) => (
+                  <div className="dashboard-group-item" key={p.id}>
+                    <Link to={`/items/${p.item_id}`} onClick={stopRowClick}>
+                      {p.items?.item_code} — {p.items?.name}
+                    </Link>
+                  </div>
+                ))}
+              </td>
+            </tr>
+          );
+        })}
       </CarouselTable>
 
       <CarouselTable
         id="week-pickups-section"
         title="This Week's Pickups Due"
-        count={weekPickups.length}
-        headers={["Day", "Item", "Customer"]}
+        count={weekPickupGroups.length}
+        headers={["Booking / Customer", "Items"]}
         emptyMessage="Nothing else due for pickup this week."
       >
-        {weekPickups.map((p) => (
-          <tr key={p.id} {...bookingRowProps(navigate, p.booking_id)}>
-            <td data-label="Day">{p.dayLabel}</td>
-            <td data-label="Item">
-              <Link to={`/items/${p.item_id}`} onClick={stopRowClick}>
-                {p.items?.item_code} — {p.items?.name}
-              </Link>
-            </td>
-            <td data-label="Customer">
-              {p.customers ? (
-                <Link to={`/customers?customer=${p.bookings?.customer_id}`} onClick={stopRowClick}>
-                  {p.customers.name}
-                </Link>
-              ) : (
-                "—"
-              )}
-            </td>
-          </tr>
-        ))}
+        {weekPickupGroups.map((group) => {
+          const first = group[0];
+          return (
+            <tr key={first.booking_id} {...bookingRowProps(navigate, first.booking_id)}>
+              <td data-label="Booking / Customer">
+                {first.bookings?.booking_code} ·{" "}
+                {first.customers ? (
+                  <Link to={`/customers?customer=${first.bookings?.customer_id}`} onClick={stopRowClick}>
+                    {first.customers.name}
+                  </Link>
+                ) : (
+                  "—"
+                )}
+              </td>
+              {/* Each item keeps its own day label here (not hoisted to a
+                  shared column) — a booking with items on genuinely
+                  different days within the week needs that visible per
+                  item, exactly the case grouping-by-booking must not
+                  obscure. */}
+              <td data-label="Items">
+                {group.map((p) => (
+                  <div className="dashboard-group-item" key={p.id}>
+                    <Link to={`/items/${p.item_id}`} onClick={stopRowClick}>
+                      {p.items?.item_code} — {p.items?.name}
+                    </Link>
+                    <div>{p.dayLabel}</div>
+                  </div>
+                ))}
+              </td>
+            </tr>
+          );
+        })}
       </CarouselTable>
 
       <CarouselTable
