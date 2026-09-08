@@ -2045,6 +2045,13 @@ a.chart-tooltip-title:hover {
    visible gap would throw that math off by the gap's own width. */
 .dashboard-carousel tbody {
   display: flex;
+  /* Without this, flex's own default (stretch) makes every card match the
+     TALLEST card in the section — a 1-item card would pad itself out to a
+     3-item sibling's height. Only one card is ever visible at a time
+     (horizontal swipe, not a side-by-side grid), so letting each size to
+     its own content just means the section's height gently grows/shrinks
+     as you swipe between a big and a small card, not a misaligned layout. */
+  align-items: flex-start;
   overflow-x: auto;
   overflow-y: hidden;
   scroll-snap-type: x mandatory;
