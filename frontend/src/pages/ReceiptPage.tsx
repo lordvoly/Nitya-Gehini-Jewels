@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useParams } from "react-router-dom";
 import { Star } from "lucide-react";
 import QRCode from "qrcode";
@@ -9,6 +9,7 @@ import { bookingItemStatusPill } from "../lib/statusPill";
 import { buildWhatsAppLink } from "../lib/whatsapp";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { ReceiptSkeleton } from "../components/common/Skeleton";
+import { usePrintFit } from "../lib/usePrintFit";
 import { InstagramIcon } from "../components/common/InstagramIcon";
 import { INSTAGRAM_HANDLE, INSTAGRAM_URL, GOOGLE_REVIEW_URL } from "../lib/socialLinks";
 import ngjLogo from "../assets/images/ngj-logo.png";
@@ -25,6 +26,8 @@ export default function ReceiptPage() {
   const [qrDataUrl, setQrDataUrl] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const receiptRef = useRef<HTMLDivElement>(null);
+  usePrintFit(receiptRef);
 
   useEffect(() => {
     if (!bookingId) return;
@@ -63,7 +66,11 @@ export default function ReceiptPage() {
   const whatsapp = buildWhatsAppLink(booking.customers?.phone, message);
 
   return (
-    <div className="page receipt-page">
+    <div className="page receipt-page" ref={receiptRef}>
+      {/* Inner wrapper is what usePrintFit scales for print; the outer
+          .receipt-page is pinned to the scaled height so the sheet
+          paginates as one page. */}
+      <div className="receipt-fit">
       <div className="no-print receipt-actions">
         <button className="btn-primary" onClick={() => window.print()}>
           Print / Save as PDF
@@ -244,6 +251,7 @@ export default function ReceiptPage() {
         <a href={GOOGLE_REVIEW_URL} target="_blank" rel="noopener noreferrer" className="receipt-social-link">
           <Star size={16} strokeWidth={2} /> Loved our service? Review us on Google
         </a>
+      </div>
       </div>
     </div>
   );

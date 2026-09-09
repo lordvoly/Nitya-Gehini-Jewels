@@ -3435,6 +3435,12 @@ a.chart-tooltip-title:hover {
    print would still lose to a more specific :root[data-theme="dark"] rule
    outside it. */
 @media print {
+  /* A predictable page box so usePrintFit's target height is stable
+     regardless of the browser's own default margin. */
+  @page {
+    margin: 10mm;
+  }
+
   .app-header,
   .app-tabbar,
   .mobile-tabbar,
@@ -3446,8 +3452,41 @@ a.chart-tooltip-title:hover {
     padding-bottom: 0;
   }
 
+  /* The compact-layout block adds a fixed-header top offset to .app-main
+     below 900px — and print media reports a page width well under that,
+     so it applies when printing too, wasting ~66px at the top of the
+     sheet even though the header itself is display:none here. */
+  .app-main {
+    padding-top: 0;
+  }
+
   body {
     background: #fff;
+  }
+
+  /* Keep a line item's own stacked sub-details, and the totals block,
+     together rather than split across the page fold. usePrintFit already
+     scales the whole receipt to one page; this is a backstop for when JS
+     is unavailable or a hair off. */
+  .receipt-items tr,
+  .receipt-totals {
+    break-inside: avoid;
+  }
+
+  /* The QR + its margin is the single biggest chunk at the bottom — trim
+     the lead-in space and the image a little so less scaling is needed. */
+  .receipt-qr {
+    margin-top: 14px;
+  }
+
+  .receipt-qr img {
+    width: 112px;
+    height: 112px;
+  }
+
+  .receipt-social {
+    margin-top: 14px;
+    padding-top: 10px;
   }
 
   /* :root:root:root, not plain :root — deliberately over-specific (0,3,0)
