@@ -41,6 +41,17 @@
   --wine-strong: #5c1626;
   --wine-deep: #5c1626;
   --wine-soft: #f6e9ec;
+  /* The "accent" role — links, the wordmark, stat numbers, active-tab
+     indicators, outline-button text/border, pill text on --wine-soft. In
+     light mode it IS wine (this is a plain alias, zero pixels change); in
+     dark mode it resolves to gold instead, because a wine dark enough to
+     read as bridal-red against near-black drifts pink, and gold carries an
+     accent on black far better. Only the *fill* uses of --wine
+     (background: var(--wine) under white text — .btn-primary, active tabs,
+     .avatar-initials, .chat-bubble.user) deliberately stay wine in both
+     themes. Mirrors --gold-text's dark value; kept a separate token so the
+     accent can be tuned without touching every gold border/divider. */
+  --accent: var(--wine);
   --gold: #a9822e;
   --gold-text: #7a5d1f;
   --gold-soft: #f1e6ce;
@@ -92,69 +103,75 @@
    setting); the [data-theme="dark"] block after it covers an explicit
    in-app choice regardless of what the OS says. frontend/src/lib/theme.ts
    is the only thing that ever sets/clears data-theme; nothing here reads
-   it directly. Every value below was chosen and checked against the real
-   WCAG contrast formula (not eyeballed), same rigor this file's own
-   --gold/--gold-text split above already used — see the scratch contrast
-   script referenced in this session's own history for the actual numbers.
-   --wine itself is the one token still asked to serve both the "readable
-   text on a dark surface" and "solid fill under white text" roles (same
-   tension --wine-strong hit above) — no single value clears the standard
-   4.5:1 AA bar in both roles at once here, so this picks the closest
-   achievable balance (~4.1-4.5:1 depending on which surface it's sitting
-   on) rather than splitting a *second* token for what's a much smaller
-   gap than --wine-strong's was. */
+   it directly.
+
+   Palette direction (revised): a NEUTRAL charcoal base (--ivory #101012 /
+   --surface #1b1b1e / --line #33333a — no warm/maroon undertone, the
+   earlier dark palette read "brown"), with GOLD carrying the visible
+   accent load rather than wine. --gold-text (#e8be6e, ~8:1 on --surface)
+   is the primary readable accent and the focus ring; --wine-strong, which
+   only ever styles emphasis text on a --wine-soft pill, is deliberately a
+   warm gold here too so chips/badges read gold-on-charcoal, not pink.
+   --wine itself is pulled deep and red (#bf3d4c — crimson, not rose) and
+   is now mostly a *fill* under white text (buttons, avatar initials,
+   active dots, --wine-deep for hovers); its few remaining text/border uses
+   (.alpha-index-letter, .receipt-shop-name, receipt links) sit at ~4:1 on
+   the near-black ground, acceptable for the large/bold contexts they're in
+   and no longer the thing the eye reads as "the accent color". */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --wine: #ca4a63;
-    --wine-strong: #f2a7b6;
-    --wine-deep: #9c3049;
-    --wine-soft: #3a1f27;
-    --gold: #c9a24a;
-    --gold-text: #e0b563;
-    --gold-soft: #332a17;
-    --ivory: #181113;
-    --surface: #241a1d;
-    --ink: #f3e9e6;
-    --ink-soft: #c2aca7;
-    --line: #453337;
+    --wine: #bf3d4c;
+    --wine-strong: #e8bd73;
+    --wine-deep: #8f2b39;
+    --wine-soft: #2a2126;
+    --accent: #e8be6e;
+    --gold: #d0a94f;
+    --gold-text: #e8be6e;
+    --gold-soft: #2f2818;
+    --ivory: #101012;
+    --surface: #1b1b1e;
+    --ink: #f1f0ee;
+    --ink-soft: #a6a4a9;
+    --line: #33333a;
     --green: #7fbf95;
-    --green-soft: #1c2a1f;
+    --green-soft: #17251b;
     --clay: #e08a72;
-    --clay-soft: #331f18;
+    --clay-soft: #2e1f1b;
     --blue: #8fb8d6;
-    --blue-soft: #1c2732;
+    --blue-soft: #1b2732;
     --amber: #d9a83e;
-    --amber-soft: #332813;
-    --focus: #e0b563;
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 16px rgba(0, 0, 0, 0.35);
+    --amber-soft: #2b2413;
+    --focus: #e8be6e;
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 20px rgba(0, 0, 0, 0.4);
   }
 }
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --wine: #ca4a63;
-  --wine-strong: #f2a7b6;
-  --wine-deep: #9c3049;
-  --wine-soft: #3a1f27;
-  --gold: #c9a24a;
-  --gold-text: #e0b563;
-  --gold-soft: #332a17;
-  --ivory: #181113;
-  --surface: #241a1d;
-  --ink: #f3e9e6;
-  --ink-soft: #c2aca7;
-  --line: #453337;
+  --wine: #bf3d4c;
+  --wine-strong: #e8bd73;
+  --wine-deep: #8f2b39;
+  --wine-soft: #2a2126;
+  --accent: #e8be6e;
+  --gold: #d0a94f;
+  --gold-text: #e8be6e;
+  --gold-soft: #2f2818;
+  --ivory: #101012;
+  --surface: #1b1b1e;
+  --ink: #f1f0ee;
+  --ink-soft: #a6a4a9;
+  --line: #33333a;
   --green: #7fbf95;
-  --green-soft: #1c2a1f;
+  --green-soft: #17251b;
   --clay: #e08a72;
-  --clay-soft: #331f18;
+  --clay-soft: #2e1f1b;
   --blue: #8fb8d6;
-  --blue-soft: #1c2732;
+  --blue-soft: #1b2732;
   --amber: #d9a83e;
-  --amber-soft: #332813;
-  --focus: #e0b563;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.4), 0 6px 16px rgba(0, 0, 0, 0.35);
+  --amber-soft: #2b2413;
+  --focus: #e8be6e;
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 20px rgba(0, 0, 0, 0.4);
 }
 
 @font-face {
@@ -207,7 +224,7 @@ h3 {
 }
 
 a {
-  color: var(--wine);
+  color: var(--accent);
 }
 
 /* Single global rule covers every interactive element — buttons, links,
@@ -235,7 +252,7 @@ a {
   font-family: "Fraunces", Georgia, serif;
   font-weight: 600;
   font-size: 19px;
-  color: var(--wine);
+  color: var(--accent);
   text-decoration: none;
 }
 
@@ -296,8 +313,8 @@ a {
 }
 
 .app-tab.active {
-  color: var(--wine);
-  border-top-color: var(--wine);
+  color: var(--accent);
+  border-top-color: var(--accent);
 }
 
 /* ── Mobile nav (icon+label bar + header "more") ─────────────────────────
@@ -349,7 +366,7 @@ a {
 }
 
 .mobile-tab-icon.active {
-  color: var(--wine);
+  color: var(--accent);
 }
 
 /* Ask sits inline as the row's middle item, same baseline as the other 4
@@ -912,8 +929,8 @@ button.more-menu-item {
 
 .btn-secondary {
   background: var(--surface);
-  color: var(--wine);
-  border-color: var(--wine);
+  color: var(--accent);
+  border-color: var(--accent);
 }
 
 .btn-secondary:hover:not(:disabled) {
@@ -950,9 +967,9 @@ button.more-menu-item {
   min-height: 36px;
   padding: 0;
   border-radius: 50%;
-  border: 2px solid var(--wine);
+  border: 2px solid var(--accent);
   background: var(--surface);
-  color: var(--wine);
+  color: var(--accent);
   cursor: pointer;
   flex-shrink: 0;
   transition: background-color 100ms ease;
@@ -1177,7 +1194,7 @@ button.more-menu-item {
   font-size: 10px;
   font-weight: 700;
   line-height: 1;
-  color: var(--wine);
+  color: var(--accent);
   cursor: pointer;
 }
 
@@ -1308,7 +1325,7 @@ button.more-menu-item {
   inset: 0;
   border-radius: 50%;
   border: 3px solid var(--line);
-  border-top-color: var(--wine);
+  border-top-color: var(--accent);
   animation: logo-intro-spin 1s linear infinite;
 }
 
@@ -1436,7 +1453,7 @@ button.more-menu-item {
    a status pill, which is exactly what makes it unambiguous here. */
 .pill-foc {
   background: var(--wine-soft);
-  color: var(--wine);
+  color: var(--accent);
 }
 
 /* ── Found / warning panels ───────────────────────────────────────────── */
@@ -1744,7 +1761,7 @@ a.stat-card:active {
   font-family: "Fraunces", Georgia, serif;
   font-size: 26px;
   font-weight: 600;
-  color: var(--wine);
+  color: var(--accent);
 }
 
 .stat-label {
@@ -1799,8 +1816,8 @@ a.stat-card:active {
 }
 
 .report-nav-pill:hover {
-  border-color: var(--wine);
-  color: var(--wine);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 /* Reports' date-range quick-select — same pill look as .report-nav-pill
@@ -1833,8 +1850,8 @@ a.stat-card:active {
 }
 
 .filter-pill:hover:not(.active) {
-  border-color: var(--wine);
-  color: var(--wine);
+  border-color: var(--accent);
+  color: var(--accent);
 }
 
 .filter-pill.active {
@@ -2015,9 +2032,9 @@ a.chart-tooltip-title:hover {
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  border: 1.5px solid var(--wine);
+  border: 1.5px solid var(--accent);
   background: var(--surface);
-  color: var(--wine);
+  color: var(--accent);
   cursor: pointer;
 }
 
@@ -2379,7 +2396,7 @@ a.chart-tooltip-title:hover {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  color: var(--wine);
+  color: var(--accent);
   font-weight: 600;
 }
 
@@ -2848,7 +2865,7 @@ a.chart-tooltip-title:hover {
   font-size: 15px;
   font-family: inherit;
   font-weight: 600;
-  color: var(--wine);
+  color: var(--accent);
   background: var(--wine-soft);
   border: 1.5px solid transparent;
   border-radius: var(--radius);
@@ -2875,7 +2892,7 @@ a.chart-tooltip-title:hover {
   font-size: 13.5px;
   font-weight: 600;
   font-family: inherit;
-  color: var(--wine);
+  color: var(--accent);
   background: var(--wine-soft);
   border: 1.5px solid transparent;
   border-radius: var(--radius-pill);
@@ -3038,7 +3055,7 @@ a.chart-tooltip-title:hover {
   font-family: "Fraunces", Georgia, serif;
   font-size: 21px;
   font-weight: 600;
-  color: var(--wine);
+  color: var(--accent);
 }
 
 .receipt-shop-line {
@@ -3180,7 +3197,7 @@ a.chart-tooltip-title:hover {
   gap: 6px;
   font-size: 13px;
   font-weight: 600;
-  color: var(--wine);
+  color: var(--accent);
   text-decoration: none;
 }
 
@@ -3286,6 +3303,7 @@ a.chart-tooltip-title:hover {
     --wine-strong: #5c1626;
     --wine-deep: #5c1626;
     --wine-soft: #f6e9ec;
+    --accent: #7a1e32;
     --gold: #a9822e;
     --gold-text: #7a5d1f;
     --gold-soft: #f1e6ce;

@@ -23,7 +23,7 @@ export function applyTheme(pref: ThemePreference) {
   else root.setAttribute("data-theme", pref);
 
   const meta = document.querySelector('meta[name="theme-color"]');
-  if (meta) meta.setAttribute("content", resolvedIsDark(pref) ? "#181113" : "#7a1e32");
+  if (meta) meta.setAttribute("content", resolvedIsDark(pref) ? "#101012" : "#7a1e32");
 }
 
 export function setStoredTheme(pref: ThemePreference) {
