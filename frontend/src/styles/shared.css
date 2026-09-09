@@ -43,14 +43,11 @@
   --wine-soft: #f6e9ec;
   /* The "accent" role — links, the wordmark, stat numbers, active-tab
      indicators, outline-button text/border, pill text on --wine-soft. In
-     light mode it IS wine (this is a plain alias, zero pixels change); in
-     dark mode it resolves to gold instead, because a wine dark enough to
-     read as bridal-red against near-black drifts pink, and gold carries an
-     accent on black far better. Only the *fill* uses of --wine
-     (background: var(--wine) under white text — .btn-primary, active tabs,
-     .avatar-initials, .chat-bubble.user) deliberately stay wine in both
-     themes. Mirrors --gold-text's dark value; kept a separate token so the
-     accent can be tuned without touching every gold border/divider. */
+     light mode it IS wine (a plain alias, zero pixels change); in dark
+     mode it resolves to gold (#e8be6e) instead. Separate from the *fill*
+     role of --wine (background: var(--wine) under white text —
+     .btn-primary, active toggles, .avatar-initials, .chat-bubble.user),
+     which is a deep emerald in dark mode. */
   --accent: var(--wine);
   --gold: #a9822e;
   --gold-text: #7a5d1f;
@@ -123,23 +120,24 @@
    is the only thing that ever sets/clears data-theme; nothing here reads
    it directly.
 
-   Palette direction (revised again): a TRUE-BLACK base (--ivory #000000),
-   not the earlier charcoal — panels are only barely lifted (--surface
-   #0d0d0f) and take a visible hairline (--card-line -> --line) since a
-   shadow has nothing to cast against pure black. GOLD still carries the
-   visible accent load (--accent / --gold-text #e8be6e, the focus ring and
-   every link/stat-number/outline-button); --wine-strong is a warm gold on
-   its --wine-soft pill so chips read gold-on-black, not pink. --wine stays
-   a deep crimson (#bf3d4c) used mostly as a *fill* under white text
-   (buttons, avatar initials, active dots); its few remaining text/border
-   uses sit at ~4:1 on the black ground, fine for the large/bold contexts
-   they're in. Both blocks below carry identical values. */
+   Palette direction: a TRUE-BLACK page (--ivory #000000) with barely-
+   lifted panels (--surface #0d0d0f) that take a visible hairline
+   (--card-line -> --line), since a shadow has nothing to cast against
+   pure black. GOLD (--accent / --gold-text / --focus #e8be6e) carries
+   the visible accent load — links, stat numbers, the wordmark, outline
+   buttons, active-tab indicators. The *fill* role (background:
+   var(--wine) under white text — .btn-primary, active toggles,
+   .avatar-initials, .chat-bubble.user) is a DEEP EMERALD (--wine #1f6b52,
+   --wine-deep #195a45 for hover) rather than the earlier wine red.
+   --wine-strong is a gold for chip/pill emphasis text; the
+   green/clay/blue/amber semantic colours are untouched. Both blocks below
+   carry identical values. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
-    --wine: #bf3d4c;
+    --wine: #1f6b52;
     --wine-strong: #e8bd73;
-    --wine-deep: #8f2b39;
+    --wine-deep: #195a45;
     --wine-soft: #221a1d;
     --accent: #e8be6e;
     --gold: #d0a94f;
@@ -166,9 +164,9 @@
 
 :root[data-theme="dark"] {
   color-scheme: dark;
-  --wine: #bf3d4c;
+  --wine: #1f6b52;
   --wine-strong: #e8bd73;
-  --wine-deep: #8f2b39;
+  --wine-deep: #195a45;
   --wine-soft: #221a1d;
   --accent: #e8be6e;
   --gold: #d0a94f;

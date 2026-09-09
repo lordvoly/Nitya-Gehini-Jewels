@@ -10,7 +10,12 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <meta name="theme-color" content="#7a1e32" />
+    <!-- Per-scheme defaults for the browser status/URL bar before theme.ts
+         runs. theme.ts then keeps the single active meta in step with an
+         explicit in-app light/dark choice; an installed PWA takes its bar
+         colour from manifest.webmanifest's theme_color instead. -->
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#7a1e32" />
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
     <!-- Sets data-theme before first paint, so an explicit dark/light
          choice (frontend/src/lib/theme.ts, localStorage key "ngj-theme")
          never flashes the wrong theme while main.tsx's own module script
