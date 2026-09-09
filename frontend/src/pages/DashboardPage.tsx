@@ -23,6 +23,7 @@ import {
   buildOverdueBookingReminderMessage,
   buildPickupOverdueReminderMessage,
   buildPickupOverdueBookingReminderMessage,
+  buildPickupDueBookingReminderMessage,
 } from "../lib/whatsapp";
 import "../styles/shared.css";
 
@@ -401,6 +402,23 @@ function PickupOverdueReminderAction({ item, shopName }: { item: PickupOverdueBo
   );
 }
 
+// "Today's Pickups Due" — one "your order's ready today" nudge per
+// booking. No per-item variant: every item in a group here shares the
+// same pickup date (today), so the booking-level message covers it.
+function PickupDueBookingReminderAction({ group, shopName }: { group: PickupDueBookingItem[]; shopName: string }) {
+  const first = group[0];
+  const names = group.map((p) => p.items?.name ?? "the item");
+  const message = buildPickupDueBookingReminderMessage(first.customers?.name ?? "there", names, shopName);
+  const whatsapp = buildWhatsAppLink(first.customers?.phone, message);
+  return (
+    <ReminderButton
+      url={"url" in whatsapp ? whatsapp.url : undefined}
+      error={"error" in whatsapp ? whatsapp.error : undefined}
+      label="Send Reminder"
+    />
+  );
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -736,14 +754,19 @@ export default function DashboardPage() {
           return (
             <tr key={first.booking_id} {...bookingRowProps(navigate, first.booking_id)}>
               <td data-label="Booking / Customer">
-                {first.bookings?.booking_code} ·{" "}
-                {first.customers ? (
-                  <Link to={`/customers?customer=${first.bookings?.customer_id}`} onClick={stopRowClick}>
-                    {first.customers.name}
-                  </Link>
-                ) : (
-                  "—"
-                )}
+                <div className="dashboard-booking-line">
+                  <span>
+                    {first.bookings?.booking_code} ·{" "}
+                    {first.customers ? (
+                      <Link to={`/customers?customer=${first.bookings?.customer_id}`} onClick={stopRowClick}>
+                        {first.customers.name}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </span>
+                  <PickupDueBookingReminderAction group={group} shopName={shopName} />
+                </div>
               </td>
               <td data-label="Items">
                 {group.map((p) => (

@@ -111,3 +111,22 @@ export function buildPickupOverdueBookingReminderMessage(
     .join("\n");
   return `Dear ${customerName}, this is a gentle reminder from *${shopName}* that the following items have been ready for pickup but haven't been collected yet:\n${list}\nCould you please arrange to collect them at your earliest convenience? If your plans have changed, just let us know — happy to help. Thank you!`;
 }
+
+// Dashboard "Today's Pickups Due" — a heads-up that the piece(s) are
+// ready to collect today. Not overdue yet (that's the builders above);
+// this is the friendly "your order's ready" nudge. Works for a sale
+// collection as much as a rental, so the wording stays item-neutral.
+export function buildPickupDueReminderMessage(customerName: string, itemName: string, shopName: string): string {
+  return `Dear ${customerName}, a gentle reminder from *${shopName}* that ${itemName} is ready and waiting for you to collect today. Do let us know if you're on your way or if the timing needs to change. Thank you!`;
+}
+
+// Booking-level version — one message covering everything ready for this
+// booking today. Falls back to the single-item wording above for the
+// common one-item case.
+export function buildPickupDueBookingReminderMessage(customerName: string, itemNames: string[], shopName: string): string {
+  if (itemNames.length <= 1) {
+    return buildPickupDueReminderMessage(customerName, itemNames[0] ?? "your order", shopName);
+  }
+  const list = itemNames.map((n) => `- ${n}`).join("\n");
+  return `Dear ${customerName}, a gentle reminder from *${shopName}* that the following are ready and waiting for you to collect today:\n${list}\nDo let us know if you're on your way or if the timing needs to change. Thank you!`;
+}
