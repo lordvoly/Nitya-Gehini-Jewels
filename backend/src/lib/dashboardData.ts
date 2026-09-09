@@ -1,5 +1,5 @@
 import { supabase } from "./supabase.js";
-import { istToday, istWeekEnd, istDaysAhead } from "./dates.js";
+import { istToday, istWeekEnd, istDaysAhead, daysUntil } from "./dates.js";
 import { ACTIVE_STATUSES } from "../routes/bookings.js";
 
 // Shared by dashboard.ts (GET /api/dashboard/summary, which also adds the
@@ -126,6 +126,45 @@ async function getPickupsInRange(fromDate: string, toDate: string) {
   });
 }
 
+// The mirror image of overdue_rentals, on the pickup side: a rental that
+// should already have gone out (status still 'booked', pickup_date
+// strictly before today — today's own un-collected pickups are still just
+// "due today", covered by pickups_due_today) and never got collected.
+// Rental-only, matching the pickup_overdue concept everywhere else in the
+// app (bookings.ts's attachChains(), the "Pickup Overdue — Not Confirmed"
+// badge). Each row carries days_overdue so the Dashboard's reminder button
+// can name it, exactly like overdue_rentals.days_until_return.
+async function getPickupsOverdue() {
+  const today = istToday();
+  const { data: rows, error } = await supabase
+    .from("booking_items")
+    .select(PICKUP_SELECT)
+    .eq("type", "rental")
+    .eq("status", "booked")
+    .lt("pickup_date", today)
+    .order("pickup_date")
+    .order("id");
+  if (error) throw error;
+
+  const customerIds = [
+    ...new Set((rows ?? []).map((r) => (r as unknown as { bookings: { customer_id: string } | null }).bookings?.customer_id)),
+  ].filter((id): id is string => !!id);
+  const { data: customers, error: customersError } = customerIds.length
+    ? await supabase.from("customers").select("id, name, phone").in("id", customerIds)
+    : { data: [], error: null };
+  if (customersError) throw customersError;
+  const customersById = new Map((customers ?? []).map((c) => [c.id, c]));
+
+  return (rows ?? []).map((r) => {
+    const row = r as unknown as { bookings: { customer_id: string } | null; pickup_date: string };
+    return {
+      ...r,
+      customers: row.bookings ? (customersById.get(row.bookings.customer_id) ?? null) : null,
+      days_overdue: Math.max(1, -daysUntil(row.pickup_date)),
+    };
+  });
+}
+
 // Deliberately separate from getDailyBriefingData() above rather than
 // folded into it — that function's shape is shared with the AI assistant's
 // get_daily_briefing tool, and this is a new, distinct concern ("what to
@@ -135,7 +174,8 @@ export async function getUpcomingPickupsData() {
   const today = istToday();
   const weekEnd = istWeekEnd();
 
-  const [pickups_due_today, pickups_due_this_week] = await Promise.all([
+  const [pickups_overdue, pickups_due_today, pickups_due_this_week] = await Promise.all([
+    getPickupsOverdue(),
     getPickupsInRange(today, today),
     // Strictly AFTER today through the end of this calendar week — today's
     // own pickups are already covered by pickups_due_today and must not
@@ -145,7 +185,7 @@ export async function getUpcomingPickupsData() {
     getPickupsInRange(istDaysAhead(1), weekEnd),
   ]);
 
-  return { pickups_due_today, pickups_due_this_week };
+  return { pickups_overdue, pickups_due_today, pickups_due_this_week };
 }
 
 // The AI assistant's flexible counterpart — "next N days" rather than the

@@ -89,12 +89,21 @@ export interface PickupDueBookingItem {
   customers: BookingCustomerSummary | null;
 }
 
+// A rental whose pickup date has already passed and was never collected
+// (status still 'booked', pickup_date < today) — the pickup-side mirror
+// of OverdueBookingItem. Same shape as a pickup-due row plus days_overdue.
+export interface PickupOverdueBookingItem extends PickupDueBookingItem {
+  days_overdue: number;
+}
+
 export interface DashboardSummary {
   // Server IST date (see backend/src/routes/dashboard.ts) — used only to key
   // the once-per-day dashboard-popup dismissal, never computed locally.
   today: string;
   due_today: DueTodayBookingItem[];
   overdue: OverdueBookingItem[];
+  // Rentals whose pickup date has passed with no pickup confirmed.
+  pickups_overdue: PickupOverdueBookingItem[];
   pickups_due_today: PickupDueBookingItem[];
   // Strictly AFTER today through the end of the current calendar week (IST)
   // — today's own pickups are only in pickups_due_today, never duplicated

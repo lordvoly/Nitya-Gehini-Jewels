@@ -84,3 +84,30 @@ export function buildOverdueBookingReminderMessage(
     .join("\n");
   return `Dear ${customerName}, this is a gentle reminder from *${shopName}* that the following rented items are past their return date:\n${list}\nCould you please arrange to return them at your earliest convenience? If you need a little more time, just let us know — happy to help. Thank you!`;
 }
+
+// Dashboard "Pickup Overdue" — the pickup-side mirror of the two builders
+// above: a rental whose pickup date has passed and that was never
+// collected (booking_items.status = 'booked', pickup_date < today). Same
+// gentle tone; the "plans changed?" out is the pickup-side equivalent of
+// the returns builder's "need more time?".
+export function buildPickupOverdueReminderMessage(customerName: string, itemName: string, daysOverdue: number, shopName: string): string {
+  return `Dear ${customerName}, this is a gentle reminder from *${shopName}* that ${itemName} was ready for you to pick up ${daysOverdue} day${daysOverdue === 1 ? "" : "s"} ago and hasn't been collected yet. Could you please arrange to collect it at your earliest convenience? If your plans have changed, just let us know — happy to help. Thank you!`;
+}
+
+// Booking-level version — one message covering every uncollected item in
+// the booking. Falls back to the single-item wording above for the common
+// one-item case.
+export function buildPickupOverdueBookingReminderMessage(
+  customerName: string,
+  items: { name: string; daysOverdue: number }[],
+  shopName: string,
+): string {
+  if (items.length <= 1) {
+    const only = items[0] ?? { name: "the item", daysOverdue: 0 };
+    return buildPickupOverdueReminderMessage(customerName, only.name, only.daysOverdue, shopName);
+  }
+  const list = items
+    .map((i) => `- ${i.name} (ready ${i.daysOverdue} day${i.daysOverdue === 1 ? "" : "s"} ago)`)
+    .join("\n");
+  return `Dear ${customerName}, this is a gentle reminder from *${shopName}* that the following items have been ready for pickup but haven't been collected yet:\n${list}\nCould you please arrange to collect them at your earliest convenience? If your plans have changed, just let us know — happy to help. Thank you!`;
+}

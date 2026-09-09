@@ -101,6 +101,7 @@ dashboardRouter.get("/summary", async (_req, res) => {
       today: briefing.today,
       due_today: briefing.due_today,
       overdue: briefing.overdue,
+      pickups_overdue: pickups.pickups_overdue,
       pickups_due_today: pickups.pickups_due_today,
       pickups_due_this_week: pickups.pickups_due_this_week,
       occasions_today: occasions.occasions_today,

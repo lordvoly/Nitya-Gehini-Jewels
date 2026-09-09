@@ -5,6 +5,7 @@ import {
   fetchDashboardSummary,
   type DashboardSummary,
   type PickupDueBookingItem,
+  type PickupOverdueBookingItem,
   type OccasionRow,
   type OverdueBookingItem,
 } from "../lib/dashboard";
@@ -15,7 +16,14 @@ import { hasShownBootIntro, markBootIntroShown } from "../lib/appBootIntro";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { formatDateDisplay, addDaysToDateString, formatWeekdayDate } from "../lib/dates";
 import { fetchShopSettings } from "../lib/shopSettings";
-import { buildWhatsAppLink, buildOccasionMessage, buildOverdueReminderMessage, buildOverdueBookingReminderMessage } from "../lib/whatsapp";
+import {
+  buildWhatsAppLink,
+  buildOccasionMessage,
+  buildOverdueReminderMessage,
+  buildOverdueBookingReminderMessage,
+  buildPickupOverdueReminderMessage,
+  buildPickupOverdueBookingReminderMessage,
+} from "../lib/whatsapp";
 import "../styles/shared.css";
 
 // Flattens an already pickup_date-ascending list into rows each carrying
@@ -362,6 +370,37 @@ function OverdueReminderAction({ booking, shopName }: { booking: OverdueBookingI
   );
 }
 
+// "Pickup Overdue" section — the exact same booking-level / per-item
+// reminder pair as Overdue Rentals above, just for a rental that was
+// never collected (message names the item(s) and how many days ago it was
+// ready). Per-item buttons appear only when the booking's uncollected
+// items have different pickup dates.
+function PickupOverdueBookingReminderAction({ group, shopName }: { group: PickupOverdueBookingItem[]; shopName: string }) {
+  const first = group[0];
+  const items = group.map((p) => ({ name: p.items?.name ?? "the item", daysOverdue: p.days_overdue }));
+  const message = buildPickupOverdueBookingReminderMessage(first.customers?.name ?? "there", items, shopName);
+  const whatsapp = buildWhatsAppLink(first.customers?.phone, message);
+  return (
+    <ReminderButton
+      url={"url" in whatsapp ? whatsapp.url : undefined}
+      error={"error" in whatsapp ? whatsapp.error : undefined}
+      label="Send Reminder"
+    />
+  );
+}
+
+function PickupOverdueReminderAction({ item, shopName }: { item: PickupOverdueBookingItem; shopName: string }) {
+  const message = buildPickupOverdueReminderMessage(item.customers?.name ?? "there", item.items?.name ?? "the item", item.days_overdue, shopName);
+  const whatsapp = buildWhatsAppLink(item.customers?.phone, message);
+  return (
+    <ReminderButton
+      url={"url" in whatsapp ? whatsapp.url : undefined}
+      error={"error" in whatsapp ? whatsapp.error : undefined}
+      label="Remind"
+    />
+  );
+}
+
 export default function DashboardPage() {
   const navigate = useNavigate();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
@@ -433,6 +472,7 @@ export default function DashboardPage() {
   const {
     due_today,
     overdue,
+    pickups_overdue,
     pickups_due_today,
     pickups_due_this_week,
     occasions_today,
@@ -446,6 +486,7 @@ export default function DashboardPage() {
 
   const pendingItemGroups = groupByBooking(pending_items, (p) => p.booking_id);
   const dueTodayGroups = groupByBooking(due_today, (b) => b.booking_id);
+  const pickupsOverdueGroups = groupByBooking(pickups_overdue, (p) => p.booking_id);
   const pickupsDueTodayGroups = groupByBooking(pickups_due_today, (p) => p.booking_id);
   const weekPickupGroups = groupByBooking(weekPickups, (p) => p.booking_id);
   // A group counts as urgent if ANY of its items does — sorted first as a
@@ -624,6 +665,59 @@ export default function DashboardPage() {
                     </DashboardItemRow>
                   );
                 })}
+              </td>
+            </tr>
+          );
+        })}
+      </CarouselTable>
+
+      <CarouselTable
+        id="pickups-overdue-section"
+        title="Pickup Overdue"
+        count={pickupsOverdueGroups.length}
+        headers={["Booking / Customer", "Uncollected Items"]}
+        emptyMessage="Nothing waiting to be picked up."
+      >
+        {pickupsOverdueGroups.map((group) => {
+          const first = group[0];
+          // Per-item buttons only when the uncollected items in this
+          // booking were ready on different dates — separate nudges worth
+          // sending. All ready the same day => the one booking-level
+          // reminder covers it.
+          const mixedPickupDates = new Set(group.map((p) => p.pickup_date)).size > 1;
+          return (
+            <tr key={first.booking_id} {...bookingRowProps(navigate, first.booking_id)}>
+              <td data-label="Booking / Customer">
+                <div className="dashboard-booking-line">
+                  <span>
+                    {first.bookings?.booking_code} ·{" "}
+                    {first.customers ? (
+                      <Link to={`/customers?customer=${first.bookings?.customer_id}`} onClick={stopRowClick}>
+                        {first.customers.name}
+                      </Link>
+                    ) : (
+                      "—"
+                    )}
+                  </span>
+                  <PickupOverdueBookingReminderAction group={group} shopName={shopName} />
+                </div>
+              </td>
+              <td data-label="Uncollected Items">
+                {group.map((p) => (
+                  <DashboardItemRow
+                    key={p.id}
+                    itemId={p.item_id}
+                    photos={p.items?.photos}
+                    code={p.items?.item_code}
+                    name={p.items?.name}
+                    onViewPhotos={setLightboxPhotos}
+                    action={mixedPickupDates ? <PickupOverdueReminderAction item={p} shopName={shopName} /> : undefined}
+                  >
+                    <div>
+                      ready {p.days_overdue} day{p.days_overdue === 1 ? "" : "s"} ago
+                    </div>
+                  </DashboardItemRow>
+                ))}
               </td>
             </tr>
           );
