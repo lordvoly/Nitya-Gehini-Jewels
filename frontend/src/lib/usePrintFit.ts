@@ -5,9 +5,11 @@ import { useEffect, type RefObject } from "react";
 // Letter ~980px; 850 clears both even with the browser's optional
 // header/footer strip enabled.
 const TARGET_PX = 850;
-// Never shrink so far the receipt becomes unreadable — a genuinely huge
-// booking is better as a slightly-too-tall single page than microscopic.
-const MIN_SCALE = 0.5;
+// Floor on the shrink so a receipt never becomes unreadable. 0.4 still
+// keeps a ~2100px receipt (roughly 6 fully-detailed line items) on one
+// page; only a booking bigger than that would begin to spill, which is
+// well beyond anything this shop produces.
+const MIN_SCALE = 0.4;
 
 // Keeps a printed receipt on exactly one page. `ref` is the outer
 // .receipt-page; it wraps a single .receipt-fit child holding all the
