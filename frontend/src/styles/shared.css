@@ -1729,16 +1729,37 @@ button.more-menu-item {
 
 .lost-and-found-fields {
   display: flex;
+  flex-wrap: wrap;
   gap: 8px;
   margin: 4px 0 8px;
 }
 
+/* These two inputs sit outside a .field-label, so they don't inherit the
+   width:100% / box-sizing / border styling the form's other inputs get —
+   without it a native input keeps its intrinsic ~20-char width and won't
+   shrink (min-width defaults to auto), so the pair + the parent's 28px
+   indent overflowed the card on a phone. Give them the app's input look,
+   min-width:0 so flex can shrink them, and a flex-basis pair that fits
+   side by side on a normal card and wraps only when genuinely too narrow. */
+.lost-and-found-fields input {
+  min-width: 0;
+  box-sizing: border-box;
+  font-size: 15px;
+  font-family: inherit;
+  color: var(--ink);
+  padding: 9px 12px;
+  border: 1.5px solid var(--line);
+  border-radius: var(--radius);
+  background: var(--surface);
+  min-height: 40px;
+}
+
 .lost-and-found-fields input[type="text"] {
-  flex: 2;
+  flex: 3 1 140px;
 }
 
 .lost-and-found-fields input[type="number"] {
-  flex: 1;
+  flex: 1 1 90px;
 }
 
 /* ── Dashboard ────────────────────────────────────────────────────────── */
