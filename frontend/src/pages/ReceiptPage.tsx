@@ -67,10 +67,6 @@ export default function ReceiptPage() {
 
   return (
     <div className="page receipt-page" ref={receiptRef}>
-      {/* Inner wrapper is what usePrintFit scales for print; the outer
-          .receipt-page is pinned to the scaled height so the sheet
-          paginates as one page. */}
-      <div className="receipt-fit">
       <div className="no-print receipt-actions">
         <button className="btn-primary" onClick={() => window.print()}>
           Print / Save as PDF
@@ -251,7 +247,6 @@ export default function ReceiptPage() {
         <a href={GOOGLE_REVIEW_URL} target="_blank" rel="noopener noreferrer" className="receipt-social-link">
           <Star size={16} strokeWidth={2} /> Loved our service? Review us on Google
         </a>
-      </div>
       </div>
     </div>
   );

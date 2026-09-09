@@ -1,72 +1,45 @@
 import { useEffect, type RefObject } from "react";
 
-// One portrait page's usable height in CSS px. A4 minus the 10mm @page
-// margin (see shared.css's @media print) is ~1046px at 96dpi and US
-// Letter ~980px; 850 clears both even with the browser's optional
-// header/footer strip enabled.
-const TARGET_PX = 850;
-// Floor on the shrink so a receipt never becomes unreadable. 0.4 still
-// keeps a ~2100px receipt (roughly 6 fully-detailed line items) on one
-// page; only a booking bigger than that would begin to spill, which is
-// well beyond anything this shop produces.
-const MIN_SCALE = 0.4;
+// Target height in CSS px for the printed receipt. Deliberately well
+// under one real page (A4 ~1046px / US Letter ~980px of printable height
+// at 96dpi with the 10mm @page margin) because `zoom` rewraps text as it
+// shrinks and the final height lands a few percent above this estimate.
+const TARGET_PX = 820;
+// Floor on the shrink so a receipt never becomes unreadable. Even at this
+// floor nothing is ever hidden — `zoom` reflows, it doesn't clip — a
+// pathologically large booking would just run a little past one page.
+const MIN_ZOOM = 0.6;
 
-// Keeps a printed receipt on exactly one page. `ref` is the outer
-// .receipt-page; it wraps a single .receipt-fit child holding all the
-// content. Just before printing this measures .receipt-fit's natural
-// height and, if it exceeds one page, scales it down with
-// `transform: scale()` (exact, since transform doesn't reflow) while
-// pinning the outer .receipt-page to the resulting visual height with
-// overflow:hidden — so the browser paginates it as one page instead of
-// spilling onto a second sheet. Everything is cleared again after
-// printing so the on-screen view is never left scaled.
+// Keeps a printed receipt to one page. Just before printing it measures
+// the receipt's natural height (toolbar excluded) and, if that is over a
+// page, sets a CSS `zoom` so the whole thing reflows smaller. `zoom` is
+// used rather than `transform: scale()` + an overflow-clipped box: the
+// clipped-box approach hid the QR / footer in some PDFs, whereas `zoom`
+// physically reflows the layout so every part of the receipt is always
+// rendered, just at a smaller size. Cleared again after printing.
 export function usePrintFit(ref: RefObject<HTMLElement | null>) {
   useEffect(() => {
     const reset = () => {
-      const outer = ref.current;
-      const inner = outer?.querySelector<HTMLElement>(".receipt-fit");
-      if (inner) {
-        inner.style.removeProperty("transform");
-        inner.style.removeProperty("transform-origin");
-      }
-      if (outer) {
-        outer.style.removeProperty("height");
-        outer.style.removeProperty("overflow");
-      }
+      ref.current?.style.removeProperty("zoom");
     };
 
     const fit = () => {
-      const outer = ref.current;
-      const inner = outer?.querySelector<HTMLElement>(".receipt-fit");
-      if (!outer || !inner) return;
-      reset();
+      const el = ref.current;
+      if (!el) return;
+      el.style.removeProperty("zoom");
 
       // The .no-print toolbar is still in flow during `beforeprint`
-      // (print styles haven't applied yet); hide it just for the measure
-      // so we don't over-shrink to compensate for something that won't
-      // actually be on the page.
-      const hidden = Array.from(inner.querySelectorAll<HTMLElement>(".no-print"));
+      // (print styles haven't applied yet); exclude it from the measure
+      // so we don't shrink to compensate for something that won't be on
+      // the printed page.
+      const hidden = Array.from(el.querySelectorAll<HTMLElement>(".no-print"));
       const prevDisplay = hidden.map((n) => n.style.display);
       hidden.forEach((n) => (n.style.display = "none"));
-      const natural = inner.scrollHeight;
+      const natural = el.scrollHeight;
       hidden.forEach((n, i) => (n.style.display = prevDisplay[i]));
 
       if (natural > TARGET_PX) {
-        const scale = Math.max(MIN_SCALE, TARGET_PX / natural);
-        inner.style.transformOrigin = "top center";
-        inner.style.transform = `scale(${scale})`;
-        void inner.offsetHeight; // flush before measuring the transformed box
-
-        // Pin the outer box to the transformed content's real height plus
-        // the outer's own padding (the inner still occupies `natural` px
-        // in layout — transform doesn't change that — so without the pin
-        // it would reserve a second page; overflow:hidden trims the
-        // leftover). getBoundingClientRect DOES reflect a transform.
-        const scaledContent = inner.getBoundingClientRect().height;
-        const cs = getComputedStyle(outer);
-        const pad = parseFloat(cs.paddingTop || "0") + parseFloat(cs.paddingBottom || "0");
-        outer.style.height = `${Math.ceil(scaledContent + pad) + 2}px`;
-        outer.style.overflow = "hidden";
+        el.style.setProperty("zoom", String(Math.max(MIN_ZOOM, TARGET_PX / natural)));
       }
     };
 

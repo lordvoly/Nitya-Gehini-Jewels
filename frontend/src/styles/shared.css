@@ -3464,24 +3464,17 @@ a.chart-tooltip-title:hover {
     background: #fff;
   }
 
-  /* Keep a line item's own stacked sub-details, and the totals block,
-     together rather than split across the page fold. usePrintFit already
-     scales the whole receipt to one page; this is a backstop for when JS
-     is unavailable or a hair off. */
-  .receipt-items tr,
-  .receipt-totals {
+  /* Keep a line item's own stacked sub-details together rather than split
+     across the page fold. */
+  .receipt-items tr {
     break-inside: avoid;
   }
 
-  /* The QR + its margin is the single biggest chunk at the bottom — trim
-     the lead-in space and the image a little so less scaling is needed. */
+  /* Trim the lead-in space above the QR and footer so less scaling is
+     needed to keep everything on one page. The QR image itself is left
+     at its full size — clamping it was what hid it in some PDFs. */
   .receipt-qr {
     margin-top: 14px;
-  }
-
-  .receipt-qr img {
-    width: 112px;
-    height: 112px;
   }
 
   .receipt-social {
