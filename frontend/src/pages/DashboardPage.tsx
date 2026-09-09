@@ -9,12 +9,13 @@ import {
   type OverdueBookingItem,
 } from "../lib/dashboard";
 import { DashboardSkeleton } from "../components/common/Skeleton";
+import { PhotoLightbox } from "../components/items/PhotoLightbox";
 import { LogoIntroLoader } from "../components/common/LogoIntroLoader";
 import { hasShownBootIntro, markBootIntroShown } from "../lib/appBootIntro";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { formatDateDisplay, addDaysToDateString, formatWeekdayDate } from "../lib/dates";
 import { fetchShopSettings } from "../lib/shopSettings";
-import { buildWhatsAppLink, buildOccasionMessage, buildOverdueReminderMessage } from "../lib/whatsapp";
+import { buildWhatsAppLink, buildOccasionMessage, buildOverdueReminderMessage, buildOverdueBookingReminderMessage } from "../lib/whatsapp";
 import "../styles/shared.css";
 
 // Flattens an already pickup_date-ascending list into rows each carrying
@@ -245,15 +246,16 @@ function stopRowClick(e: { stopPropagation: () => void }) {
   e.stopPropagation();
 }
 
-// One item line inside a booking's grouped "Items" cell — a small square
-// thumbnail (the item's first photo, or a placeholder tile when it has
-// none) beside the code+name link, so every row carries a visual identity
-// and the previously-empty right side of these tables is put to use. Both
-// the thumb and the text link go to the item's own page; stopRowClick on
-// each keeps a tap from also firing the surrounding card's navigate-to-
-// booking. `action` (only Overdue passes one) is the per-item Send
-// Reminder button, kept a sibling of the whole thumb+text block so it
-// sits to its right rather than under the text.
+// One item line inside a booking's grouped "Items" cell. The code+name
+// link (and the surrounding card's own click) still navigate to the item
+// / booking respectively; only the thumbnail is different — a tap on it
+// opens the photo in the shared PhotoLightbox quick-view rather than
+// navigating anywhere (onViewPhotos), matching the Items list's thumbnail
+// behaviour. Text sits left, the thumbnail (and Overdue's optional
+// per-item Remind button) is pushed to the right edge so the row reads
+// justified rather than clumped against the left. A placeholder tile
+// (not a button) shows when the item has no photo. stopRowClick keeps a
+// thumbnail tap from also firing the card's navigate-to-booking.
 function DashboardItemRow({
   itemId,
   photos,
@@ -261,6 +263,7 @@ function DashboardItemRow({
   name,
   children,
   action,
+  onViewPhotos,
 }: {
   itemId: string;
   photos?: string[] | null;
@@ -268,60 +271,94 @@ function DashboardItemRow({
   name?: string | null;
   children?: ReactNode;
   action?: ReactNode;
+  onViewPhotos: (photos: string[]) => void;
 }) {
   const photo = photos?.[0];
   return (
     <div className={action ? "dashboard-group-item dashboard-group-item-overdue" : "dashboard-group-item"}>
-      <div className="dashboard-group-item-main">
-        <Link
-          to={`/items/${itemId}`}
-          className="dashboard-group-thumb-link"
-          onClick={stopRowClick}
-          aria-label={`View ${name ?? "item"}`}
-        >
-          {photo ? (
-            <img src={photo} alt="" className="dashboard-group-thumb" />
-          ) : (
-            <span className="dashboard-group-thumb dashboard-group-thumb-placeholder" aria-hidden="true">
-              <ImageOff size={15} strokeWidth={2} />
-            </span>
-          )}
+      <div className="dashboard-group-item-text">
+        <Link to={`/items/${itemId}`} onClick={stopRowClick}>
+          {code} — {name}
         </Link>
-        <div className="dashboard-group-item-text">
-          <Link to={`/items/${itemId}`} onClick={stopRowClick}>
-            {code} — {name}
-          </Link>
-          {children}
-        </div>
+        {children}
       </div>
-      {action}
+      <div className="dashboard-group-item-trailing">
+        {photo ? (
+          <button
+            type="button"
+            className="dashboard-group-thumb-btn"
+            onClick={(e) => {
+              stopRowClick(e);
+              onViewPhotos(photos ?? []);
+            }}
+            aria-label={`View photo of ${name ?? "item"}`}
+          >
+            <img src={photo} alt="" className="dashboard-group-thumb" />
+          </button>
+        ) : (
+          <span className="dashboard-group-thumb dashboard-group-thumb-placeholder" aria-hidden="true">
+            <ImageOff size={15} strokeWidth={2} />
+          </span>
+        )}
+        {action}
+      </div>
     </div>
   );
 }
 
-// WhatsApp nudge for a single overdue rental — same wa.me pattern as
-// GreetingAction below, just for the thing that actually needs chasing
-// here: the item hasn't come back yet. Every overdue row gets this, not
-// only the next_customer_waiting/urgent ones — the point is chasing it
-// before it becomes urgent, not only after. A customer with no valid
-// phone on file gets a genuinely disabled button with a reason in its
-// title, never a broken link, same as every other WhatsApp button in
-// this app. stopRowClick keeps this from also triggering the card's own
-// navigate-to-booking click.
+// WhatsApp nudge, rendered as a real <a> (or a disabled <button> with the
+// reason in its title when there's no valid phone) — same wa.me pattern as
+// GreetingAction below. stopRowClick keeps a tap from also triggering the
+// card's own navigate-to-booking click. `label` differs between the
+// booking-level and per-item variants below.
+function ReminderButton({ url, error, label }: { url?: string; error?: string; label: string }) {
+  return url ? (
+    <a href={url} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-compact" onClick={stopRowClick}>
+      <Bell size={14} strokeWidth={2} aria-hidden="true" />
+      {label}
+    </a>
+  ) : (
+    <button className="btn-secondary btn-compact" disabled title={error} onClick={stopRowClick}>
+      <Bell size={14} strokeWidth={2} aria-hidden="true" />
+      {label}
+    </button>
+  );
+}
+
+// One reminder for the whole overdue booking — its message names every
+// item in the group that's past its return date, so the operator sends a
+// single nudge for the transaction rather than one per piece. Always
+// shown, once, in the booking's row.
+function OverdueBookingReminderAction({ group, shopName }: { group: OverdueBookingItem[]; shopName: string }) {
+  const first = group[0];
+  const items = group.map((b) => ({ name: b.items?.name ?? "the item", daysOverdue: Math.abs(b.days_until_return) }));
+  const message = buildOverdueBookingReminderMessage(first.customers?.name ?? "there", items, shopName);
+  const whatsapp = buildWhatsAppLink(first.customers?.phone, message);
+  return (
+    <ReminderButton
+      url={"url" in whatsapp ? whatsapp.url : undefined}
+      error={"error" in whatsapp ? whatsapp.error : undefined}
+      label={group.length > 1 ? "Remind — all items" : "Send Reminder"}
+    />
+  );
+}
+
+// Per-item nudge — rendered only when the overdue items in a booking have
+// DIFFERENT return dates (so each is a genuinely separate deadline worth
+// chasing on its own), letting the operator remind about just that one.
+// When every overdue item shares one return date, the booking-level
+// button above already says everything a per-item one would, so this is
+// skipped. Its message names that single item.
 function OverdueReminderAction({ booking, shopName }: { booking: OverdueBookingItem; shopName: string }) {
   const days = Math.abs(booking.days_until_return);
   const message = buildOverdueReminderMessage(booking.customers?.name ?? "there", booking.items?.name ?? "the item", days, shopName);
   const whatsapp = buildWhatsAppLink(booking.customers?.phone, message);
-  return "url" in whatsapp ? (
-    <a href={whatsapp.url} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-compact" onClick={stopRowClick}>
-      <Bell size={14} strokeWidth={2} aria-hidden="true" />
-      Send Reminder
-    </a>
-  ) : (
-    <button className="btn-secondary btn-compact" disabled title={whatsapp.error} onClick={stopRowClick}>
-      <Bell size={14} strokeWidth={2} aria-hidden="true" />
-      Send Reminder
-    </button>
+  return (
+    <ReminderButton
+      url={"url" in whatsapp ? whatsapp.url : undefined}
+      error={"error" in whatsapp ? whatsapp.error : undefined}
+      label="Remind"
+    />
   );
 }
 
@@ -330,6 +367,9 @@ export default function DashboardPage() {
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  // Non-null while a thumbnail's photo(s) are open in the shared
+  // PhotoLightbox quick-view (opened from any section's item row).
+  const [lightboxPhotos, setLightboxPhotos] = useState<string[] | null>(null);
   // Independent, non-blocking fetch — a fallback name/discount here just
   // makes a WhatsApp greeting generic for one render, whereas failing the
   // whole Dashboard load over a shop-settings hiccup would be a much
@@ -485,6 +525,7 @@ export default function DashboardPage() {
                     photos={p.item_photos}
                     code={p.item_code}
                     name={p.item_name}
+                    onViewPhotos={setLightboxPhotos}
                   >
                     <div>
                       {p.component_name}
@@ -524,6 +565,7 @@ export default function DashboardPage() {
                     photos={b.items?.photos}
                     code={b.items?.item_code}
                     name={b.items?.name}
+                    onViewPhotos={setLightboxPhotos}
                   />
                 ))}
               </td>
@@ -541,6 +583,10 @@ export default function DashboardPage() {
       >
         {overdueGroups.map((group) => {
           const first = group[0];
+          // Per-item buttons appear only when this booking's overdue items
+          // fall on different return dates — separate deadlines. All on one
+          // date => a single universal reminder is enough.
+          const mixedReturnDates = new Set(group.map((b) => b.return_date)).size > 1;
           return (
             <tr key={first.booking_id} {...bookingRowProps(navigate, first.booking_id)}>
               <td data-label="Booking / Customer">
@@ -548,6 +594,9 @@ export default function DashboardPage() {
                 <Link to={`/customers?customer=${first.customer_id}`} onClick={stopRowClick}>
                   {first.customers?.name}
                 </Link>
+                <div className="dashboard-group-booking-action">
+                  <OverdueBookingReminderAction group={group} shopName={shopName} />
+                </div>
               </td>
               <td data-label="Overdue Items">
                 {group.map((b) => {
@@ -559,7 +608,8 @@ export default function DashboardPage() {
                       photos={b.items?.photos}
                       code={b.items?.item_code}
                       name={b.items?.name}
-                      action={<OverdueReminderAction booking={b} shopName={shopName} />}
+                      onViewPhotos={setLightboxPhotos}
+                      action={mixedReturnDates ? <OverdueReminderAction booking={b} shopName={shopName} /> : undefined}
                     >
                       <div>
                         {days} day{days === 1 ? "" : "s"} overdue
@@ -607,6 +657,7 @@ export default function DashboardPage() {
                     photos={p.items?.photos}
                     code={p.items?.item_code}
                     name={p.items?.name}
+                    onViewPhotos={setLightboxPhotos}
                   />
                 ))}
               </td>
@@ -649,6 +700,7 @@ export default function DashboardPage() {
                     photos={p.items?.photos}
                     code={p.items?.item_code}
                     name={p.items?.name}
+                    onViewPhotos={setLightboxPhotos}
                   >
                     <div>{p.dayLabel}</div>
                   </DashboardItemRow>
@@ -695,6 +747,10 @@ export default function DashboardPage() {
           </tr>
         ))}
       </CarouselTable>
+
+      {lightboxPhotos && lightboxPhotos.length > 0 && (
+        <PhotoLightbox photos={lightboxPhotos} startIndex={0} onClose={() => setLightboxPhotos(null)} />
+      )}
     </div>
   );
 }

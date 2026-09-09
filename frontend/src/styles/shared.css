@@ -105,6 +105,14 @@
      .empty-state's dashed border/.chat-bubble) which use color, not
      elevation, to mean something specific. */
   --shadow-card: 0 1px 2px rgba(43, 33, 41, 0.05), 0 6px 16px rgba(43, 33, 41, 0.07);
+
+  /* Resting border colour for the elevated card surfaces (.wizard-card,
+     .stat-card, .booking-card, mobile .data-table rows). Transparent in
+     light — those cards read purely off --shadow-card there, unchanged —
+     but a visible hairline in dark mode, where the palette is true black
+     (#000) with barely-lifted panels and a shadow has nothing to cast
+     against, so an explicit edge is what separates a card from the page. */
+  --card-line: transparent;
 }
 
 /* Dark mode, three-state per the standard pattern: bare :root above stays
@@ -115,45 +123,44 @@
    is the only thing that ever sets/clears data-theme; nothing here reads
    it directly.
 
-   Palette direction (revised): a NEUTRAL charcoal base (--ivory #101012 /
-   --surface #1b1b1e / --line #33333a — no warm/maroon undertone, the
-   earlier dark palette read "brown"), with GOLD carrying the visible
-   accent load rather than wine. --gold-text (#e8be6e, ~8:1 on --surface)
-   is the primary readable accent and the focus ring; --wine-strong, which
-   only ever styles emphasis text on a --wine-soft pill, is deliberately a
-   warm gold here too so chips/badges read gold-on-charcoal, not pink.
-   --wine itself is pulled deep and red (#bf3d4c — crimson, not rose) and
-   is now mostly a *fill* under white text (buttons, avatar initials,
-   active dots, --wine-deep for hovers); its few remaining text/border uses
-   (.alpha-index-letter, .receipt-shop-name, receipt links) sit at ~4:1 on
-   the near-black ground, acceptable for the large/bold contexts they're in
-   and no longer the thing the eye reads as "the accent color". */
+   Palette direction (revised again): a TRUE-BLACK base (--ivory #000000),
+   not the earlier charcoal — panels are only barely lifted (--surface
+   #0d0d0f) and take a visible hairline (--card-line -> --line) since a
+   shadow has nothing to cast against pure black. GOLD still carries the
+   visible accent load (--accent / --gold-text #e8be6e, the focus ring and
+   every link/stat-number/outline-button); --wine-strong is a warm gold on
+   its --wine-soft pill so chips read gold-on-black, not pink. --wine stays
+   a deep crimson (#bf3d4c) used mostly as a *fill* under white text
+   (buttons, avatar initials, active dots); its few remaining text/border
+   uses sit at ~4:1 on the black ground, fine for the large/bold contexts
+   they're in. Both blocks below carry identical values. */
 @media (prefers-color-scheme: dark) {
   :root:not([data-theme="light"]) {
     color-scheme: dark;
     --wine: #bf3d4c;
     --wine-strong: #e8bd73;
     --wine-deep: #8f2b39;
-    --wine-soft: #2a2126;
+    --wine-soft: #221a1d;
     --accent: #e8be6e;
     --gold: #d0a94f;
     --gold-text: #e8be6e;
-    --gold-soft: #2f2818;
-    --ivory: #101012;
-    --surface: #1b1b1e;
-    --ink: #f1f0ee;
-    --ink-soft: #a6a4a9;
-    --line: #33333a;
+    --gold-soft: #241d10;
+    --ivory: #000000;
+    --surface: #0d0d0f;
+    --ink: #f4f3f1;
+    --ink-soft: #9b99a0;
+    --line: #2b2b31;
+    --card-line: var(--line);
     --green: #7fbf95;
-    --green-soft: #17251b;
+    --green-soft: #122019;
     --clay: #e08a72;
-    --clay-soft: #2e1f1b;
+    --clay-soft: #261915;
     --blue: #8fb8d6;
-    --blue-soft: #1b2732;
+    --blue-soft: #141d27;
     --amber: #d9a83e;
-    --amber-soft: #2b2413;
+    --amber-soft: #241e10;
     --focus: #e8be6e;
-    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 20px rgba(0, 0, 0, 0.4);
+    --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.6), 0 10px 28px rgba(0, 0, 0, 0.55);
   }
 }
 
@@ -162,26 +169,27 @@
   --wine: #bf3d4c;
   --wine-strong: #e8bd73;
   --wine-deep: #8f2b39;
-  --wine-soft: #2a2126;
+  --wine-soft: #221a1d;
   --accent: #e8be6e;
   --gold: #d0a94f;
   --gold-text: #e8be6e;
-  --gold-soft: #2f2818;
-  --ivory: #101012;
-  --surface: #1b1b1e;
-  --ink: #f1f0ee;
-  --ink-soft: #a6a4a9;
-  --line: #33333a;
+  --gold-soft: #241d10;
+  --ivory: #000000;
+  --surface: #0d0d0f;
+  --ink: #f4f3f1;
+  --ink-soft: #9b99a0;
+  --line: #2b2b31;
+  --card-line: var(--line);
   --green: #7fbf95;
-  --green-soft: #17251b;
+  --green-soft: #122019;
   --clay: #e08a72;
-  --clay-soft: #2e1f1b;
+  --clay-soft: #261915;
   --blue: #8fb8d6;
-  --blue-soft: #1b2732;
+  --blue-soft: #141d27;
   --amber: #d9a83e;
-  --amber-soft: #2b2413;
+  --amber-soft: #241e10;
   --focus: #e8be6e;
-  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.45), 0 8px 20px rgba(0, 0, 0, 0.4);
+  --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.6), 0 10px 28px rgba(0, 0, 0, 0.55);
 }
 
 @font-face {
@@ -235,6 +243,13 @@ h3 {
 
 a {
   color: var(--accent);
+  /* No persistent underline anywhere — links read as links by their
+     accent color alone (the item/customer names threaded through the
+     Dashboard and Bookings lists were dominated by the underline). The
+     few places that want an underline affordance opt in themselves via
+     the transparent-underline-color hover trick (.stat-subnote,
+     .booking-card-item-next-link, etc.). */
+  text-decoration: none;
 }
 
 /* Single global rule covers every interactive element — buttons, links,
@@ -540,9 +555,11 @@ button.more-menu-item {
   .data-table tr {
     /* Same card language as .wizard-card/.stat-card/.booking-card above —
        a stacked table row at this width IS a card, visually, so it gets
-       the same shadow-not-border treatment and radius rather than staying
-       on the old flat-bordered look while every other card in the app
-       moves off it. */
+       the same shadow-and-hairline treatment and radius rather than
+       staying on the old flat-bordered look while every other card in the
+       app moves off it. (--card-line is transparent in light, a real edge
+       in true-black dark mode.) */
+    border: 1px solid var(--card-line);
     border-radius: var(--radius-lg);
     box-shadow: var(--shadow-card);
     background: var(--surface);
@@ -666,6 +683,7 @@ button.more-menu-item {
 
 .wizard-card {
   background: var(--surface);
+  border: 1px solid var(--card-line);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   padding: 20px;
@@ -1725,8 +1743,9 @@ button.more-menu-item {
   background: var(--surface);
   /* Transparent, not omitted — reserves the same 1px box as the visible
      hover border below so hovering never shifts layout, while the resting
-     state itself now reads through --shadow-card instead of a line. */
-  border: 1px solid transparent;
+     state itself now reads through --shadow-card instead of a line (in
+     light) or --card-line (a real hairline in true-black dark mode). */
+  border: 1px solid var(--card-line);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   padding: 16px 14px;
@@ -2239,30 +2258,24 @@ a.chart-tooltip-title:hover {
 }
 
 /* One line per item inside a booking's grouped "Items" cell (see
-   groupByBooking in DashboardPage.tsx) — a hairline between entries once
-   there's more than one, so a multi-item booking still reads as several
-   distinct things rather than one run-on block. */
+   groupByBooking in DashboardPage.tsx). Text on the left, the thumbnail
+   (and Overdue's optional per-item button) pushed to the right edge, so
+   the row spans the card's full width and reads justified rather than
+   clumped against the left. A hairline between entries once there's more
+   than one, so a multi-item booking still reads as several distinct
+   things rather than one run-on block. */
 .dashboard-group-item {
-  padding: 4px 0;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 14px;
+  padding: 5px 0;
 }
 
 .dashboard-group-item + .dashboard-group-item {
   border-top: 1px solid var(--line);
   margin-top: 4px;
-  padding-top: 8px;
-}
-
-/* Thumb + text side by side for each item line — a small photo (or a
-   placeholder tile when the item has none) gives every row a visual
-   identity the code+name text alone didn't. Wrapped in its own -main
-   element so Overdue's trailing Send Reminder button stays a sibling of
-   the whole thumb+text block, not of the text alone. */
-.dashboard-group-item-main {
-  display: flex;
-  align-items: flex-start;
-  gap: 10px;
-  min-width: 0;
-  flex: 1 1 auto;
+  padding-top: 9px;
 }
 
 .dashboard-group-item-text {
@@ -2270,21 +2283,37 @@ a.chart-tooltip-title:hover {
   flex: 1 1 auto;
 }
 
-.dashboard-group-thumb-link {
+/* The right-edge group: thumbnail, then (Overdue only) the per-item
+   Remind button. flex: 0 0 auto so it never shrinks the text. */
+.dashboard-group-item-trailing {
+  flex: 0 0 auto;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+/* Tap opens the photo in the shared PhotoLightbox (see DashboardPage's
+   onViewPhotos) rather than navigating — hence a button, not a link. */
+.dashboard-group-thumb-btn {
   flex: 0 0 auto;
   display: block;
+  padding: 0;
+  border: none;
+  background: none;
   line-height: 0;
+  cursor: zoom-in;
 }
 
 .dashboard-group-thumb {
-  width: 36px;
-  height: 36px;
+  width: 42px;
+  height: 42px;
   object-fit: cover;
-  border-radius: 6px;
+  border-radius: 8px;
   display: block;
 }
 
 .dashboard-group-thumb-placeholder {
+  flex: 0 0 auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2293,14 +2322,17 @@ a.chart-tooltip-title:hover {
   color: var(--ink-soft);
 }
 
-/* Overdue's own item line additionally carries a per-item Send Reminder
-   button — laid out as a row so the button sits beside its item's own
-   text instead of stacking under every entry in a multi-item booking. */
+/* Overdue's booking-level "Send Reminder" (covers every overdue item in
+   the booking) sits under the booking/customer line in the left cell. */
+.dashboard-group-booking-action {
+  margin-top: 8px;
+}
+
+/* Overdue's per-item reminder button — only rendered when a booking's
+   overdue items fall on different return dates — sits in the row's
+   right-edge trailing group next to the thumbnail. Allow the trailing
+   group to wrap under the text on a very narrow card. */
 .dashboard-group-item-overdue {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 10px;
   flex-wrap: wrap;
 }
 
@@ -2342,6 +2374,7 @@ a.chart-tooltip-title:hover {
 
 .booking-card {
   background: var(--surface);
+  border: 1px solid var(--card-line);
   border-radius: var(--radius-lg);
   box-shadow: var(--shadow-card);
   padding: 16px;
@@ -3398,6 +3431,7 @@ a.chart-tooltip-title:hover {
     --amber-soft: #fffaf0;
     --focus: #7a5d1f;
     --shadow-card: 0 1px 2px rgba(43, 33, 41, 0.05), 0 6px 16px rgba(43, 33, 41, 0.07);
+    --card-line: transparent;
   }
 }
 

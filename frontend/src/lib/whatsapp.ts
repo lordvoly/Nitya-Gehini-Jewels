@@ -63,3 +63,24 @@ export function buildFeedbackRequestMessage(customerName: string, shopName: stri
 export function buildOverdueReminderMessage(customerName: string, itemName: string, daysOverdue: number, shopName: string): string {
   return `Dear ${customerName}, this is a gentle reminder from *${shopName}* that ${itemName} was due back with us ${daysOverdue} day${daysOverdue === 1 ? "" : "s"} ago. Could you please arrange to return it at your earliest convenience? If you need a little more time, just let us know — happy to help. Thank you!`;
 }
+
+// Booking-level version of the above: one message covering every overdue
+// item in a single family booking, so the operator sends one nudge for
+// the whole transaction rather than one per piece. Falls back to the
+// exact single-item wording above when the booking only has one overdue
+// item (the common case) — the per-item button in that situation would
+// say the same thing.
+export function buildOverdueBookingReminderMessage(
+  customerName: string,
+  items: { name: string; daysOverdue: number }[],
+  shopName: string,
+): string {
+  if (items.length <= 1) {
+    const only = items[0] ?? { name: "the item", daysOverdue: 0 };
+    return buildOverdueReminderMessage(customerName, only.name, only.daysOverdue, shopName);
+  }
+  const list = items
+    .map((i) => `- ${i.name} (${i.daysOverdue} day${i.daysOverdue === 1 ? "" : "s"} overdue)`)
+    .join("\n");
+  return `Dear ${customerName}, this is a gentle reminder from *${shopName}* that the following rented items are past their return date:\n${list}\nCould you please arrange to return them at your earliest convenience? If you need a little more time, just let us know — happy to help. Thank you!`;
+}
