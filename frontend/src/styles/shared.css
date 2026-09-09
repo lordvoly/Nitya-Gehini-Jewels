@@ -1073,6 +1073,18 @@ button.more-menu-item {
   font-size: 13px;
 }
 
+/* One notch smaller than .btn-compact — for buttons that sit inline
+   inside a dense list row (the Overdue Rentals reminder buttons), where a
+   full-size pill dominates the row it belongs to. Layered on top of
+   .btn-secondary.btn-compact. */
+.btn-xs {
+  min-height: 28px;
+  padding: 4px 11px;
+  font-size: 11.5px;
+  gap: 5px;
+  border-width: 1.5px;
+}
+
 .btn-save {
   width: 100%;
   padding: 14px;
@@ -2322,10 +2334,15 @@ a.chart-tooltip-title:hover {
   color: var(--ink-soft);
 }
 
-/* Overdue's booking-level "Send Reminder" (covers every overdue item in
-   the booking) sits under the booking/customer line in the left cell. */
-.dashboard-group-booking-action {
-  margin-top: 8px;
+/* Overdue's booking/customer line with its booking-level "Send Reminder"
+   pushed to the right edge (covers every overdue item in the booking).
+   Wraps the button under the name on a very narrow card. */
+.dashboard-booking-line {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  flex-wrap: wrap;
 }
 
 /* Overdue's per-item reminder button — only rendered when a booking's
@@ -2598,6 +2615,20 @@ a.chart-tooltip-title:hover {
   justify-content: space-between;
   align-items: center;
   margin-bottom: 4px;
+}
+
+/* BookingDetail's item cards pair the header with a 40px thumbnail, which
+   makes .line-item-title-group tall enough that a status pill sharing the
+   row lands beside — or, once the name wraps to two lines with no
+   row-gap, on top of — the name, and in a different spot for every item
+   depending on its name length. Stack the pill on its own line directly
+   below the title instead: always the same place, never overlapping,
+   matching how BookingsList's .booking-card-item already lays a pill out
+   below its item name. */
+.line-item-card-header-stacked {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 8px;
 }
 
 .line-item-card-header h3 {

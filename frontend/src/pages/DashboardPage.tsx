@@ -313,13 +313,13 @@ function DashboardItemRow({
 // booking-level and per-item variants below.
 function ReminderButton({ url, error, label }: { url?: string; error?: string; label: string }) {
   return url ? (
-    <a href={url} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-compact" onClick={stopRowClick}>
-      <Bell size={14} strokeWidth={2} aria-hidden="true" />
+    <a href={url} target="_blank" rel="noopener noreferrer" className="btn-secondary btn-compact btn-xs" onClick={stopRowClick}>
+      <Bell size={12} strokeWidth={2} aria-hidden="true" />
       {label}
     </a>
   ) : (
-    <button className="btn-secondary btn-compact" disabled title={error} onClick={stopRowClick}>
-      <Bell size={14} strokeWidth={2} aria-hidden="true" />
+    <button className="btn-secondary btn-compact btn-xs" disabled title={error} onClick={stopRowClick}>
+      <Bell size={12} strokeWidth={2} aria-hidden="true" />
       {label}
     </button>
   );
@@ -328,7 +328,7 @@ function ReminderButton({ url, error, label }: { url?: string; error?: string; l
 // One reminder for the whole overdue booking — its message names every
 // item in the group that's past its return date, so the operator sends a
 // single nudge for the transaction rather than one per piece. Always
-// shown, once, in the booking's row.
+// shown, once, on the right of the booking's row.
 function OverdueBookingReminderAction({ group, shopName }: { group: OverdueBookingItem[]; shopName: string }) {
   const first = group[0];
   const items = group.map((b) => ({ name: b.items?.name ?? "the item", daysOverdue: Math.abs(b.days_until_return) }));
@@ -338,7 +338,7 @@ function OverdueBookingReminderAction({ group, shopName }: { group: OverdueBooki
     <ReminderButton
       url={"url" in whatsapp ? whatsapp.url : undefined}
       error={"error" in whatsapp ? whatsapp.error : undefined}
-      label={group.length > 1 ? "Remind — all items" : "Send Reminder"}
+      label="Send Reminder"
     />
   );
 }
@@ -590,11 +590,13 @@ export default function DashboardPage() {
           return (
             <tr key={first.booking_id} {...bookingRowProps(navigate, first.booking_id)}>
               <td data-label="Booking / Customer">
-                {first.booking_code} ·{" "}
-                <Link to={`/customers?customer=${first.customer_id}`} onClick={stopRowClick}>
-                  {first.customers?.name}
-                </Link>
-                <div className="dashboard-group-booking-action">
+                <div className="dashboard-booking-line">
+                  <span>
+                    {first.booking_code} ·{" "}
+                    <Link to={`/customers?customer=${first.customer_id}`} onClick={stopRowClick}>
+                      {first.customers?.name}
+                    </Link>
+                  </span>
                   <OverdueBookingReminderAction group={group} shopName={shopName} />
                 </div>
               </td>

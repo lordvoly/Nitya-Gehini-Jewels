@@ -382,7 +382,7 @@ export function BookingDetail({
               const canUndoPickup = bi.status === "out";
               return (
                 <div className="line-item-card" key={bi.id}>
-                  <div className="line-item-card-header">
+                  <div className="line-item-card-header line-item-card-header-stacked">
                     <div className="line-item-title-group">
                       <Link to={`/items/${bi.item_id}`} className="line-item-thumb-link" aria-label={`View ${bi.items?.name}`}>
                         {bi.items?.photos?.[0] ? (
