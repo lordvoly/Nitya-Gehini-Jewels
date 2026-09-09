@@ -80,6 +80,16 @@
   --radius-lg: 16px;
   --radius-pill: 999px;
   --tap: 46px; /* minimum comfortable touch target */
+  /* .app-header's rendered height (12px padding top/bottom + a 40px action
+     row). Consumed only in the compact-layout @media block, where the
+     header becomes position: fixed — .app-main's top padding, .report-nav's
+     sticky offset and section scroll-margin-top all key off this so the
+     fixed bar never covers content. Keep in sync if the header's padding or
+     control sizes change. 66 not 64: 12px padding × 2 + a 40px action row
+     renders ~64.9px once the 1px border-bottom and sub-pixel rounding
+     count, and the spare ~1px keeps the sticky .report-nav off the header
+     edge. */
+  --app-header-h: 66px;
 
   /* Phase 2 Stage 1 — the shared "lifted surface" replacing a flat 1px
      border on the app's page-level cards (wizard-card/stat-card/
@@ -472,10 +482,40 @@ button.more-menu-item {
     display: flex;
   }
 
+  /* The top brand/profile bar stays put while only the page body scrolls —
+     matches the always-fixed bottom nav at this width, so both app chrome
+     rails are stationary and just the content between them moves. Desktop
+     keeps the header in normal flow (it has no fixed top bar there). */
+  .app-header {
+    position: fixed;
+    top: 0;
+    left: 0;
+    right: 0;
+    z-index: 40;
+    padding-top: calc(12px + env(safe-area-inset-top, 0));
+  }
+
+  .app-main {
+    padding-top: calc(var(--app-header-h) + env(safe-area-inset-top, 0));
+  }
+
   .app-content {
     /* Bar height + breathing room, so the last bit of scrollable page
        content never sits under the fixed bottom bar. */
     padding-bottom: 92px;
+  }
+
+  /* Reports' sticky jump-nav sticks just below the now-fixed header
+     instead of at viewport top 0 (where it would hide under the header).
+     Set as a custom property rather than a `.report-nav { top }` rule here
+     because this block sits ABOVE .report-nav's own definition in the
+     file — a direct rule would lose the cascade to it on source order,
+     whereas the var (unset on desktop, so .report-nav's `top` falls back
+     to 0) resolves correctly regardless of order. Same reason
+     --dashboard-scroll-margin is used just below. */
+  :root {
+    --report-nav-top: calc(var(--app-header-h) + env(safe-area-inset-top, 0));
+    --dashboard-scroll-margin: calc(var(--app-header-h) + env(safe-area-inset-top, 0) + 8px);
   }
 
   /* Table rows become stacked cards instead of forcing horizontal scroll —
@@ -1671,17 +1711,6 @@ button.more-menu-item {
   flex: 1;
 }
 
-/* ── Dashboard alert popups ───────────────────────────────────────────── */
-
-.alert-modal h2 {
-  margin-top: 0;
-}
-
-.alert-modal p {
-  margin: 10px 0 18px;
-  line-height: 1.5;
-}
-
 /* ── Dashboard ────────────────────────────────────────────────────────── */
 
 .stat-grid {
@@ -1772,6 +1801,10 @@ a.stat-card:active {
 
 .dashboard-section {
   margin-bottom: 24px;
+  /* 0 on desktop; on mobile the compact-layout block sets
+     --dashboard-scroll-margin so a scrolled-to section (Reports' hash /
+     jump-nav) lands below the fixed header, not behind it. */
+  scroll-margin-top: var(--dashboard-scroll-margin, 0px);
 }
 
 .dashboard-section h2 {
@@ -1789,7 +1822,9 @@ a.stat-card:active {
    Dashboard's Outstanding Dues deep link already used before this existed. */
 .report-nav {
   position: sticky;
-  top: 0;
+  /* 0 on desktop; on mobile the compact-layout block sets
+     --report-nav-top so this clears the fixed header. */
+  top: var(--report-nav-top, 0px);
   z-index: 5;
   display: flex;
   gap: 8px;
@@ -2215,6 +2250,47 @@ a.chart-tooltip-title:hover {
   border-top: 1px solid var(--line);
   margin-top: 4px;
   padding-top: 8px;
+}
+
+/* Thumb + text side by side for each item line — a small photo (or a
+   placeholder tile when the item has none) gives every row a visual
+   identity the code+name text alone didn't. Wrapped in its own -main
+   element so Overdue's trailing Send Reminder button stays a sibling of
+   the whole thumb+text block, not of the text alone. */
+.dashboard-group-item-main {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.dashboard-group-item-text {
+  min-width: 0;
+  flex: 1 1 auto;
+}
+
+.dashboard-group-thumb-link {
+  flex: 0 0 auto;
+  display: block;
+  line-height: 0;
+}
+
+.dashboard-group-thumb {
+  width: 36px;
+  height: 36px;
+  object-fit: cover;
+  border-radius: 6px;
+  display: block;
+}
+
+.dashboard-group-thumb-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--ivory);
+  border: 1px solid var(--line);
+  color: var(--ink-soft);
 }
 
 /* Overdue's own item line additionally carries a per-item Send Reminder

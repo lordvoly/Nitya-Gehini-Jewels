@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Link, useNavigate, type NavigateFunction } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Bell, Gift } from "lucide-react";
+import { ChevronLeft, ChevronRight, Bell, Gift, ImageOff } from "lucide-react";
 import {
   fetchDashboardSummary,
   type DashboardSummary,
@@ -8,8 +8,6 @@ import {
   type OccasionRow,
   type OverdueBookingItem,
 } from "../lib/dashboard";
-import { useAuth } from "../lib/auth";
-import { DashboardAlerts } from "../components/dashboard/DashboardAlerts";
 import { DashboardSkeleton } from "../components/common/Skeleton";
 import { LogoIntroLoader } from "../components/common/LogoIntroLoader";
 import { hasShownBootIntro, markBootIntroShown } from "../lib/appBootIntro";
@@ -247,6 +245,60 @@ function stopRowClick(e: { stopPropagation: () => void }) {
   e.stopPropagation();
 }
 
+// One item line inside a booking's grouped "Items" cell — a small square
+// thumbnail (the item's first photo, or a placeholder tile when it has
+// none) beside the code+name link, so every row carries a visual identity
+// and the previously-empty right side of these tables is put to use. Both
+// the thumb and the text link go to the item's own page; stopRowClick on
+// each keeps a tap from also firing the surrounding card's navigate-to-
+// booking. `action` (only Overdue passes one) is the per-item Send
+// Reminder button, kept a sibling of the whole thumb+text block so it
+// sits to its right rather than under the text.
+function DashboardItemRow({
+  itemId,
+  photos,
+  code,
+  name,
+  children,
+  action,
+}: {
+  itemId: string;
+  photos?: string[] | null;
+  code?: string | null;
+  name?: string | null;
+  children?: ReactNode;
+  action?: ReactNode;
+}) {
+  const photo = photos?.[0];
+  return (
+    <div className={action ? "dashboard-group-item dashboard-group-item-overdue" : "dashboard-group-item"}>
+      <div className="dashboard-group-item-main">
+        <Link
+          to={`/items/${itemId}`}
+          className="dashboard-group-thumb-link"
+          onClick={stopRowClick}
+          aria-label={`View ${name ?? "item"}`}
+        >
+          {photo ? (
+            <img src={photo} alt="" className="dashboard-group-thumb" />
+          ) : (
+            <span className="dashboard-group-thumb dashboard-group-thumb-placeholder" aria-hidden="true">
+              <ImageOff size={15} strokeWidth={2} />
+            </span>
+          )}
+        </Link>
+        <div className="dashboard-group-item-text">
+          <Link to={`/items/${itemId}`} onClick={stopRowClick}>
+            {code} — {name}
+          </Link>
+          {children}
+        </div>
+      </div>
+      {action}
+    </div>
+  );
+}
+
 // WhatsApp nudge for a single overdue rental — same wa.me pattern as
 // GreetingAction below, just for the thing that actually needs chasing
 // here: the item hasn't come back yet. Every overdue row gets this, not
@@ -275,7 +327,6 @@ function OverdueReminderAction({ booking, shopName }: { booking: OverdueBookingI
 
 export default function DashboardPage() {
   const navigate = useNavigate();
-  const { session } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -369,8 +420,6 @@ export default function DashboardPage() {
 
   return (
     <div className="page">
-      <DashboardAlerts summary={summary} userId={session?.user.id ?? null} />
-
       <div className="stat-grid">
         <div className="stat-card">
           <Link to="/items?filter=active" className="stat-card-link">
@@ -430,16 +479,19 @@ export default function DashboardPage() {
               </td>
               <td data-label="Missing">
                 {group.map((p) => (
-                  <div className="dashboard-group-item" key={`${p.booking_item_id}-${p.component_name}`}>
-                    <Link to={`/items/${p.item_id}`} onClick={stopRowClick}>
-                      {p.item_code} — {p.item_name}
-                    </Link>
+                  <DashboardItemRow
+                    key={`${p.booking_item_id}-${p.component_name}`}
+                    itemId={p.item_id}
+                    photos={p.item_photos}
+                    code={p.item_code}
+                    name={p.item_name}
+                  >
                     <div>
                       {p.component_name}
                       {p.actual_return_date ? ` · returned ${formatDateDisplay(p.actual_return_date)}` : ""}
                     </div>
                     {p.return_notes && <span className="dashboard-table-note">"{p.return_notes}"</span>}
-                  </div>
+                  </DashboardItemRow>
                 ))}
               </td>
             </tr>
@@ -466,11 +518,13 @@ export default function DashboardPage() {
               </td>
               <td data-label="Items">
                 {group.map((b) => (
-                  <div className="dashboard-group-item" key={b.id}>
-                    <Link to={`/items/${b.item_id}`} onClick={stopRowClick}>
-                      {b.items?.item_code} — {b.items?.name}
-                    </Link>
-                  </div>
+                  <DashboardItemRow
+                    key={b.id}
+                    itemId={b.item_id}
+                    photos={b.items?.photos}
+                    code={b.items?.item_code}
+                    name={b.items?.name}
+                  />
                 ))}
               </td>
             </tr>
@@ -499,22 +553,23 @@ export default function DashboardPage() {
                 {group.map((b) => {
                   const days = Math.abs(b.days_until_return);
                   return (
-                    <div className="dashboard-group-item dashboard-group-item-overdue" key={b.id}>
+                    <DashboardItemRow
+                      key={b.id}
+                      itemId={b.item_id}
+                      photos={b.items?.photos}
+                      code={b.items?.item_code}
+                      name={b.items?.name}
+                      action={<OverdueReminderAction booking={b} shopName={shopName} />}
+                    >
                       <div>
-                        <Link to={`/items/${b.item_id}`} onClick={stopRowClick}>
-                          {b.items?.item_code} — {b.items?.name}
-                        </Link>
-                        <div>
-                          {days} day{days === 1 ? "" : "s"} overdue
-                          {b.next_customer_waiting && (
-                            <span className="dashboard-table-urgent">
-                              Next: {b.next_booking_code} — {b.next_customer_name} ({b.next_pickup_date})
-                            </span>
-                          )}
-                        </div>
+                        {days} day{days === 1 ? "" : "s"} overdue
+                        {b.next_customer_waiting && (
+                          <span className="dashboard-table-urgent">
+                            Next: {b.next_booking_code} — {b.next_customer_name} ({b.next_pickup_date})
+                          </span>
+                        )}
                       </div>
-                      <OverdueReminderAction booking={b} shopName={shopName} />
-                    </div>
+                    </DashboardItemRow>
                   );
                 })}
               </td>
@@ -546,11 +601,13 @@ export default function DashboardPage() {
               </td>
               <td data-label="Items">
                 {group.map((p) => (
-                  <div className="dashboard-group-item" key={p.id}>
-                    <Link to={`/items/${p.item_id}`} onClick={stopRowClick}>
-                      {p.items?.item_code} — {p.items?.name}
-                    </Link>
-                  </div>
+                  <DashboardItemRow
+                    key={p.id}
+                    itemId={p.item_id}
+                    photos={p.items?.photos}
+                    code={p.items?.item_code}
+                    name={p.items?.name}
+                  />
                 ))}
               </td>
             </tr>
@@ -586,12 +643,15 @@ export default function DashboardPage() {
                   obscure. */}
               <td data-label="Items">
                 {group.map((p) => (
-                  <div className="dashboard-group-item" key={p.id}>
-                    <Link to={`/items/${p.item_id}`} onClick={stopRowClick}>
-                      {p.items?.item_code} — {p.items?.name}
-                    </Link>
+                  <DashboardItemRow
+                    key={p.id}
+                    itemId={p.item_id}
+                    photos={p.items?.photos}
+                    code={p.items?.item_code}
+                    name={p.items?.name}
+                  >
                     <div>{p.dayLabel}</div>
-                  </div>
+                  </DashboardItemRow>
                 ))}
               </td>
             </tr>

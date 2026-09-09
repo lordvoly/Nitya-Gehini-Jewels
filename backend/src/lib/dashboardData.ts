@@ -13,7 +13,7 @@ export async function getDailyBriefingData() {
   // whether it was ever formally checked out.
   const { data: dueTodayRows, error: dueTodayError } = await supabase
     .from("booking_items")
-    .select("*, bookings(booking_code, customer_id), items(item_code, name, tracking_type)")
+    .select("*, bookings(booking_code, customer_id), items(item_code, name, tracking_type, photos)")
     .eq("type", "rental")
     .in("status", ACTIVE_STATUSES)
     .eq("return_date", istToday())
@@ -41,7 +41,7 @@ export async function getDailyBriefingData() {
   const itemIds = [...new Set((overdueRows ?? []).map((r) => r.item_id))];
   const customerIds = [...new Set((overdueRows ?? []).map((r) => r.customer_id))];
   const [{ data: overdueItems, error: overdueItemsError }, { data: overdueCustomers, error: overdueCustomersError }] = await Promise.all([
-    itemIds.length ? supabase.from("items").select("id, item_code, name").in("id", itemIds) : Promise.resolve({ data: [], error: null }),
+    itemIds.length ? supabase.from("items").select("id, item_code, name, photos").in("id", itemIds) : Promise.resolve({ data: [], error: null }),
     customerIds.length ? supabase.from("customers").select("id, name, phone").in("id", customerIds) : Promise.resolve({ data: [], error: null }),
   ]);
   if (overdueItemsError) throw overdueItemsError;

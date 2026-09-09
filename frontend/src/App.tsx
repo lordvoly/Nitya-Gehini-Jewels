@@ -132,7 +132,7 @@ export default function App() {
         </Modal>
       )}
 
-      <main className={session ? "app-content" : undefined}>
+      <main className={session ? "app-main app-content" : "app-main"}>
         <Routes>
           <Route path="/login" element={<LoginPage />} />
           {/* Deliberately outside ProtectedRoute — this is the one page a

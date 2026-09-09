@@ -15,6 +15,7 @@ export interface PendingItem {
   item_id: string;
   item_code: string;
   item_name: string;
+  item_photos: string[];
   component_name: string;
   actual_return_date: string | null;
   return_notes: string | null;

@@ -75,6 +75,7 @@ export interface PendingItemEntry {
   item_id: string;
   item_code: string;
   item_name: string;
+  item_photos: string[];
   component_name: string;
   actual_return_date: string | null;
   return_notes: string | null;
@@ -89,7 +90,7 @@ export async function getPendingItems(): Promise<PendingItemEntry[]> {
   const { data: bookingItems, error } = await supabase
     .from("booking_items")
     .select(
-      "id, booking_id, item_id, return_checklist, return_notes, actual_return_date, bookings(booking_code, customer_id, customers(name)), items(item_code, name)",
+      "id, booking_id, item_id, return_checklist, return_notes, actual_return_date, bookings(booking_code, customer_id, customers(name)), items(item_code, name, photos)",
     )
     .eq("status", "returned")
     .not("return_checklist", "is", null);
@@ -106,7 +107,7 @@ export async function getPendingItems(): Promise<PendingItemEntry[]> {
     );
     if (pendingNames.length === 0) continue;
     const booking = bi.bookings as unknown as { booking_code: string; customer_id: string; customers: { name: string } | null } | null;
-    const item = bi.items as unknown as { item_code: string; name: string } | null;
+    const item = bi.items as unknown as { item_code: string; name: string; photos: string[] | null } | null;
     for (const name of pendingNames) {
       result.push({
         booking_id: bi.booking_id,
@@ -117,6 +118,7 @@ export async function getPendingItems(): Promise<PendingItemEntry[]> {
         item_id: bi.item_id,
         item_code: item?.item_code ?? "—",
         item_name: item?.name ?? "—",
+        item_photos: item?.photos ?? [],
         component_name: name,
         actual_return_date: bi.actual_return_date,
         return_notes: bi.return_notes,

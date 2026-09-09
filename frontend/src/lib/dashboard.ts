@@ -33,7 +33,7 @@ export interface OverdueBookingItem {
   status: BookingItemStatus;
   booking_code: string;
   customer_id: string;
-  items: { item_code: string; name: string } | null;
+  items: { item_code: string; name: string; photos: string[] } | null;
   customers: { name: string; phone: string } | null;
   balance_due: number;
   days_until_return: number;
