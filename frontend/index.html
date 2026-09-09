@@ -10,22 +10,30 @@
     <link rel="icon" type="image/png" sizes="16x16" href="/favicon-16x16.png" />
     <link rel="apple-touch-icon" sizes="180x180" href="/apple-touch-icon.png" />
     <link rel="manifest" href="/manifest.webmanifest" />
-    <!-- Per-scheme defaults for the browser status/URL bar before theme.ts
-         runs. theme.ts then keeps the single active meta in step with an
-         explicit in-app light/dark choice; an installed PWA takes its bar
-         colour from manifest.webmanifest's theme_color instead. -->
-    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#7a1e32" />
-    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#000000" />
-    <!-- Sets data-theme before first paint, so an explicit dark/light
-         choice (frontend/src/lib/theme.ts, localStorage key "ngj-theme")
-         never flashes the wrong theme while main.tsx's own module script
-         is still loading. "system" (the default — no stored value) needs
-         no attribute at all; shared.css's prefers-color-scheme media query
-         already handles that case with zero JS. -->
+    <!-- iOS standalone reads this (not theme-color) for the status bar;
+         "black-translucent" lets the dark app show through it. -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <!-- Placeholder value; the inline script below overwrites it with the
+         resolved theme's colour before first paint, and theme.ts keeps it
+         in step on an in-app light/dark toggle. An installed Android PWA
+         also reads manifest.webmanifest's theme_color (baked at install,
+         refreshed lazily by Chrome). -->
+    <meta name="theme-color" content="#7a1e32" />
+    <!-- Runs before first paint: sets data-theme so the correct theme
+         renders immediately (no flash while main.tsx loads), and points
+         <meta name="theme-color"> at that theme's chrome colour so the
+         browser/OS status bar matches from the very first frame. "system"
+         (no stored value) falls back to the OS prefers-color-scheme. -->
     <script>
       (function () {
         var v = localStorage.getItem("ngj-theme");
         if (v === "light" || v === "dark") document.documentElement.setAttribute("data-theme", v);
+        var dark =
+          v === "dark" ||
+          (v !== "light" && window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches);
+        var m = document.querySelector('meta[name="theme-color"]');
+        if (m) m.setAttribute("content", dark ? "#0d0d0f" : "#7a1e32");
       })();
     </script>
   </head>
