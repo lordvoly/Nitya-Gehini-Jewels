@@ -1386,6 +1386,52 @@ button.more-menu-item {
   margin-top: 16px;
 }
 
+/* LoadingTip — one shared "did you know" banner shown at the top of every
+   skeleton layout (see Skeleton.tsx), cycling through LOADING_TIPS while a
+   page loads. Same --wine-soft/--accent combo as .chat-starter-btn, so it
+   reads as "the assistant" without introducing a third color pairing. */
+.loading-tip {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--wine-soft);
+  color: var(--accent);
+  border-radius: var(--radius);
+  padding: 10px 14px;
+  font-size: 13px;
+  font-weight: 600;
+  margin-bottom: 14px;
+}
+
+.loading-tip svg {
+  flex-shrink: 0;
+}
+
+/* Re-mounted (via a `key` change) each time the tip advances, so this
+   entrance animation plays again on every rotation — same "decorates a
+   change, never gates it" motion rule as the rest of this file's
+   @keyframes. */
+.loading-tip-text {
+  animation: tip-fade-in 260ms ease-out;
+}
+
+@keyframes tip-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(2px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .loading-tip-text {
+    animation: none;
+  }
+}
+
 /* Dashboard's first-load-only logo intro (LogoIntroLoader) — a short
    branded moment before falling back to the regular shimmer skeleton. The
    ring spins around the logo rather than the logo itself, so "NGJ" stays
@@ -1794,6 +1840,47 @@ button.more-menu-item {
 }
 
 /* ── Dashboard ────────────────────────────────────────────────────────── */
+
+/* "Hi {name} — here's your overview" panel above the stat grid — styled
+   like the assistant (same --wine-soft/--accent/badge combo as the "Ask"
+   nav tab's .mobile-tab-ask-badge and the Assistant page's own
+   .chat-starter-btn) even though the numbers themselves come straight
+   from DashboardSummary, not a live chat call — see
+   lib/dashboardGreeting.ts for why. */
+.dashboard-greeting {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: var(--wine-soft);
+  border-radius: var(--radius-lg);
+  padding: 14px 16px;
+  margin-bottom: 14px;
+}
+
+.dashboard-greeting-badge {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--wine);
+  color: #fff;
+}
+
+.dashboard-greeting-title {
+  margin: 0 0 2px;
+  font-weight: 700;
+  font-size: 15px;
+  color: var(--accent);
+}
+
+.dashboard-greeting-body {
+  margin: 0;
+  font-size: 13.5px;
+  color: var(--ink-soft);
+}
 
 .stat-grid {
   display: grid;

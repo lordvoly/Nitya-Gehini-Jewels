@@ -1,4 +1,5 @@
 import type { CSSProperties } from "react";
+import { LoadingTip } from "./LoadingTip";
 
 // The one shared shape primitive behind every loading skeleton in the app
 // — a page composes its own skeleton LAYOUT (e.g. DashboardSkeleton below,
@@ -6,6 +7,11 @@ import type { CSSProperties } from "react";
 // via width/height, rather than each page inventing its own placeholder
 // markup. The shimmer sweep itself lives on .skeleton in shared.css (and
 // respects prefers-reduced-motion there), not here.
+//
+// Every named layout below also renders a <LoadingTip /> as its first
+// element — one shared cycling-tips banner (see components/common/
+// LoadingTip.tsx) rather than each page wiring it in separately, so any
+// new skeleton layout gets it for free just by living in this file.
 export function Skeleton({
   width,
   height = 14,
@@ -34,6 +40,7 @@ export function Skeleton({
 export function DashboardSkeleton() {
   return (
     <div className="page">
+      <LoadingTip />
       <div className="stat-grid">
         {Array.from({ length: 4 }).map((_, i) => (
           <Skeleton key={i} height={78} radius="var(--radius-lg)" />
@@ -58,6 +65,7 @@ export function DashboardSkeleton() {
 export function BookingDetailSkeleton() {
   return (
     <div className="skeleton-stack">
+      <LoadingTip />
       <Skeleton width="55%" height={24} />
       <Skeleton width="35%" height={14} />
       <Skeleton width="90%" />
@@ -77,6 +85,7 @@ export function BookingDetailSkeleton() {
 export function ReceiptSkeleton() {
   return (
     <div className="page receipt-page">
+      <LoadingTip />
       <div className="receipt-actions">
         <Skeleton width={160} height={46} radius="var(--radius-pill)" />
       </div>
@@ -110,6 +119,7 @@ export function ReceiptSkeleton() {
 export function ItemDetailSkeleton() {
   return (
     <div className="page">
+      <LoadingTip />
       <div className="wizard-card">
         <div className="skeleton-stack">
           <Skeleton height={220} radius="var(--radius-lg)" />
@@ -136,6 +146,7 @@ export function ItemDetailSkeleton() {
 export function FormSkeleton() {
   return (
     <div className="page">
+      <LoadingTip />
       <div className="skeleton-stack">
         <Skeleton width="40%" height={24} />
         <Skeleton width="70%" height={14} />
@@ -157,6 +168,7 @@ export function FormSkeleton() {
 export function TableRowsSkeleton({ rows = 5 }: { rows?: number }) {
   return (
     <div className="skeleton-stack">
+      <LoadingTip />
       {Array.from({ length: rows }).map((_, i) => (
         <Skeleton key={i} height={54} radius="var(--radius-lg)" />
       ))}
@@ -170,6 +182,7 @@ export function TableRowsSkeleton({ rows = 5 }: { rows?: number }) {
 export function BookingCardsSkeleton({ cards = 3 }: { cards?: number }) {
   return (
     <div className="skeleton-stack">
+      <LoadingTip />
       {Array.from({ length: cards }).map((_, i) => (
         <Skeleton key={i} height={180} radius="var(--radius-lg)" />
       ))}
@@ -183,6 +196,7 @@ export function BookingCardsSkeleton({ cards = 3 }: { cards?: number }) {
 export function ListPageSkeleton() {
   return (
     <div className="page">
+      <LoadingTip />
       <div className="skeleton-stack">
         <Skeleton width="35%" height={24} />
         <div style={{ display: "flex", gap: 10 }}>

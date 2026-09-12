@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type KeyboardEvent, type ReactNode, type RefObject } from "react";
 import { Link, useNavigate, type NavigateFunction } from "react-router-dom";
-import { ChevronLeft, ChevronRight, Bell, Gift, ImageOff } from "lucide-react";
+import { ChevronLeft, ChevronRight, Bell, Gift, ImageOff, Sparkles } from "lucide-react";
 import {
   fetchDashboardSummary,
   type DashboardSummary,
@@ -9,6 +9,8 @@ import {
   type OccasionRow,
   type OverdueBookingItem,
 } from "../lib/dashboard";
+import { buildDashboardOverview, firstName } from "../lib/dashboardGreeting";
+import { useAuth } from "../lib/auth";
 import { DashboardSkeleton } from "../components/common/Skeleton";
 import { PhotoLightbox } from "../components/items/PhotoLightbox";
 import { LogoIntroLoader } from "../components/common/LogoIntroLoader";
@@ -421,6 +423,7 @@ function PickupDueBookingReminderAction({ group, shopName }: { group: PickupDueB
 
 export default function DashboardPage() {
   const navigate = useNavigate();
+  const { profile } = useAuth();
   const [summary, setSummary] = useState<DashboardSummary | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -519,6 +522,16 @@ export default function DashboardPage() {
 
   return (
     <div className="page">
+      <div className="dashboard-greeting">
+        <div className="dashboard-greeting-badge">
+          <Sparkles size={18} strokeWidth={2} aria-hidden="true" />
+        </div>
+        <div>
+          <p className="dashboard-greeting-title">Hi {firstName(profile?.name ?? "there")} — here's your overview</p>
+          <p className="dashboard-greeting-body">{buildDashboardOverview(summary)}</p>
+        </div>
+      </div>
+
       <div className="stat-grid">
         <div className="stat-card">
           <Link to="/items?filter=active" className="stat-card-link">
