@@ -252,6 +252,85 @@ export async function getIdleInventory() {
   return (activeItems ?? []).filter((i) => !recentlyBookedIds.has(i.id));
 }
 
+// Total sale-price value of the current, active inventory — "what would
+// we make if we sold everything on the shelf right now", not revenue
+// already earned (that's get_financial_summary/get_item_revenue). Retired
+// items (is_active = false) are excluded, same convention as
+// getIdleInventory above. A unique item already sold is excluded — it's
+// no longer inventory, matching how items.status flips to 'sold' the
+// moment a sale is booked (see the long comment above POST /api/bookings
+// in routes/bookings.ts), not at pickup. A quantity-tracked item's own
+// contribution is scaled by whatever's actually still sellable:
+// quantity_on_hand minus units already committed to a non-cancelled sale
+// (status 'booked' or 'out' — a booked-but-not-yet-picked-up sale is
+// already spoken for, same "committed at booking time, not pickup" rule
+// as the unique-item case). Rentals never reduce this count — a rented
+// item comes back and is still ours to sell. Items with no sale_price set
+// at all are skipped from the total but reported back separately (count
+// + a capped sample list) — "did we forget to price something" is exactly
+// the kind of gap this was built to catch, per the request that prompted
+// it.
+export async function getInventoryValue() {
+  const { data: items, error } = await supabase
+    .from("items")
+    .select("id, item_code, name, category, tracking_type, status, sale_price, quantity_on_hand")
+    .eq("is_active", true);
+  if (error) throw error;
+
+  const quantityItemIds = (items ?? []).filter((i) => i.tracking_type === "quantity").map((i) => i.id);
+  const soldByItem = new Map<string, number>();
+  if (quantityItemIds.length > 0) {
+    const { data: soldRows, error: soldError } = await supabase
+      .from("booking_items")
+      .select("item_id, quantity_booked")
+      .eq("type", "sale")
+      .in("status", ["booked", "out"])
+      .in("item_id", quantityItemIds);
+    if (soldError) throw soldError;
+    for (const row of soldRows ?? []) {
+      soldByItem.set(row.item_id, (soldByItem.get(row.item_id) ?? 0) + (row.quantity_booked ?? 0));
+    }
+  }
+
+  let total_sale_value = 0;
+  let priced_item_count = 0;
+  const missingSalePrice: { item_code: string; name: string }[] = [];
+  const categoryTotals = new Map<string, number>();
+
+  for (const item of items ?? []) {
+    if (item.sale_price == null) {
+      missingSalePrice.push({ item_code: item.item_code, name: item.name });
+      continue;
+    }
+
+    let units = 1;
+    if (item.tracking_type === "quantity") {
+      const sold = soldByItem.get(item.id) ?? 0;
+      units = Math.max((item.quantity_on_hand ?? 0) - sold, 0);
+      if (units === 0) continue; // fully sold out — nothing left to value
+    } else if (item.status === "sold") {
+      continue; // this unique item is already sold, no longer inventory
+    }
+
+    const value = Number(item.sale_price) * units;
+    total_sale_value += value;
+    priced_item_count += 1;
+    categoryTotals.set(item.category, (categoryTotals.get(item.category) ?? 0) + value);
+  }
+
+  return {
+    total_sale_value,
+    priced_item_count,
+    by_category: [...categoryTotals.entries()]
+      .map(([category, value]) => ({ category, value }))
+      .sort((a, b) => b.value - a.value),
+    missing_sale_price_count: missingSalePrice.length,
+    // Capped so a large gap doesn't blow up the tool response — the count
+    // above is always the real total either way.
+    missing_sale_price: missingSalePrice.slice(0, 25),
+  };
+}
+
 export async function getExpensesForPeriod(from: string, to: string) {
   const { data: periodExpenses, error } = await supabase.from("expenses").select("category, amount").gte("date", from).lte("date", to);
   if (error) throw error;

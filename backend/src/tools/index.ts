@@ -10,6 +10,7 @@ import {
   getOutstandingDues,
   getItemBookingItems,
   getRevenueBreakdown,
+  getInventoryValue,
 } from "../lib/reportsData.js";
 import { getDailyBriefingData, getUpcomingPickupsForDays } from "../lib/dashboardData.js";
 import { getItemCharges } from "../routes/itemCharges.js";
@@ -184,6 +185,12 @@ export const toolDefinitions = [
     input_schema: { type: "object" as const, properties: {} },
   },
   {
+    name: "get_inventory_value",
+    description:
+      "The total sale-price value of the CURRENT physical inventory — 'what would we make if we sold everything on the shelf right now', summed from each item's own sale_price field. This is NOT revenue already earned (use get_financial_summary/get_item_revenue for that) and not a rental figure — sale price only. Excludes retired items and anything already sold (a sold unique item, or the already-sold portion of a quantity-tracked item); a rented-out item still counts, since it's still owned and will come back. Includes a by-category breakdown and flags any active items that have no sale_price set at all yet (missing_sale_price_count/missing_sale_price) — use this same tool for a 'have we priced everything' data-completeness question, not just a 'what's it all worth' one.",
+    input_schema: { type: "object" as const, properties: {} },
+  },
+  {
     name: "get_booking_by_code",
     description: "Full status of one specific booking looked up by its booking_code (e.g. BK-0001) — every item, dates, balance due, and payment history.",
     input_schema: {
@@ -345,6 +352,9 @@ export async function runTool(name: string, input: Record<string, unknown>) {
     }
     case "get_daily_briefing": {
       return await getDailyBriefingData();
+    }
+    case "get_inventory_value": {
+      return await getInventoryValue();
     }
     case "get_booking_by_code": {
       const code = String(input.booking_code ?? "").trim();
