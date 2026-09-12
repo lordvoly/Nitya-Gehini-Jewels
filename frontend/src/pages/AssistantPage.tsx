@@ -6,7 +6,7 @@ import "../styles/shared.css";
 // Deliberately item-agnostic — an earlier set named a specific real item
 // ("Peacock Bridal Set") twice, which goes stale as inventory changes (sold,
 // renamed, retired). These instead cover a mix of tools (daily briefing,
-// overdue, outstanding dues, most-booked items) — see
+// overdue, outstanding dues, most-booked items, inventory value) — see
 // backend/src/tools/index.ts. Tapping one sends immediately (same as a
 // per-reply suggestion chip below) rather than just filling the input.
 // "What can you help me with?" leads the list rather than following it —
@@ -20,6 +20,7 @@ const STARTER_QUESTIONS = [
   "What's overdue this week?",
   "Who owes us money?",
   "What's our most popular set?",
+  "What's our total inventory sale value?",
 ];
 
 // The model's replies commonly use **bold** for emphasis (item names, key
