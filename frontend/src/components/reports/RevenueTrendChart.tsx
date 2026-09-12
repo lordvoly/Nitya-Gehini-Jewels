@@ -1,5 +1,6 @@
 import { Area, AreaChart, CartesianGrid, ResponsiveContainer, Tooltip, XAxis, YAxis } from "recharts";
 import { formatTrendBucketLabel } from "../../lib/dates";
+import { formatNumber } from "../../lib/format";
 import type { RevenueTrend } from "../../lib/reports";
 import { usePrefersReducedMotion } from "../../lib/usePrefersReducedMotion";
 
@@ -15,7 +16,7 @@ function RevenueTrendTooltip({ active, payload }: { active?: boolean; payload?: 
   return (
     <div className="chart-tooltip">
       <p className="chart-tooltip-title">{point.label}</p>
-      <p>₹{point.revenue}</p>
+      <p>₹{formatNumber(point.revenue)}</p>
     </div>
   );
 }
@@ -53,7 +54,7 @@ export function RevenueTrendChart({ trend }: { trend: RevenueTrend }) {
             minTickGap={24}
           />
           <YAxis
-            tickFormatter={(v: number) => `₹${v}`}
+            tickFormatter={(v: number) => `₹${formatNumber(v)}`}
             tick={{ fontSize: 12, fill: "var(--ink-soft)" }}
             axisLine={false}
             tickLine={false}

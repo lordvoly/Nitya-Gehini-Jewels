@@ -8,6 +8,7 @@ import {
   type PickupPersonType,
 } from "../../lib/bookings";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/payments";
+import { formatNumber } from "../../lib/format";
 import { toNumberOrNull } from "../../lib/numbers";
 
 // Scoped to a single line item, same as ReturnForm — booking is passed only
@@ -86,7 +87,7 @@ export function ConfirmPickupForm({
         </p>
         {numericAmount > 0 && (
           <p className="wizard-hint">
-            ₹{numericAmount} ({PAYMENT_METHOD_LABELS[method]}) recorded.
+            ₹{formatNumber(numericAmount)} ({PAYMENT_METHOD_LABELS[method]}) recorded.
           </p>
         )}
         {result.pickup_person_type && (

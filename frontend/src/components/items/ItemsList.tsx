@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { Pencil, Trash2 } from "lucide-react";
 import type { Item } from "../../lib/items";
 import { itemStatusPill } from "../../lib/statusPill";
+import { formatNumber } from "../../lib/format";
 import { PhotoLightbox } from "./PhotoLightbox";
 import { TableRowsSkeleton } from "../common/Skeleton";
 import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
@@ -249,8 +250,8 @@ export function ItemsList({
                         )}
                       </span>
                     </td>
-                    <td data-label="Rental">{item.rental_price != null ? `₹${item.rental_price}` : "—"}</td>
-                    <td data-label="Sale">{item.sale_price != null ? `₹${item.sale_price}` : "—"}</td>
+                    <td data-label="Rental">{item.rental_price != null ? `₹${formatNumber(item.rental_price)}` : "—"}</td>
+                    <td data-label="Sale">{item.sale_price != null ? `₹${formatNumber(item.sale_price)}` : "—"}</td>
                     <td className="row-actions">
                       {confirmingId === item.id ? (
                         <>

@@ -5,6 +5,7 @@ import QRCode from "qrcode";
 import { fetchBooking, PICKUP_PERSON_TYPE_LABELS, type Booking } from "../lib/bookings";
 import { fetchShopSettings, type ShopSettings } from "../lib/shopSettings";
 import { formatDateDisplay } from "../lib/dates";
+import { formatNumber } from "../lib/format";
 import { bookingItemStatusPill } from "../lib/statusPill";
 import { buildWhatsAppLink } from "../lib/whatsapp";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
@@ -166,7 +167,7 @@ export default function ReceiptPage() {
                       to show on a receipt. */}
                   {!cancelled && bi.deposit_collected && (
                     <div className="receipt-item-deposit">
-                      Security Deposit: ₹{bi.deposit_amount}
+                      Security Deposit: ₹{formatNumber(bi.deposit_amount)}
                       {bi.deposit_refunded
                         ? ` (Refunded${bi.deposit_refund_date ? ` ${formatDateDisplay(bi.deposit_refund_date)}` : ""})`
                         : " (Held — not yet refunded)"}
@@ -200,11 +201,11 @@ export default function ReceiptPage() {
                 <td data-label="Price">
                   {bi.is_foc ? (
                     <>
-                      <span className="receipt-item-name-cancelled">₹{bi.price_charged}</span>{" "}
+                      <span className="receipt-item-name-cancelled">₹{formatNumber(bi.price_charged)}</span>{" "}
                       <span className="pill pill-foc receipt-item-pill">FOC</span>
                     </>
                   ) : (
-                    `₹${bi.price_charged}`
+                    `₹${formatNumber(bi.price_charged)}`
                   )}
                 </td>
               </tr>
@@ -221,15 +222,15 @@ export default function ReceiptPage() {
       <div className="receipt-totals">
         <div className="receipt-totals-row">
           <span>Total</span>
-          <span className="receipt-totals-value">₹{booking.price_charged}</span>
+          <span className="receipt-totals-value">₹{formatNumber(booking.price_charged)}</span>
         </div>
         <div className="receipt-totals-row">
           <span>Amount Paid</span>
-          <span className="receipt-totals-value">₹{booking.total_paid}</span>
+          <span className="receipt-totals-value">₹{formatNumber(booking.total_paid)}</span>
         </div>
         <div className="receipt-totals-row receipt-totals-balance">
           <span>Balance Due</span>
-          <span className="receipt-totals-value">₹{booking.balance_due}</span>
+          <span className="receipt-totals-value">₹{formatNumber(booking.balance_due)}</span>
         </div>
       </div>
 

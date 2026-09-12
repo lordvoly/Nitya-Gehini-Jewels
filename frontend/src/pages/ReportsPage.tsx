@@ -3,6 +3,7 @@ import { Link, useLocation } from "react-router-dom";
 import { fetchReports, type ReportsResponse } from "../lib/reports";
 import { PAYMENT_METHOD_LABELS } from "../lib/payments";
 import { formatDateDisplay } from "../lib/dates";
+import { formatNumber } from "../lib/format";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { ListPageSkeleton } from "../components/common/Skeleton";
 import { MostBookedBarChart } from "../components/reports/MostBookedBarChart";
@@ -204,7 +205,7 @@ export default function ReportsPage() {
           </div>
         </div>
         <div className="stat-card stat-card-wide">
-          <div className="stat-value">₹{summary.total_revenue}</div>
+          <div className="stat-value">₹{formatNumber(summary.total_revenue)}</div>
           <div className="stat-label">Total revenue (price charged)</div>
         </div>
         <p className="wizard-hint">
@@ -235,16 +236,16 @@ export default function ReportsPage() {
         <h2>Profit &amp; Loss</h2>
         <div className="stat-grid">
           <div className="stat-card">
-            <div className="stat-value">₹{pnl.revenue}</div>
+            <div className="stat-value">₹{formatNumber(pnl.revenue)}</div>
             <div className="stat-label">Revenue</div>
           </div>
           <div className="stat-card">
-            <div className="stat-value">₹{pnl.expenses}</div>
+            <div className="stat-value">₹{formatNumber(pnl.expenses)}</div>
             <div className="stat-label">Expenses</div>
           </div>
         </div>
         <div className="stat-card stat-card-wide">
-          <div className="stat-value">₹{pnl.net}</div>
+          <div className="stat-value">₹{formatNumber(pnl.net)}</div>
           <div className="stat-label">Net (revenue − expenses)</div>
         </div>
         {pnl.by_category.length > 0 && (
@@ -260,7 +261,7 @@ export default function ReportsPage() {
                 {pnl.by_category.map((c) => (
                   <tr key={c.category}>
                     <td data-label="Category">{c.category}</td>
-                    <td data-label="Amount">₹{c.amount}</td>
+                    <td data-label="Amount">₹{formatNumber(c.amount)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -305,7 +306,7 @@ export default function ReportsPage() {
         ) : (
           <>
             <div className="stat-card stat-card-wide">
-              <div className="stat-value">₹{shownBreakdown.total}</div>
+              <div className="stat-value">₹{formatNumber(shownBreakdown.total)}</div>
               <div className="stat-label">{paymentMethodsView === "received" ? "Total received" : "Total refunded"}</div>
             </div>
             <div className="table-wrap">
@@ -321,7 +322,7 @@ export default function ReportsPage() {
                   {shownBreakdown.by_method.map((m) => (
                     <tr key={m.method}>
                       <td data-label="Method">{PAYMENT_METHOD_LABELS[m.method as keyof typeof PAYMENT_METHOD_LABELS] ?? m.method}</td>
-                      <td data-label="Amount">₹{m.amount}</td>
+                      <td data-label="Amount">₹{formatNumber(m.amount)}</td>
                       <td data-label={paymentMethodsView === "received" ? "Payments" : "Refunds"}>{m.count}</td>
                     </tr>
                   ))}
@@ -348,7 +349,7 @@ export default function ReportsPage() {
                         </td>
                         <td data-label="Customer">{r.customer_name}</td>
                         <td data-label="Method">{PAYMENT_METHOD_LABELS[r.method] ?? r.method}</td>
-                        <td data-label="Amount">₹{r.amount}</td>
+                        <td data-label="Amount">₹{formatNumber(r.amount)}</td>
                         <td data-label="Date">{formatDateDisplay(r.payment_date)}</td>
                       </tr>
                     ))}
@@ -441,7 +442,7 @@ export default function ReportsPage() {
                     </td>
                     <td data-label="Phone">{c.phone}</td>
                     <td data-label="Bookings">{c.booking_count}</td>
-                    <td data-label="Total Spend">₹{c.total_spend}</td>
+                    <td data-label="Total Spend">₹{formatNumber(c.total_spend)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -517,7 +518,7 @@ export default function ReportsPage() {
                         d.customer_name
                       )}
                     </td>
-                    <td data-label="Balance Due">₹{d.balance_due}</td>
+                    <td data-label="Balance Due">₹{formatNumber(d.balance_due)}</td>
                   </tr>
                 ))}
               </tbody>
@@ -533,16 +534,16 @@ export default function ReportsPage() {
           "Lifetime" would show if every other range on this page didn't stop at today.
         </p>
         <div className="stat-card stat-card-wide">
-          <div className="stat-value">₹{expected_revenue.lifetime_total}</div>
+          <div className="stat-value">₹{formatNumber(expected_revenue.lifetime_total)}</div>
           <div className="stat-label">Total expected revenue (lifetime)</div>
         </div>
         <div className="stat-grid">
           <div className="stat-card">
-            <div className="stat-value">₹{expected_revenue.past_total}</div>
+            <div className="stat-value">₹{formatNumber(expected_revenue.past_total)}</div>
             <div className="stat-label">Past (up to today)</div>
           </div>
           <div className="stat-card">
-            <div className="stat-value">₹{expected_revenue.future_total}</div>
+            <div className="stat-value">₹{formatNumber(expected_revenue.future_total)}</div>
             <div className="stat-label">Upcoming (confirmed, full value)</div>
           </div>
         </div>
@@ -555,15 +556,15 @@ export default function ReportsPage() {
         ) : (
           <>
             <p className="wizard-hint">
-              Of the ₹{expected_revenue.future_total} upcoming, here's what's already collected vs. still owed:
+              Of the ₹{formatNumber(expected_revenue.future_total)} upcoming, here's what's already collected vs. still owed:
             </p>
             <div className="stat-grid">
               <div className="stat-card">
-                <div className="stat-value">₹{expected_revenue.already_collected}</div>
+                <div className="stat-value">₹{formatNumber(expected_revenue.already_collected)}</div>
                 <div className="stat-label">Already collected</div>
               </div>
               <div className="stat-card">
-                <div className="stat-value">₹{expected_revenue.still_to_collect}</div>
+                <div className="stat-value">₹{formatNumber(expected_revenue.still_to_collect)}</div>
                 <div className="stat-label">Still to collect</div>
               </div>
             </div>
@@ -591,7 +592,7 @@ export default function ReportsPage() {
                         )}
                       </td>
                       <td data-label="Nearest Pickup">{formatDateDisplay(b.nearest_pickup_date)}</td>
-                      <td data-label="Expected Amount">₹{b.expected_amount}</td>
+                      <td data-label="Expected Amount">₹{formatNumber(b.expected_amount)}</td>
                     </tr>
                   ))}
                 </tbody>

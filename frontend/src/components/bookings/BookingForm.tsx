@@ -11,6 +11,7 @@ import {
 import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
 import { PAYMENT_METHODS, PAYMENT_METHOD_LABELS, type PaymentMethod } from "../../lib/payments";
 import { formatDateDisplay } from "../../lib/dates";
+import { formatNumber } from "../../lib/format";
 import { fireCompletionConfetti } from "../../lib/confetti";
 import { CustomerPicker } from "./CustomerPicker";
 import { ItemPicker } from "./ItemPicker";
@@ -257,12 +258,12 @@ export function BookingForm() {
         <p className="success-code">{saved.booking_code}</p>
         <p className="success-detail">{customer?.name}</p>
         <p className="wizard-hint">
-          {saved.booking_items.length} item{saved.booking_items.length === 1 ? "" : "s"} · ₹{saved.price_charged}
+          {saved.booking_items.length} item{saved.booking_items.length === 1 ? "" : "s"} · ₹{formatNumber(saved.price_charged)}
         </p>
         <p className="wizard-hint">Booked on: {formatDateDisplay(saved.booking_date)}</p>
         {(toNumberOrNull(advanceAmount) ?? 0) > 0 && (
           <p className="wizard-hint">
-            Advance of ₹{advanceAmount} ({PAYMENT_METHOD_LABELS[advanceMethod]}) recorded
+            Advance of ₹{formatNumber(advanceAmount)} ({PAYMENT_METHOD_LABELS[advanceMethod]}) recorded
             {advanceDate ? ` for ${formatDateDisplay(advanceDate)}` : ""}.
           </p>
         )}

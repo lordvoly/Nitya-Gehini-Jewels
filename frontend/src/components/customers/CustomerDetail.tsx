@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import { ArrowLeft, Pencil } from "lucide-react";
 import { fetchCustomer, fetchCustomerRevenue, CUSTOMER_TYPE_LABELS, type Customer, type CustomerRevenue } from "../../lib/customers";
 import { BookingsList } from "../bookings/BookingsList";
+import { formatNumber } from "../../lib/format";
 import { BookingDetailSkeleton } from "../common/Skeleton";
 import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
 
@@ -72,7 +73,7 @@ export function CustomerDetail({
                 CustomerRevenue's own doc comment), same "earned" figure
                 Item Detail's own Total Earnings shows for one item. */}
             <li>
-              <strong>Total Business: ₹{revenue?.total_business ?? 0}</strong>
+              <strong>Total Business: ₹{formatNumber(revenue?.total_business ?? 0)}</strong>
             </li>
             {customer.notes && <li>Notes: {customer.notes}</li>}
           </ul>

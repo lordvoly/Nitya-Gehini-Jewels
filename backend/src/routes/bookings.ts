@@ -1,6 +1,7 @@
 import { Router } from "express";
 import { supabase } from "../lib/supabase.js";
 import { istToday, istRangeForPreset } from "../lib/dates.js";
+import { formatINR } from "../lib/format.js";
 import { recordPayment } from "../lib/payments.js";
 import {
   computePendingComponentNames,
@@ -977,7 +978,7 @@ bookingsRouter.post("/:bookingId/items/:bookingItemId/cancel", async (req: Authe
 
   if (overpaid > 0 && requestedRefund == null) {
     return res.status(409).json({
-      error: `Removing this item means refunding ₹${overpaid.toFixed(2)} already paid toward it.`,
+      error: `Removing this item means refunding ₹${formatINR(overpaid)} already paid toward it.`,
       refund_amount_needed: Number(overpaid.toFixed(2)),
     });
   }

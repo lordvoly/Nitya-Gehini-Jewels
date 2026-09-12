@@ -12,6 +12,7 @@ import {
 } from "../../lib/bookings";
 import { bookingItemStatusPill, bookingComputedStatusPill, bookingChargeStatusPill } from "../../lib/statusPill";
 import { formatDateDisplay } from "../../lib/dates";
+import { formatNumber } from "../../lib/format";
 import { FilterDropdown } from "../common/FilterDropdown";
 import { BookingCardsSkeleton } from "../common/Skeleton";
 import { useSlowLoadHint } from "../../lib/useSlowLoadHint";
@@ -313,10 +314,10 @@ export function BookingsList({
 
             <div className="booking-card-financials">
               <span>
-                Paid: <strong>₹{b.total_paid}</strong>
+                Paid: <strong>₹{formatNumber(b.total_paid)}</strong>
               </span>
               <span>
-                Balance: <strong>₹{b.balance_due}</strong>
+                Balance: <strong>₹{formatNumber(b.balance_due)}</strong>
               </span>
             </div>
 

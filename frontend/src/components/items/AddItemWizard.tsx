@@ -14,6 +14,7 @@ import {
   type TrackingType,
 } from "../../lib/items";
 import { toIntOrNull, toNumberOrNull } from "../../lib/numbers";
+import { formatNumber } from "../../lib/format";
 import { itemStatusPill } from "../../lib/statusPill";
 import { fireCompletionConfetti } from "../../lib/confetti";
 import { PhotoPicker } from "./PhotoPicker";
@@ -435,7 +436,7 @@ export function AddItemWizard({
               {form.tracking_type === "quantity" && ` (${form.quantityOnHand || 0} on hand)`}
             </li>
             <li>
-              Rental: {form.rentalPrice ? `₹${form.rentalPrice}` : "—"} · Sale: {form.salePrice ? `₹${form.salePrice}` : "—"}
+              Rental: {form.rentalPrice ? `₹${formatNumber(form.rentalPrice)}` : "—"} · Sale: {form.salePrice ? `₹${formatNumber(form.salePrice)}` : "—"}
             </li>
             <li>{form.photos.length} photo(s)</li>
           </ul>

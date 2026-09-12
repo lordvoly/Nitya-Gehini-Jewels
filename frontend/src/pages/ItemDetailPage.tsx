@@ -5,6 +5,7 @@ import { fetchItem, fetchItemHistory, fetchItemRevenue, deleteItem, type Item, t
 import { PhotoLightbox } from "../components/items/PhotoLightbox";
 import { itemStatusPill, bookingItemStatusPill } from "../lib/statusPill";
 import { formatDateDisplay } from "../lib/dates";
+import { formatNumber } from "../lib/format";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { ItemDetailSkeleton } from "../components/common/Skeleton";
 import "../styles/shared.css";
@@ -119,14 +120,14 @@ export default function ItemDetailPage() {
                 {!item.is_active && <span className="pill pill-neutral">Retired</span>}
               </span>
             </li>
-            <li>Rental price: {item.rental_price != null ? `₹${item.rental_price}` : "—"}</li>
-            <li>Sale price: {item.sale_price != null ? `₹${item.sale_price}` : "—"}</li>
+            <li>Rental price: {item.rental_price != null ? `₹${formatNumber(item.rental_price)}` : "—"}</li>
+            <li>Sale price: {item.sale_price != null ? `₹${formatNumber(item.sale_price)}` : "—"}</li>
             {/* Total agreed value earned across every non-cancelled booking,
                 all-time — not cash collected so far, see ItemRevenue's own
                 doc comment. The one figure this page exists to answer:
                 "has this item paid for itself." */}
             <li>
-              <strong>Total Earnings: ₹{revenue?.grand_total ?? 0}</strong>
+              <strong>Total Earnings: ₹{formatNumber(revenue?.grand_total ?? 0)}</strong>
             </li>
             {item.components && item.components.length > 0 && <li>Components: {item.components.join(", ")}</li>}
           </ul>
@@ -200,11 +201,11 @@ export default function ItemDetailPage() {
                         <td data-label="Amount">
                           {row.is_foc ? (
                             <>
-                              <span className="receipt-item-name-cancelled">₹{row.price_charged}</span>{" "}
+                              <span className="receipt-item-name-cancelled">₹{formatNumber(row.price_charged)}</span>{" "}
                               <span className="pill pill-foc receipt-item-pill">FOC</span>
                             </>
                           ) : (
-                            `₹${row.price_charged}`
+                            `₹${formatNumber(row.price_charged)}`
                           )}
                         </td>
                       </tr>

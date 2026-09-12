@@ -6,6 +6,7 @@ import { fetchPublicReceipt, type PublicReceipt } from "../lib/publicReceipt";
 import { PICKUP_PERSON_TYPE_LABELS } from "../lib/bookings";
 import { bookingItemStatusPill } from "../lib/statusPill";
 import { formatDateDisplay } from "../lib/dates";
+import { formatNumber } from "../lib/format";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { ReceiptSkeleton } from "../components/common/Skeleton";
 import { usePrintFit } from "../lib/usePrintFit";
@@ -122,7 +123,7 @@ export default function PublicReceiptPage() {
                   )}
                   {!cancelled && bi.deposit && (
                     <div className="receipt-item-deposit">
-                      Security Deposit: ₹{bi.deposit.amount}
+                      Security Deposit: ₹{formatNumber(bi.deposit.amount)}
                       {bi.deposit.refunded
                         ? ` (Refunded${bi.deposit.refund_date ? ` ${formatDateDisplay(bi.deposit.refund_date)}` : ""})`
                         : " (Held — not yet refunded)"}
@@ -148,7 +149,7 @@ export default function PublicReceiptPage() {
                     : formatDateDisplay(bi.pickup_date)}
                 </td>
                 <td data-label="Price">
-                  {bi.is_foc ? <span className="pill pill-foc receipt-item-pill">FOC</span> : `₹${bi.price_charged}`}
+                  {bi.is_foc ? <span className="pill pill-foc receipt-item-pill">FOC</span> : `₹${formatNumber(bi.price_charged)}`}
                 </td>
               </tr>
             );
@@ -164,15 +165,15 @@ export default function PublicReceiptPage() {
       <div className="receipt-totals">
         <div className="receipt-totals-row">
           <span>Total</span>
-          <span className="receipt-totals-value">₹{receipt.price_charged}</span>
+          <span className="receipt-totals-value">₹{formatNumber(receipt.price_charged)}</span>
         </div>
         <div className="receipt-totals-row">
           <span>Amount Paid</span>
-          <span className="receipt-totals-value">₹{receipt.total_paid}</span>
+          <span className="receipt-totals-value">₹{formatNumber(receipt.total_paid)}</span>
         </div>
         <div className="receipt-totals-row receipt-totals-balance">
           <span>Balance Due</span>
-          <span className="receipt-totals-value">₹{receipt.balance_due}</span>
+          <span className="receipt-totals-value">₹{formatNumber(receipt.balance_due)}</span>
         </div>
       </div>
 

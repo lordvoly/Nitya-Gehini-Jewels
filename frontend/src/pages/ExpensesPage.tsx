@@ -8,6 +8,7 @@ import {
   type ExpenseCategory,
 } from "../lib/expenses";
 import { formatDateDisplay } from "../lib/dates";
+import { formatNumber } from "../lib/format";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { ListPageSkeleton } from "../components/common/Skeleton";
 import "../styles/shared.css";
@@ -124,7 +125,7 @@ export default function ExpensesPage() {
       {loading && <p className="wizard-hint">Refreshing…</p>}
 
       <div className="stat-card stat-card-wide">
-        <div className="stat-value">₹{total}</div>
+        <div className="stat-value">₹{formatNumber(total)}</div>
         <div className="stat-label">Total expenses this period</div>
       </div>
 
@@ -199,7 +200,7 @@ export default function ExpensesPage() {
                     <td data-label="Date">{formatDateDisplay(e.date)}</td>
                     <td data-label="Category">{EXPENSE_CATEGORY_LABELS[e.category]}</td>
                     <td data-label="Description">{e.description ?? "—"}</td>
-                    <td data-label="Amount">₹{e.amount}</td>
+                    <td data-label="Amount">₹{formatNumber(e.amount)}</td>
                   </tr>
                 ))}
               </tbody>

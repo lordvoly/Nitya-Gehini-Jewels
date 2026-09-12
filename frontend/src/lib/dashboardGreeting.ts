@@ -1,4 +1,5 @@
 import type { DashboardSummary } from "./dashboard";
+import { formatNumber } from "./format";
 
 // Powers DashboardPage's "Hi {name} — here's your overview" panel.
 // Deliberately computed from the exact DashboardSummary the page already
@@ -35,7 +36,7 @@ export function buildDashboardOverview(summary: DashboardSummary): string {
 
   if (summary.outstanding_balance > 0) {
     parts.push(
-      `₹${summary.outstanding_balance} outstanding across ${summary.outstanding_balance_count} booking${
+      `₹${formatNumber(summary.outstanding_balance)} outstanding across ${summary.outstanding_balance_count} booking${
         summary.outstanding_balance_count === 1 ? "" : "s"
       }`
     );

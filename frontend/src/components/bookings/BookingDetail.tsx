@@ -39,6 +39,7 @@ import {
 import { toNumberOrNull } from "../../lib/numbers";
 import { bookingItemStatusPill, bookingComputedStatusPill, bookingChargeStatusPill } from "../../lib/statusPill";
 import { formatDateDisplay } from "../../lib/dates";
+import { formatNumber } from "../../lib/format";
 import { fetchShopSettings } from "../../lib/shopSettings";
 
 export function BookingDetail({
@@ -306,10 +307,10 @@ export function BookingDetail({
                   GST: {booking.gst_invoice_number ?? "—"} · HSN {booking.hsn_code ?? "—"} · {booking.tax_rate ?? 0}%
                 </li>
               )}
-              <li>Price charged: ₹{booking.price_charged}</li>
-              <li>Total paid: ₹{booking.total_paid}</li>
+              <li>Price charged: ₹{formatNumber(booking.price_charged)}</li>
+              <li>Total paid: ₹{formatNumber(booking.total_paid)}</li>
               <li>
-                <strong>Balance due: ₹{booking.balance_due}</strong>
+                <strong>Balance due: ₹{formatNumber(booking.balance_due)}</strong>
               </li>
             </ul>
 
@@ -410,12 +411,12 @@ export function BookingDetail({
                       {bi.actual_return_date ? ` (returned ${formatDateDisplay(bi.actual_return_date)})` : ""}
                     </li>
                     <li>
-                      Price charged: ₹{bi.price_charged}
+                      Price charged: ₹{formatNumber(bi.price_charged)}
                       {bi.is_foc && <> <span className="pill pill-foc">FOC</span></>}
                     </li>
                     {bi.type === "rental" && bi.deposit_amount > 0 && (
                       <li>
-                        Deposit: ₹{bi.deposit_amount}
+                        Deposit: ₹{formatNumber(bi.deposit_amount)}
                         {bi.deposit_collected ? (bi.deposit_refunded ? " (refunded)" : " (collected)") : " (not collected)"}
                       </li>
                     )}
@@ -491,7 +492,7 @@ export function BookingDetail({
                       <ul className="review-list">
                         {bi.item_charges.map((c) => (
                           <li key={c.id}>
-                            {c.description} — ₹{c.charge_amount}{" "}
+                            {c.description} — ₹{formatNumber(c.charge_amount)}{" "}
                             {c.resolved ? (
                               <span className="pill pill-info">
                                 Resolved{c.resolved_at ? ` ${formatDateDisplay(c.resolved_at)}` : ""}
@@ -586,7 +587,7 @@ export function BookingDetail({
                   return (
                     <li key={p.id}>
                       <div>
-                        ₹{p.amount} — {PAYMENT_METHOD_LABELS[p.method]} · {formatDateDisplay(p.payment_date)}
+                        ₹{formatNumber(p.amount)} — {PAYMENT_METHOD_LABELS[p.method]} · {formatDateDisplay(p.payment_date)}
                         {p.notes ? ` — ${p.notes}` : ""}
                       </div>
 
@@ -595,7 +596,7 @@ export function BookingDetail({
                           most recent one. */}
                       {editsForThisPayment.map((e) => (
                         <p key={e.id} className="wizard-hint payment-edit-entry">
-                          Edited: ₹{e.old_amount} → ₹{e.new_amount} — "{e.reason}" — {e.edited_by_name ?? "Unknown"} ·{" "}
+                          Edited: ₹{formatNumber(e.old_amount)} → ₹{formatNumber(e.new_amount)} — "{e.reason}" — {e.edited_by_name ?? "Unknown"} ·{" "}
                           {formatDateDisplay(e.edited_at.slice(0, 10))}
                         </p>
                       ))}

@@ -18,6 +18,7 @@ import { hasShownBootIntro, markBootIntroShown } from "../lib/appBootIntro";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { formatDateDisplay, addDaysToDateString, formatWeekdayDate } from "../lib/dates";
 import { fetchShopSettings } from "../lib/shopSettings";
+import { formatNumber } from "../lib/format";
 import {
   buildWhatsAppLink,
   buildOccasionMessage,
@@ -567,7 +568,7 @@ export default function DashboardPage() {
 
       <div id="outstanding-balance-section">
         <Link to="/reports#outstanding-dues-section" className="stat-card stat-card-wide">
-          <div className="stat-value">₹{outstanding_balance}</div>
+          <div className="stat-value">₹{formatNumber(outstanding_balance)}</div>
           <div className="stat-label">Outstanding balance (active bookings)</div>
         </Link>
       </div>

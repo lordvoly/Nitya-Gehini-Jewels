@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import { fetchItemCharges, resolveItemCharge, type ItemCharge } from "../lib/itemCharges";
 import { fetchPendingItems, resolvePendingItem, chargePendingItem, type PendingItem } from "../lib/pendingItems";
 import { formatDateDisplay } from "../lib/dates";
+import { formatNumber } from "../lib/format";
 import { useSlowLoadHint } from "../lib/useSlowLoadHint";
 import { ListPageSkeleton } from "../components/common/Skeleton";
 import "../styles/shared.css";
@@ -263,7 +264,7 @@ export default function ChargesPage() {
                   {customerName} · {itemLabel}
                 </p>
                 <p>
-                  <strong>{c.description}</strong> — ₹{c.charge_amount}
+                  <strong>{c.description}</strong> — ₹{formatNumber(c.charge_amount)}
                 </p>
 
                 {resolvingId === c.id ? (
