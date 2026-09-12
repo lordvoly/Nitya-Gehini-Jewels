@@ -74,6 +74,19 @@
   --blue-soft: #e6edf1;
   --amber: #f0c14b;
   --amber-soft: #fffaf0;
+  /* Two more additions to the pill palette, both to break a same-color
+     collision that read as confusing on the booking detail page:
+     --orange is the booking-level "Active" status specifically (was
+     sharing --gold/pill-active with an item's own "Booked" pill, which sit
+     right next to each other on that screen); --rose is "Cancelled"
+     (was sharing --line/pill-neutral with an item's "Out" pill). Neither
+     touches pill-active/pill-neutral's existing colors, so every other use
+     of those two classes (Items list, Retired badges, the birthday pill,
+     etc.) is unaffected. */
+  --orange: #a8480f;
+  --orange-soft: #fbe8d5;
+  --rose: #954150;
+  --rose-soft: #f6e6e8;
   --focus: #7a5d1f;
 
   --radius: 10px;
@@ -159,6 +172,10 @@
     --blue-soft: #141d27;
     --amber: #d9a83e;
     --amber-soft: #241e10;
+    --orange: #e0954f;
+    --orange-soft: #2e2011;
+    --rose: #dd93a0;
+    --rose-soft: #332027;
     --focus: #e8be6e;
     --shadow-card: 0 1px 2px rgba(0, 0, 0, 0.6), 0 10px 28px rgba(0, 0, 0, 0.55);
   }
@@ -1504,6 +1521,20 @@ button.more-menu-item {
 .pill-neutral {
   background: var(--line);
   color: var(--ink);
+}
+
+/* Booking-level "Active" specifically — see the --orange/--rose comment in
+   the design-tokens block above for why these two exist as their own
+   classes rather than recoloring pill-active/pill-neutral outright. */
+.pill-orange {
+  background: var(--orange-soft);
+  color: var(--orange);
+}
+
+/* "Cancelled", at either the booking or the line-item grain. */
+.pill-rose {
+  background: var(--rose-soft);
+  color: var(--rose);
 }
 
 /* A single returned item is "settled," not the same achievement as the
@@ -3513,6 +3544,10 @@ a.chart-tooltip-title:hover {
     --blue-soft: #e6edf1;
     --amber: #f0c14b;
     --amber-soft: #fffaf0;
+    --orange: #a8480f;
+    --orange-soft: #fbe8d5;
+    --rose: #954150;
+    --rose-soft: #f6e6e8;
     --focus: #7a5d1f;
     --shadow-card: 0 1px 2px rgba(43, 33, 41, 0.05), 0 6px 16px rgba(43, 33, 41, 0.07);
     --card-line: transparent;

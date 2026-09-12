@@ -224,6 +224,9 @@ export interface NewBooking {
   // Left blank on purpose defaults to today in IST server-side — same
   // pattern as advance_date above.
   booking_date?: string | null;
+  // The same whole-transaction note bookings.notes already holds (editable
+  // later via PATCH /api/bookings/:id) — settable up front at creation too.
+  notes?: string | null;
   items: NewBookingItem[];
   // Defaults to server-generated (BK-000N) when omitted/empty — an
   // explicit non-empty value is validated for uniqueness instead, same

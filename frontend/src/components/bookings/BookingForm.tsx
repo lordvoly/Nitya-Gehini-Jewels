@@ -82,6 +82,10 @@ export function BookingForm() {
   const [gstInvoiceNumber, setGstInvoiceNumber] = useState("");
   const [hsnCode, setHsnCode] = useState("");
   const [taxRate, setTaxRate] = useState("");
+  // A whole-transaction note, same field BookingDetail's own Add/Edit Notes
+  // edits later (bookings.notes) — previously only settable after creation;
+  // this lets it be entered up front instead of requiring a second trip.
+  const [notes, setNotes] = useState("");
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [itemConflicts, setItemConflicts] = useState<ItemConflict[]>([]);
@@ -194,6 +198,7 @@ export function BookingForm() {
         advance_method: (toNumberOrNull(advanceAmount) ?? 0) > 0 ? advanceMethod : null,
         advance_date: (toNumberOrNull(advanceAmount) ?? 0) > 0 ? advanceDate || null : null,
         booking_date: bookingDate || null,
+        notes: notes.trim() || null,
         items: lineItems.map((r) => {
           const selected = selectedItemFor(r);
           return {
@@ -239,6 +244,7 @@ export function BookingForm() {
     setGstInvoiceNumber("");
     setHsnCode("");
     setTaxRate("");
+    setNotes("");
     setError(null);
     setItemConflicts([]);
     setSaved(null);
@@ -597,6 +603,17 @@ export function BookingForm() {
                 </label>
               </>
             )}
+
+            <label className="field-label">
+              Notes
+              <textarea
+                rows={3}
+                value={notes}
+                onChange={(e) => setNotes(e.target.value)}
+                placeholder="Optional"
+              />
+            </label>
+            <p className="wizard-hint">Internal only — never shown on the printed receipt.</p>
 
             {error && <p className="wizard-error">{error}</p>}
           </>

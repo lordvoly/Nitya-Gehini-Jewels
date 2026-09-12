@@ -44,7 +44,10 @@ export function bookingItemStatusPill(bi: {
       // different-grain achievements that shouldn't look identical.
       return { className: "pill-info", label: "Returned" };
     case "cancelled":
-      return { className: "pill-neutral", label: "Cancelled" };
+      // pill-rose, not pill-neutral — a cancelled item used to share its
+      // grey with a rental's own "Out" pill, which sit next to each other
+      // on the booking detail page and read as the same thing at a glance.
+      return { className: "pill-rose", label: "Cancelled" };
     case "out":
       return bi.type === "sale" ? { className: "pill-neutral", label: "Picked Up" } : { className: "pill-neutral", label: "Out" };
     case "booked":
@@ -66,15 +69,22 @@ export function bookingComputedStatusPill(
 ): PillInfo & { fraction: string | null } {
   switch (status) {
     case "active":
+      // pill-orange, not pill-active — the whole booking's own "Active"
+      // used to share its gold with an individual rental item's "Booked"
+      // pill, which sit right next to each other on this same screen and
+      // read as the same status at a glance even though they're different
+      // grains (whole transaction vs. one line item).
       return {
-        className: "pill-active",
+        className: "pill-orange",
         label: "Active",
         fraction: `${resolvedItemCount} of ${activeItemCount} items returned`,
       };
     case "completed":
       return { className: "pill-good", label: "Completed", fraction: null };
     case "cancelled":
-      return { className: "pill-neutral", label: "Cancelled", fraction: null };
+      // Same pill-rose as bookingItemStatusPill's own "Cancelled" above —
+      // one consistent look for "cancelled" regardless of grain.
+      return { className: "pill-rose", label: "Cancelled", fraction: null };
   }
 }
 

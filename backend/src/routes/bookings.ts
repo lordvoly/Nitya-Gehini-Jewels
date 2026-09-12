@@ -664,6 +664,7 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
     advance_method,
     advance_date,
     booking_date,
+    notes,
     items,
     booking_code: requestedBookingCode,
   } = req.body ?? {};
@@ -773,6 +774,10 @@ bookingsRouter.post("/", async (req: AuthedRequest, res) => {
       // pattern as advance_date/payment_date above, rather than the
       // frontend computing "today" itself.
       p_booking_date: booking_date || istToday(),
+      // Same field PATCH /api/bookings/:id already edits (bookings.notes) —
+      // settable up front now too. The RPC itself trims/nulls an empty
+      // string and sets notes_updated_at only when a real note is given.
+      p_notes: typeof notes === "string" ? notes : null,
     });
 
     if (!error) {
